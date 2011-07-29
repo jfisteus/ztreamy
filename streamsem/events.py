@@ -9,3 +9,6 @@ class Event(object):
 
     def __str__(self):
         return str(self.message)
+
+def deserialize_event(data):
+    return Event(data)
