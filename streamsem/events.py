@@ -2,13 +2,113 @@
 
 """
 
+from rdflib.graph import Graph
+
+import streamsem
 
 class Event(object):
-    def __init__(self, message):
-        self.message = message
+    def __init__(self, source_id, syntax, message, aggregator_id=None,
+                 event_type=None, timestamp=None):
+        self.source_id = source_id
+        self.syntax = self.__parse_syntax(syntax)
+        self.aggregator_id = None
+        self.event_type = None
+        self.timestamp = None
+        self.message = self.parse_message(message)
+
+    def parse_message(self, message):
+        if self.syntax == 'n3':
+            return self.parse_message_rdflib(message, syntax='n3')
+        elif self.syntax == 'text/plain':
+            return message
+        else:
+            raise StreamsemException('Unsupported syntax', 'event_syntax')
+
+    def parse_message_rdflib(self, message, syntax):
+        g = Graph()
+        g.parse(data=message, format=syntax)
+        return g
+
+    def serialize(self):
+        data = []
+        data.append('Source-Id: ' + str(self.source_id))
+        data.append('Syntax: ' + str(self.syntax))
+        if self.aggregator_id is not None:
+            data.append('Aggregator-Id: ' + str(self.aggregator_id))
+        if self.event_type is not None:
+            data.append('Event-Type: ' + str(self.event_type))
+        if self.timestamp is not None:
+            data.append('Timestamp: ' + str(self.timestamp))
+        data.append('')
+        if self.syntax == 'n3':
+            data.append(self.message.serialize(format='n3'))
+        elif self.syntax == 'text/plain':
+            data.append(self.message)
+        else:
+            raise StreamsemException('Unsupported syntax', 'event_syntax')
+        return '\n'.join(data)
 
     def __str__(self):
-        return str(self.message)
+        return self.serialize()
+
+    def __parse_syntax(self, syntax):
+        if syntax == 'n3' or syntax == 'text/plain':
+            return syntax
+        else:
+            raise StreamsemException('Unknown syntax', 'event_syntax')
 
 def deserialize_event(data):
-    return Event(data)
+    parts = data.split('\n')
+    source_id = None
+    syntax = None
+    aggregator_id = None
+    event_type = None
+    timestamp = None
+    num_headers = 0
+    for part in parts:
+        if part != '':
+            comps = part.split(':')
+            if len(comps) != 2:
+                raise StreamsemException('Event syntax error',
+                                         'event_deserialize')
+            header = comps[0].strip()
+            value = comps[1].strip()
+            if header == 'Source-Id':
+                if source_id is None:
+                    source_id = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Syntax':
+                if syntax is None:
+                    syntax = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Aggregator-Id':
+                if aggregator_id is None:
+                    aggregator_id = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Event-Type':
+                if event_type is None:
+                    event_type = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Timestamp':
+                if timestamp is None:
+                    timestamp = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            num_headers += 1
+        else:
+            break
+    message = '\n'.join(parts[num_headers + 1:])
+    if source_id is None or syntax is None:
+        raise StreamsemException('Missing headers in event',
+                                 'event_deserialize')
+    return Event(source_id, syntax, message, aggregator_id=aggregator_id,
+                 event_type=event_type, timestamp=timestamp)
