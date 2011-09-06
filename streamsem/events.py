@@ -7,14 +7,24 @@ from rdflib.graph import Graph
 import streamsem
 
 class Event(object):
-    def __init__(self, source_id, syntax, message, aggregator_id=None,
+    def __init__(self, source_id, syntax, message, aggregator_id=[],
                  event_type=None, timestamp=None):
         self.source_id = source_id
         self.syntax = self.__parse_syntax(syntax)
-        self.aggregator_id = None
-        self.event_type = None
-        self.timestamp = None
+        if aggregator_id is None:
+            aggregator_id = []
+        else:
+            if type(aggregator_id) is not list:
+                self.aggregator_id = [str(aggregator_id)]
+            else:
+                self.aggregator_id = [str(e) for e in aggregator_id]
+        self.event_type = event_type
+        self.timestamp = timestamp
         self.message = self.parse_message(message)
+
+    def append_aggregator_id(self, aggregator_id):
+        """Appends a new aggregator id to the event."""
+        self.aggregator_id.append(aggregator_id)
 
     def parse_message(self, message):
         if self.syntax == 'n3':
@@ -33,8 +43,8 @@ class Event(object):
         data = []
         data.append('Source-Id: ' + str(self.source_id))
         data.append('Syntax: ' + str(self.syntax))
-        if self.aggregator_id is not None:
-            data.append('Aggregator-Id: ' + str(self.aggregator_id))
+        if self.aggregator_id != []:
+            data.append('Aggregator-Ids: ' + ','.join(self.aggregator_id))
         if self.event_type is not None:
             data.append('Event-Type: ' + str(self.event_type))
         if self.timestamp is not None:
@@ -61,7 +71,7 @@ def deserialize_event(data):
     parts = data.split('\n')
     source_id = None
     syntax = None
-    aggregator_id = None
+    aggregator_id = []
     event_type = None
     timestamp = None
     num_headers = 0
@@ -85,9 +95,9 @@ def deserialize_event(data):
                 else:
                     raise StreamsemException('Duplicate header in event',
                                              'event_deserialize')
-            elif header == 'Aggregator-Id':
-                if aggregator_id is None:
-                    aggregator_id = value
+            elif header == 'Aggregator-Ids':
+                if aggregator_id == []:
+                    aggregator_id = [v.strip() for v in value.split(',')]
                 else:
                     raise StreamsemException('Duplicate header in event',
                                              'event_deserialize')

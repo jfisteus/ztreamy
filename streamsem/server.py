@@ -10,7 +10,7 @@ import tornado.options
 import tornado.web
 
 from streamsem import events
-
+import streamsem
 
 class StreamServer(object):
     def __init__(self, port, ioloop=None):
@@ -143,9 +143,10 @@ class NextEventHandler(tornado.web.RequestHandler):
             self.finish()
 
 def main():
+    source_id = streamsem.random_id()
     def publish_event():
         logging.info('In publish_event')
-        event = events.Event('a1b2f3', 'n3',
+        event = events.Event(source_id, 'n3',
                              '<http://example.com/now> '
                              '<http://example.com/time> "%s".'%time.time())
         server.dispatch_event(event)
