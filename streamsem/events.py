@@ -33,7 +33,8 @@ class Event(object):
         elif self.syntax == 'text/plain':
             return message
         else:
-            raise StreamsemException('Unsupported syntax', 'event_syntax')
+            raise streamsem.StreamsemException('Unsupported syntax',
+                                               'event_syntax')
 
     def parse_message_rdflib(self, message, syntax):
         g = Graph()
@@ -57,7 +58,8 @@ class Event(object):
         elif self.syntax == 'text/plain':
             data.append(self.message)
         else:
-            raise StreamsemException('Unsupported syntax', 'event_syntax')
+            raise streamsem.StreamsemException('Unsupported syntax',
+                                               'event_syntax')
         return '\n'.join(data)
 
     def __str__(self):
@@ -67,7 +69,8 @@ class Event(object):
         if syntax == 'n3' or syntax == 'text/plain':
             return syntax
         else:
-            raise StreamsemException('Unknown syntax', 'event_syntax')
+            raise streamsem.StreamsemException('Unknown syntax',
+                                               'event_syntax')
 
 def deserialize_event(data):
     parts = data.split('\n')
@@ -82,52 +85,52 @@ def deserialize_event(data):
         if part != '':
             comps = part.split(':')
             if len(comps) != 2:
-                raise StreamsemException('Event syntax error',
-                                         'event_deserialize')
+                raise streamsem.StreamsemException('Event syntax error',
+                                                   'event_deserialize')
             header = comps[0].strip()
             value = comps[1].strip()
             if header == 'Event-Id':
                 if event_id is None:
                     event_id = value
                 else:
-                    raise StreamsemException('Duplicate header in event',
-                                             'event_deserialize')
+                    raise streamsem.StreamsemException(
+                        'Duplicate header in event', 'event_deserialize')
             if header == 'Source-Id':
                 if source_id is None:
                     source_id = value
                 else:
-                    raise StreamsemException('Duplicate header in event',
-                                             'event_deserialize')
+                    raise streamsem.StreamsemException(
+                        'Duplicate header in event', 'event_deserialize')
             elif header == 'Syntax':
                 if syntax is None:
                     syntax = value
                 else:
-                    raise StreamsemException('Duplicate header in event',
-                                             'event_deserialize')
+                    raise streamsem.StreamsemException(
+                        'Duplicate header in event', 'event_deserialize')
             elif header == 'Aggregator-Ids':
                 if aggregator_id == []:
                     aggregator_id = [v.strip() for v in value.split(',')]
                 else:
-                    raise StreamsemException('Duplicate header in event',
-                                             'event_deserialize')
+                    raise streamsem.StreamsemException(
+                        'Duplicate header in event', 'event_deserialize')
             elif header == 'Event-Type':
                 if event_type is None:
                     event_type = value
                 else:
-                    raise StreamsemException('Duplicate header in event',
-                                             'event_deserialize')
+                    raise streamsem.StreamsemException(
+                        'Duplicate header in event', 'event_deserialize')
             elif header == 'Timestamp':
                 if timestamp is None:
                     timestamp = value
                 else:
-                    raise StreamsemException('Duplicate header in event',
-                                             'event_deserialize')
+                    raise streamsem.StreamsemException(
+                        'Duplicate header in event', 'event_deserialize')
             num_headers += 1
         else:
             break
     message = '\n'.join(parts[num_headers + 1:])
     if event_id is None or source_id is None or syntax is None:
-        raise StreamsemException('Missing headers in event',
-                                 'event_deserialize')
+        raise streamsem.StreamsemException('Missing headers in event',
+                                           'event_deserialize')
     return Event(source_id, syntax, message, aggregator_id=aggregator_id,
                  event_type=event_type, timestamp=timestamp)

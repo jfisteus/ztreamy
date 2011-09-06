@@ -8,7 +8,6 @@ def read_cmd_options():
     from optparse import OptionParser, Values
     parser = OptionParser(usage='usage: %prog [options] source_stream_urls',
                           version='0.0')
-    import tornado.options
     tornado.options.define('port', default=8888, help='run on the given port',
                            type=int)
     tornado.options.define('aggregatorid', default=None,

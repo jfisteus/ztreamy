@@ -4,7 +4,6 @@ import logging
 
 from streamsem import events
 
-
 class AsyncStreamingClient(object):
     def __init__(self, url, event_callback=None, error_callback=None,
                  ioloop=None):
@@ -48,7 +47,7 @@ class AsyncStreamingClient(object):
                 if self.looping:
                     self.ioloop.stop()
         else:
-            self._notify_event(request.body)
+            self._notify_event(response.body)
 
 def read_cmd_options():
     from optparse import OptionParser

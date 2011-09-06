@@ -6,7 +6,6 @@ import logging
 import time
 import tornado.escape
 import tornado.ioloop
-import tornado.options
 import tornado.web
 
 from streamsem import events
