@@ -9,6 +9,7 @@ import streamsem
 class Event(object):
     def __init__(self, source_id, syntax, message, aggregator_id=[],
                  event_type=None, timestamp=None):
+        self.event_id = streamsem.random_id()
         self.source_id = source_id
         self.syntax = self.__parse_syntax(syntax)
         if aggregator_id is None:
@@ -41,6 +42,7 @@ class Event(object):
 
     def serialize(self):
         data = []
+        data.append('Event-Id: ' + self.event_id)
         data.append('Source-Id: ' + str(self.source_id))
         data.append('Syntax: ' + str(self.syntax))
         if self.aggregator_id != []:
@@ -69,6 +71,7 @@ class Event(object):
 
 def deserialize_event(data):
     parts = data.split('\n')
+    event_id = None
     source_id = None
     syntax = None
     aggregator_id = []
@@ -83,6 +86,12 @@ def deserialize_event(data):
                                          'event_deserialize')
             header = comps[0].strip()
             value = comps[1].strip()
+            if header == 'Event-Id':
+                if event_id is None:
+                    event_id = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
             if header == 'Source-Id':
                 if source_id is None:
                     source_id = value
@@ -117,7 +126,7 @@ def deserialize_event(data):
         else:
             break
     message = '\n'.join(parts[num_headers + 1:])
-    if source_id is None or syntax is None:
+    if event_id is None or source_id is None or syntax is None:
         raise StreamsemException('Missing headers in event',
                                  'event_deserialize')
     return Event(source_id, syntax, message, aggregator_id=aggregator_id,

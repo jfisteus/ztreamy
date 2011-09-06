@@ -1,6 +1,6 @@
 """ A framework for transporting for semantic events."""
 
-import random
+import uuid
 
 class StreamsemException(Exception):
     def __init__(self, message, error_type=None):
@@ -20,4 +20,4 @@ def random_id():
        returned as a string.
 
     """
-    return hex(random.getrandbits(128))[2:-1]
+    return str(uuid.uuid4())
