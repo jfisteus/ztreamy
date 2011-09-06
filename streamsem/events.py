@@ -11,7 +11,7 @@ class Event(object):
                  event_type=None, timestamp=None):
         self.event_id = streamsem.random_id()
         self.source_id = source_id
-        self.syntax = self.__parse_syntax(syntax)
+        self.syntax = self._parse_syntax(syntax)
         if aggregator_id is None:
             aggregator_id = []
         else:
@@ -63,7 +63,7 @@ class Event(object):
     def __str__(self):
         return self.serialize()
 
-    def __parse_syntax(self, syntax):
+    def _parse_syntax(self, syntax):
         if syntax == 'n3' or syntax == 'text/plain':
             return syntax
         else:

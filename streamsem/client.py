@@ -20,15 +20,15 @@ class AsyncStreamingClient(object):
     def start(self, loop=False):
         http_client = tornado.httpclient.AsyncHTTPClient()
         req = tornado.httpclient.HTTPRequest(
-            self.url, streaming_callback=self.__stream_callback,
+            self.url, streaming_callback=self._stream_callback,
             request_timeout=None, connect_timeout=None)
-        http_client.fetch(req, self.__request_callback)
+        http_client.fetch(req, self._request_callback)
         if loop:
             self.looping = True
             self.ioloop.start()
             self.looping = False
 
-    def __notify_event(self, data):
+    def _notify_event(self, data):
         event = events.deserialize_event(data)
         if event is not None:
             if self.event_callback is not None:
@@ -37,10 +37,10 @@ class AsyncStreamingClient(object):
             if self.error_callback is not None:
                 self.error_callback('Error while deserializing event')
 
-    def __stream_callback(self, data):
-        self.__notify_event(data)
+    def _stream_callback(self, data):
+        self._notify_event(data)
 
-    def __request_callback(self, response):
+    def _request_callback(self, response):
         if response.error:
             if self.error_callback is not None:
                 self.error_callback('Error in HTTP request',
@@ -48,7 +48,7 @@ class AsyncStreamingClient(object):
                 if self.looping:
                     self.ioloop.stop()
         else:
-            self.__notify_event(request.body)
+            self._notify_event(request.body)
 
 def read_cmd_options():
     from optparse import OptionParser
