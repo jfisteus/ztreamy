@@ -8,7 +8,10 @@ import tornado.escape
 import tornado.ioloop
 import tornado.web
 
+import streamsem
 from streamsem import events
+from streamsem.client import AsyncStreamingClient
+
 import streamsem
 
 class StreamServer(object):
@@ -29,6 +32,36 @@ class StreamServer(object):
         self.ioloop.start()
 
 
+class RelayServer(StreamServer):
+    """A server that relays events from other servers."""
+    def __init__(self, port, source_urls, aggregator_id, ioloop=None):
+        super(RelayServer, self).__init__(port, ioloop=ioloop)
+        if aggregator_id is not None:
+            self.aggregator_id = aggregator_id
+        else:
+            self.aggregator_id = streamsem.random_id()
+        self.source_urls = source_urls
+        self.clients = \
+            [AsyncStreamingClient(url, event_callback=self._relay_event,
+                                  error_callback=self._handle_error) \
+                 for url in source_urls]
+
+    def start(self):
+        for client in self.clients:
+            client.start(loop=False)
+        super(RelayServer, self).start()
+
+    def _relay_event(self, event):
+        event.append_aggregator_id(self.aggregator_id)
+        self.dispatch_event(event)
+
+    def _handle_error(self, message, http_error=None):
+        if http_error is not None:
+            logging.error(message + ': ' + str(http_error))
+        else:
+            logging.error(message)
+
+
 class Application(tornado.web.Application):
     def __init__(self):
         self.dispatcher = EventDispatcher()
@@ -46,7 +79,7 @@ class Application(tornado.web.Application):
         ]
         # No settings by now...
         settings = dict()
-        tornado.web.Application.__init__(self, handlers, **settings)
+        super(Application, self).__init__(handlers, **settings)
 
 
 class Client(object):

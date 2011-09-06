@@ -1,8 +1,6 @@
 import tornado.options
 
-import streamsem
-from streamsem.server import StreamServer
-from streamsem.client import AsyncStreamingClient
+from streamsem.server import RelayServer
 
 def read_cmd_options():
     from optparse import OptionParser, Values
@@ -13,7 +11,6 @@ def read_cmd_options():
     tornado.options.define('aggregatorid', default=None,
                            help='aggregator id', type=str)
     remaining = tornado.options.parse_command_line()
-#    (options, args) = parser.parse_args()
     options = Values()
     if len(remaining) >= 1:
         options.stream_urls = remaining
@@ -23,22 +20,8 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
-    server = StreamServer(tornado.options.options.port)
-    if tornado.options.options.aggregatorid is None:
-        tornado.options.options.aggregatorid = streamsem.random_id()
-    def relay_event(event):
-        event.append_aggregator_id(tornado.options.options.aggregatorid)
-        server.dispatch_event(event)
-    def handle_error(message, http_error=None):
-        if http_error is not None:
-            print message + ': ' + str(http_error)
-        else:
-            print message
-    clients = [AsyncStreamingClient(url, event_callback=relay_event,
-                                    error_callback=handle_error) \
-                   for url in options.stream_urls]
-    for client in clients:
-        client.start(loop=False)
+    server = RelayServer(tornado.options.options.port, options.stream_urls,
+                         tornado.options.options.aggregatorid)
     server.start()
 
 if __name__ == "__main__":

@@ -65,9 +65,9 @@ def main():
         print event
     def handle_error(message, http_error=None):
         if http_error is not None:
-            print message + ': ' + str(http_error)
+            logging.error(message + ': ' + str(http_error))
         else:
-            print message
+            logging.error(message)
     options = read_cmd_options()
     client = AsyncStreamingClient(options.stream_url,
                                   event_callback=handle_event,
