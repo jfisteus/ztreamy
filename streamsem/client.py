@@ -6,7 +6,7 @@ from streamsem import events
 
 class AsyncStreamingClient(object):
     def __init__(self, url, event_callback=None, error_callback=None,
-                 ioloop=None):
+                 ioloop=None, parse_event_body=True):
         self.url = url
         self.event_callback = event_callback
         self.error_callback = error_callback
@@ -15,6 +15,7 @@ class AsyncStreamingClient(object):
         else:
             self.ioloop = tornado.ioloop.IOLoop.instance()
         self.looping = False
+        self.parse_event_body = parse_event_body
 
     def start(self, loop=False):
         http_client = tornado.httpclient.AsyncHTTPClient()
@@ -28,7 +29,7 @@ class AsyncStreamingClient(object):
             self.looping = False
 
     def _notify_event(self, data):
-        event = events.deserialize_event(data)
+        event = events.deserialize(data, parse_body=self.parse_event_body)
         if event is not None:
             if self.event_callback is not None:
                 self.event_callback(event)

@@ -7,8 +7,14 @@ from rdflib.graph import Graph
 import streamsem
 
 class Event(object):
-    def __init__(self, source_id, syntax, message, aggregator_id=[],
-                 event_type=None, timestamp=None):
+    def __init__(self, source_id, syntax, body, aggregator_id=[],
+                 event_type=None, timestamp=None, parse_body=True):
+        """Creates a new event.
+
+        parse_body -- If True (default value) the body is parsed.  If
+        False, the body is stored as it is, without parsing.
+
+        """
         self.event_id = streamsem.random_id()
         self.source_id = source_id
         self.syntax = self._parse_syntax(syntax)
@@ -21,27 +27,41 @@ class Event(object):
                 self.aggregator_id = [str(e) for e in aggregator_id]
         self.event_type = event_type
         self.timestamp = timestamp
-        self.message = self.parse_message(message)
+        if parse_body:
+            self.body = self._parse_body_internal(body)
+            self.internal_syntax = syntax
+        else:
+            self.body = str(body)
+            self.internal_syntax = 'unparsed'
 
     def append_aggregator_id(self, aggregator_id):
         """Appends a new aggregator id to the event."""
         self.aggregator_id.append(aggregator_id)
 
-    def parse_message(self, message):
+    def parse_body(self):
+        """Parses the event body if it was not parsed before."""
+        if self.internal_syntax == 'unparsed':
+            self.body = self._parse_body_internal(self.body)
+            self.internal_syntax = self.syntax
+
+    def __str__(self):
+        return self._serialize()
+
+    def _parse_body_internal(self, body):
         if self.syntax == 'n3':
-            return self.parse_message_rdflib(message, syntax='n3')
+            return self._parse_body_rdflib(body, syntax='n3')
         elif self.syntax == 'text/plain':
-            return message
+            return self.body
         else:
             raise streamsem.StreamsemException('Unsupported syntax',
                                                'event_syntax')
 
-    def parse_message_rdflib(self, message, syntax):
+    def _parse_body_rdflib(self, body, syntax):
         g = Graph()
-        g.parse(data=message, format=syntax)
+        g.parse(data=body, format=syntax)
         return g
 
-    def serialize(self):
+    def _serialize(self):
         data = []
         data.append('Event-Id: ' + self.event_id)
         data.append('Source-Id: ' + str(self.source_id))
@@ -53,17 +73,16 @@ class Event(object):
         if self.timestamp is not None:
             data.append('Timestamp: ' + str(self.timestamp))
         data.append('')
-        if self.syntax == 'n3':
-            data.append(self.message.serialize(format='n3'))
-        elif self.syntax == 'text/plain':
-            data.append(self.message)
+        if self.internal_syntax == 'n3':
+            data.append(self.body.serialize(format='n3'))
+        elif self.internal_syntax == 'text/plain':
+            data.append(self.body)
+        elif self.internal_syntax == 'unparsed':
+            data.append(self.body)
         else:
             raise streamsem.StreamsemException('Unsupported syntax',
                                                'event_syntax')
         return '\n'.join(data)
-
-    def __str__(self):
-        return self.serialize()
 
     def _parse_syntax(self, syntax):
         if syntax == 'n3' or syntax == 'text/plain':
@@ -72,7 +91,7 @@ class Event(object):
             raise streamsem.StreamsemException('Unknown syntax',
                                                'event_syntax')
 
-def deserialize_event(data):
+def deserialize(data, parse_body=True):
     parts = data.split('\n')
     event_id = None
     source_id = None
@@ -128,9 +147,10 @@ def deserialize_event(data):
             num_headers += 1
         else:
             break
-    message = '\n'.join(parts[num_headers + 1:])
+    body = '\n'.join(parts[num_headers + 1:])
     if event_id is None or source_id is None or syntax is None:
         raise streamsem.StreamsemException('Missing headers in event',
                                            'event_deserialize')
-    return Event(source_id, syntax, message, aggregator_id=aggregator_id,
-                 event_type=event_type, timestamp=timestamp)
+    return Event(source_id, syntax, body, aggregator_id=aggregator_id,
+                 event_type=event_type, timestamp=timestamp,
+                 parse_body=parse_body)

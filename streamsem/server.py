@@ -43,7 +43,8 @@ class RelayServer(StreamServer):
         self.source_urls = source_urls
         self.clients = \
             [AsyncStreamingClient(url, event_callback=self._relay_event,
-                                  error_callback=self._handle_error) \
+                                  error_callback=self._handle_error,
+                                  parse_event_body=False) \
                  for url in source_urls]
 
     def start(self):
