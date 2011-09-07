@@ -15,13 +15,13 @@ from streamsem.client import AsyncStreamingClient
 import streamsem
 
 class StreamServer(object):
-    def __init__(self, port, ioloop=None):
+    def __init__(self, port, ioloop=None, allow_publish=False):
         logging.info('Initializing server...')
         if ioloop is not None:
             self.ioloop = ioloop
         else:
             self.ioloop = tornado.ioloop.IOLoop.instance()
-        self.app = Application()
+        self.app = WebApplication(allow_publish=allow_publish)
         self.app.listen(port)
 
     def dispatch_event(self, event):
@@ -34,8 +34,10 @@ class StreamServer(object):
 
 class RelayServer(StreamServer):
     """A server that relays events from other servers."""
-    def __init__(self, port, source_urls, aggregator_id, ioloop=None):
-        super(RelayServer, self).__init__(port, ioloop=ioloop)
+    def __init__(self, port, source_urls, aggregator_id, ioloop=None,
+                 allow_publish=False):
+        super(RelayServer, self).__init__(port, ioloop=ioloop,
+                                          allow_publish=allow_publish)
         if aggregator_id is not None:
             self.aggregator_id = aggregator_id
         else:
@@ -63,24 +65,26 @@ class RelayServer(StreamServer):
             logging.error(message)
 
 
-class Application(tornado.web.Application):
-    def __init__(self):
+class WebApplication(tornado.web.Application):
+    def __init__(self, allow_publish=False):
         self.dispatcher = EventDispatcher()
         handler_kwargs = {
             'dispatcher': self.dispatcher,
         }
         handlers = [
             tornado.web.URLSpec(r"/", MainHandler),
-            tornado.web.URLSpec(r"/events/publish", EventPublishHandler,
-                                kwargs=handler_kwargs),
             tornado.web.URLSpec(r"/events/stream", EventStreamHandler,
                                 kwargs=handler_kwargs),
             tornado.web.URLSpec(r"/events/next", NextEventHandler,
                                 kwargs=handler_kwargs),
         ]
+        if allow_publish:
+            handlers.append(tornado.web.URLSpec(r"/events/publish",
+                                                EventPublishHandler,
+                                                kwargs=handler_kwargs))
         # No settings by now...
         settings = dict()
-        super(Application, self).__init__(handlers, **settings)
+        super(WebApplication, self).__init__(handlers, **settings)
 
 
 class Client(object):
@@ -138,7 +142,29 @@ class EventPublishHandler(tornado.web.RequestHandler):
         self.dispatcher = dispatcher
 
     def get(self):
-        event = events.Event(self.get_argument('message'))
+        event_id = self.get_argument('event-id', default=None)
+        if event_id is None:
+            event_id = streamsem.random_id()
+        source_id = self.get_argument('source-id')
+        syntax = self.get_argument('syntax')
+        body = self.get_argument('body')
+        aggregator_id = events.parse_aggregator_id( \
+            self.get_argument('aggregator-id', default=''))
+        event_type = self.get_argument('event-type', default=None)
+        timestamp = self.get_argument('timestamp', default=None)
+        event = events.Event(source_id, syntax, body,
+                             aggregator_id=aggregator_id,
+                             event_type=event_type, timestamp=timestamp)
+        self.dispatcher.dispatch(event)
+        self.finish()
+
+    def post(self):
+        if self.request.headers['Content-Type'] != streamsem.mimetype_event:
+            raise tornado.web.HTTPError(400, 'Bad content type')
+        try:
+            event = events.deserialize(self.request.body)
+        except Exception as ex:
+            raise tornado.web.HTTPError(400, str(ex))
         self.dispatcher.dispatch(event)
         self.finish()
 
@@ -189,7 +215,7 @@ def main():
                            type=int)
     tornado.options.parse_command_line()
     port = tornado.options.options.port
-    server = StreamServer(port)
+    server = StreamServer(port, allow_publish=True)
     sched = tornado.ioloop.PeriodicCallback(publish_event, 3000,
                                             io_loop=server.ioloop)
     sched.start()
