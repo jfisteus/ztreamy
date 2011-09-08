@@ -3,10 +3,10 @@
 """
 
 import logging
-import time
 import tornado.escape
 import tornado.ioloop
 import tornado.web
+import tornado.httpserver
 
 import streamsem
 from streamsem import events
@@ -17,19 +17,36 @@ import streamsem
 class StreamServer(object):
     def __init__(self, port, ioloop=None, allow_publish=False):
         logging.info('Initializing server...')
-        if ioloop is not None:
-            self.ioloop = ioloop
-        else:
-            self.ioloop = tornado.ioloop.IOLoop.instance()
+        self.port = port
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.app = WebApplication(allow_publish=allow_publish)
-        self.app.listen(port)
+        self.http_server = tornado.httpserver.HTTPServer(self.app)
+        self._looping = False
+        self._started = False
+        self._stopped = False
 
     def dispatch_event(self, event):
         self.app.dispatcher.dispatch(event)
 
-    def start(self):
+    def start(self, loop=True):
+        assert(not self._started)
         logging.info('Starting server...')
-        self.ioloop.start()
+        self.http_server.listen(self.port)
+        if loop:
+            self._looping = True
+            self._started = True
+            self.ioloop.start()
+            self._looping = False
+
+    def stop(self):
+        if self._started and not self._stopped:
+            logging.info('Stopping server...')
+            self.http_server.stop()
+            self.app.dispatcher.close()
+            self._stopped = True
+            if self._looping == True:
+                self.ioloop.stop()
+                self._looping = False
 
 
 class RelayServer(StreamServer):
@@ -49,10 +66,16 @@ class RelayServer(StreamServer):
                                   parse_event_body=False) \
                  for url in source_urls]
 
-    def start(self):
+    def start(self, loop=True):
         for client in self.clients:
             client.start(loop=False)
-        super(RelayServer, self).start()
+        super(RelayServer, self).start(loop)
+
+    def stop(self):
+        if self._started and not self._stopped:
+            for client in self.clients:
+                client.stop()
+            super(RelayServer, self).stop()
 
     def _relay_event(self, event):
         event.append_aggregator_id(self.aggregator_id)
@@ -88,9 +111,20 @@ class WebApplication(tornado.web.Application):
 
 
 class Client(object):
-    def __init__(self, callback, streaming):
+    def __init__(self, handler, callback, streaming):
+        self.handler = handler
         self.callback = callback
         self.streaming = streaming
+
+    def close(self):
+        """Closes the connection to this client.
+
+        It does nothing if the connection is already closed.
+
+        """
+        if not self.handler.request.connection.stream.closed():
+            logging.info('Finishing a client...')
+            self.handler.finish()
 
 
 class EventDispatcher(object):
@@ -111,6 +145,8 @@ class EventDispatcher(object):
         if client.streaming and client in self.streaming_clients:
             self.streaming_clients.remove(client)
             logging.info('Client deregistered')
+        else:
+            logging.info('Client already deregistered')
 
     def dispatch(self, event):
         logging.info('Sending event to %r clients',
@@ -129,6 +165,12 @@ class EventDispatcher(object):
         self.event_cache.append(event)
         if len(self.event_cache) > self.cache_size:
             self.event_cache = self.event_cache[-self.cache_size:]
+
+    def close(self):
+        """Closes every active streaming client."""
+        for client in self.streaming_clients:
+            client.close()
+        self.streaming_clients = []
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -176,15 +218,19 @@ class EventStreamHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self.on_new_event, True)
+        self.client = Client(self, self._on_new_event, True)
         self.dispatcher.register_client(self.client)
 
-    def on_new_event(self, event):
+    def _on_new_event(self, event):
         if self.request.connection.stream.closed():
             self.dispatcher.deregister_client(self.client)
             return
         self.write(str(event))
         self.flush()
+
+    def _on_client_close(self):
+        self.dispatcher.deregister_client(self.client)
+
 
 class NextEventHandler(tornado.web.RequestHandler):
     def __init__(self, application, request, dispatcher=None):
@@ -202,15 +248,19 @@ class NextEventHandler(tornado.web.RequestHandler):
             self.finish()
 
 def main():
+    import time
+    import tornado.options
     source_id = streamsem.random_id()
+
     def publish_event():
         logging.info('In publish_event')
         event = events.Event(source_id, 'n3',
                              '<http://example.com/now> '
                              '<http://example.com/time> "%s".'%time.time())
         server.dispatch_event(event)
+    def stop_server():
+        server.stop()
 
-    import tornado.options
     tornado.options.define('port', default=8888, help='run on the given port',
                            type=int)
     tornado.options.parse_command_line()
@@ -219,6 +269,10 @@ def main():
     sched = tornado.ioloop.PeriodicCallback(publish_event, 3000,
                                             io_loop=server.ioloop)
     sched.start()
+
+     # Uncomment to test StreamServer.stop():
+#    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
+
     server.start()
 
 

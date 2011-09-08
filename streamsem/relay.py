@@ -19,9 +19,16 @@ def read_cmd_options():
     return options
 
 def main():
+    import time
     options = read_cmd_options()
+    def stop_server():
+        server.stop()
     server = RelayServer(tornado.options.options.port, options.stream_urls,
                          tornado.options.options.aggregatorid)
+
+    # Uncomment to test RelayServer.stop():
+#    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
+
     server.start()
 
 if __name__ == "__main__":
