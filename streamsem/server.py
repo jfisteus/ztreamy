@@ -189,12 +189,14 @@ class EventPublishHandler(tornado.web.RequestHandler):
             event_id = streamsem.random_id()
         source_id = self.get_argument('source-id')
         syntax = self.get_argument('syntax')
+        application_id = self.get_argument('application_id')
         body = self.get_argument('body')
         aggregator_id = events.parse_aggregator_id( \
             self.get_argument('aggregator-id', default=''))
         event_type = self.get_argument('event-type', default=None)
         timestamp = self.get_argument('timestamp', default=None)
         event = events.Event(source_id, syntax, body,
+                             application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
         self.dispatcher.dispatch(event)
@@ -251,12 +253,14 @@ def main():
     import time
     import tornado.options
     source_id = streamsem.random_id()
+    application_id = '1111-1111'
 
     def publish_event():
         logging.info('In publish_event')
         event = events.Event(source_id, 'n3',
                              '<http://example.com/now> '
-                             '<http://example.com/time> "%s".'%time.time())
+                             '<http://example.com/time> "%s".'%time.time(),
+                             application_id=application_id)
         server.dispatch_event(event)
     def stop_server():
         server.stop()

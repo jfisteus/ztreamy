@@ -7,8 +7,9 @@ from rdflib.graph import Graph
 import streamsem
 
 class Event(object):
-    def __init__(self, source_id, syntax, body, aggregator_id=[],
-                 event_type=None, timestamp=None, parse_body=True):
+    def __init__(self, source_id, syntax, body, application_id=None,
+                 aggregator_id=[], event_type=None, timestamp=None,
+                 parse_body=True):
         """Creates a new event.
 
         parse_body -- If True (default value) the body is parsed.  If
@@ -26,16 +27,14 @@ class Event(object):
             else:
                 self.aggregator_id = [str(e) for e in aggregator_id]
         self.event_type = event_type
-        if timestamp is not None:
-            self.timestamp = timestamp
-        else:
-            self.timestamp = streamsem.get_timestamp()
+        self.timestamp = timestamp or streamsem.get_timestamp()
         if parse_body:
             self.body = self._parse_body_internal(body)
             self.internal_syntax = syntax
         else:
             self.body = str(body)
             self.internal_syntax = 'unparsed'
+        self.application_id = application_id
 
     def append_aggregator_id(self, aggregator_id):
         """Appends a new aggregator id to the event."""
@@ -48,6 +47,7 @@ class Event(object):
             self.internal_syntax = self.syntax
 
     def __str__(self):
+        """Returns the string serialization of the event."""
         return self._serialize()
 
     def _parse_body_internal(self, body):
@@ -69,6 +69,8 @@ class Event(object):
         data.append('Event-Id: ' + self.event_id)
         data.append('Source-Id: ' + str(self.source_id))
         data.append('Syntax: ' + str(self.syntax))
+        if self.application_id is not None:
+            data.append('Application-Id: ' + str(self.application_id))
         if self.aggregator_id != []:
             data.append('Aggregator-Ids: ' + ','.join(self.aggregator_id))
         if self.event_type is not None:
@@ -108,6 +110,7 @@ def deserialize(data, parse_body=True):
     event_id = None
     source_id = None
     syntax = None
+    application_id = None
     aggregator_id = []
     event_type = None
     timestamp = None
@@ -126,7 +129,7 @@ def deserialize(data, parse_body=True):
                 else:
                     raise streamsem.StreamsemException(
                         'Duplicate header in event', 'event_deserialize')
-            if header == 'Source-Id':
+            elif header == 'Source-Id':
                 if source_id is None:
                     source_id = value
                 else:
@@ -135,6 +138,12 @@ def deserialize(data, parse_body=True):
             elif header == 'Syntax':
                 if syntax is None:
                     syntax = value
+                else:
+                    raise streamsem.StreamsemException(
+                        'Duplicate header in event', 'event_deserialize')
+            elif header == 'Application-Id':
+                if application_id is None:
+                    application_id = value
                 else:
                     raise streamsem.StreamsemException(
                         'Duplicate header in event', 'event_deserialize')
@@ -163,9 +172,9 @@ def deserialize(data, parse_body=True):
     if event_id is None or source_id is None or syntax is None:
         raise streamsem.StreamsemException('Missing headers in event',
                                            'event_deserialize')
-    return Event(source_id, syntax, body, aggregator_id=aggregator_id,
-                 event_type=event_type, timestamp=timestamp,
-                 parse_body=parse_body)
+    return Event(source_id, syntax, body, application_id=application_id,
+                 aggregator_id=aggregator_id, event_type=event_type,
+                 timestamp=timestamp, parse_body=parse_body)
 
 def parse_aggregator_id(data):
     return [v.strip() for v in data.split(',') if v != '']

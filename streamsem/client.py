@@ -91,7 +91,7 @@ def main():
     client = AsyncStreamingClient(options.stream_url,
                                   event_callback=handle_event,
                                   error_callback=handle_error)
-    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
+#    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     client.start(loop=True)
 
 if __name__ == "__main__":
