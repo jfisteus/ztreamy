@@ -2,23 +2,59 @@
 
 """
 
-from rdflib.graph import Graph
-
 import streamsem
+from streamsem import StreamsemException
 
 class Event(object):
+    """Represents a generic event in the system.
+
+    It is intended to be subclassed for application-specific types
+    of events.
+
+    """
+
+    _subclasses = {}
+
+    @staticmethod
+    def register_syntax(syntax, subclass):
+        """Registers a subclass of `Event` for a specific syntax.
+
+        `subclass`should be a subclass of `Event`.  Overrides a
+        previous registration for the same syntax.
+
+        """
+        assert issubclass(subclass, Event), \
+            '{0} must be a subclass of Event'.format(subclass)
+        Event._subclasses[syntax] = subclass
+
+    @staticmethod
+    def create(source_id, syntax, body, **kwargs):
+        """Creates an instance of the appropriate subclass of `Event`.
+
+        The subclass to use is the one registered for the syntax
+        of the event (see `register_syntax`). If no subclass has
+        been registered for than syntax, an instance of `Event`
+        is returned instead.
+
+        """
+        if syntax in Event._subclasses:
+            subclass = Event._subclasses[syntax]
+        else:
+            subclass = Event
+        return subclass(source_id, syntax, body, **kwargs)
+
     def __init__(self, source_id, syntax, body, application_id=None,
-                 aggregator_id=[], event_type=None, timestamp=None,
-                 parse_body=True):
+                 aggregator_id=[], event_type=None, timestamp=None):
         """Creates a new event.
 
-        parse_body -- If True (default value) the body is parsed.  If
-        False, the body is stored as it is, without parsing.
+        `body` must be the textual representation of the event or
+        provide that textual representation through `str()`.
 
         """
         self.event_id = streamsem.random_id()
         self.source_id = source_id
-        self.syntax = self._parse_syntax(syntax)
+        self.syntax = syntax
+        self.body = body
         if aggregator_id is None:
             aggregator_id = []
         else:
@@ -28,41 +64,117 @@ class Event(object):
                 self.aggregator_id = [str(e) for e in aggregator_id]
         self.event_type = event_type
         self.timestamp = timestamp or streamsem.get_timestamp()
-        if parse_body:
-            self.body = self._parse_body_internal(body)
-            self.internal_syntax = syntax
-        else:
-            self.body = str(body)
-            self.internal_syntax = 'unparsed'
         self.application_id = application_id
 
     def append_aggregator_id(self, aggregator_id):
         """Appends a new aggregator id to the event."""
         self.aggregator_id.append(aggregator_id)
 
-    def parse_body(self):
-        """Parses the event body if it was not parsed before."""
-        if self.internal_syntax == 'unparsed':
-            self.body = self._parse_body_internal(self.body)
-            self.internal_syntax = self.syntax
-
     def __str__(self):
         """Returns the string serialization of the event."""
         return self._serialize()
 
-    def _parse_body_internal(self, body):
-        if self.syntax == 'n3':
-            return self._parse_body_rdflib(body, syntax='n3')
-        elif self.syntax == 'text/plain':
-            return body
-        else:
-            raise streamsem.StreamsemException('Unsupported syntax',
-                                               'event_syntax')
+    @staticmethod
+    def deserialize(data, parse_body=True):
+        """Deserializes and returns an event from the given string.
 
-    def _parse_body_rdflib(self, body, syntax):
-        g = Graph()
-        g.parse(data=body, format=syntax)
-        return g
+        `data` -- the string representing the event
+
+        `parse_body` -- if True, the body of the event is parsed according
+        to its type. If not, it is stored just as a string in the event
+        object.
+
+        """
+        parts = data.split('\n')
+        event_id = None
+        source_id = None
+        syntax = None
+        application_id = None
+        aggregator_id = []
+        event_type = None
+        timestamp = None
+        num_headers = 0
+        for part in parts:
+            if part == '':
+                break
+            comps = part.split(':')
+            if len(comps) < 2:
+                raise StreamsemException('Event syntax error',
+                                         'event_deserialize')
+            header = comps[0].strip()
+            value = part[len(comps[0]) + 1:].strip()
+            if header == 'Event-Id':
+                if event_id is None:
+                    event_id = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Source-Id':
+                if source_id is None:
+                    source_id = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Syntax':
+                if syntax is None:
+                    syntax = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Application-Id':
+                if application_id is None:
+                    application_id = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Aggregator-Ids':
+                if aggregator_id == []:
+                    aggregator_id = parse_aggregator_id(value)
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Event-Type':
+                if event_type is None:
+                    event_type = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            elif header == 'Timestamp':
+                if timestamp is None:
+                    timestamp = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
+            num_headers += 1
+        body = '\n'.join(parts[num_headers + 1:])
+        if event_id is None or source_id is None or syntax is None:
+            raise StreamsemException('Missing headers in event',
+                                     'event_deserialize')
+        if parse_body:
+            return Event.create(source_id, syntax, body,
+                                application_id=application_id,
+                                aggregator_id=aggregator_id,
+                                event_type=event_type,
+                                timestamp=timestamp)
+        else:
+            return Event(source_id, syntax, body,
+                         application_id=application_id,
+                         aggregator_id=aggregator_id,
+                         event_type=event_type,
+                         timestamp=timestamp)
+
+    def serialize_body(self):
+        """Returns a string representation of the body of the event.
+
+        Raises a `StreamsemException` if the body is None. This method
+        should be overriden by subclasses in order to provide a
+        syntax-specific serialization.
+
+        """
+        if self.body is not None:
+            return str(self.body)
+        else:
+            raise StreamsemException('Empty body in event', 'even_serialize')
 
     def _serialize(self):
         data = []
@@ -78,103 +190,9 @@ class Event(object):
         if self.timestamp is not None:
             data.append('Timestamp: ' + str(self.timestamp))
         data.append('')
-        if self.internal_syntax == 'n3':
-            data.append(self.body.serialize(format='n3'))
-        elif self.internal_syntax == 'text/plain':
-            data.append(self.body)
-        elif self.internal_syntax == 'unparsed':
-            data.append(self.body)
-        else:
-            raise streamsem.StreamsemException('Unsupported syntax',
-                                               'event_syntax')
+        data.append(self.serialize_body())
         return '\n'.join(data)
 
-    def _parse_syntax(self, syntax):
-        if syntax == 'n3' or syntax == 'text/plain':
-            return syntax
-        else:
-            raise streamsem.StreamsemException('Unknown syntax',
-                                               'event_syntax')
-
-def deserialize(data, parse_body=True):
-    """Deserializes and returns an event from the given string.
-
-    `data` -- the string representing the event
-
-    `parse_body` -- if True, the body of the event is parsed according
-    to its type. If not, it is stored just as a string in the event
-    object.
-
-    """
-    parts = data.split('\n')
-    event_id = None
-    source_id = None
-    syntax = None
-    application_id = None
-    aggregator_id = []
-    event_type = None
-    timestamp = None
-    num_headers = 0
-    for part in parts:
-        if part != '':
-            comps = part.split(':')
-            if len(comps) < 2:
-                raise streamsem.StreamsemException('Event syntax error',
-                                                   'event_deserialize')
-            header = comps[0].strip()
-            value = part[len(comps[0]) + 1:].strip()
-            if header == 'Event-Id':
-                if event_id is None:
-                    event_id = value
-                else:
-                    raise streamsem.StreamsemException(
-                        'Duplicate header in event', 'event_deserialize')
-            elif header == 'Source-Id':
-                if source_id is None:
-                    source_id = value
-                else:
-                    raise streamsem.StreamsemException(
-                        'Duplicate header in event', 'event_deserialize')
-            elif header == 'Syntax':
-                if syntax is None:
-                    syntax = value
-                else:
-                    raise streamsem.StreamsemException(
-                        'Duplicate header in event', 'event_deserialize')
-            elif header == 'Application-Id':
-                if application_id is None:
-                    application_id = value
-                else:
-                    raise streamsem.StreamsemException(
-                        'Duplicate header in event', 'event_deserialize')
-            elif header == 'Aggregator-Ids':
-                if aggregator_id == []:
-                    aggregator_id = parse_aggregator_id(value)
-                else:
-                    raise streamsem.StreamsemException(
-                        'Duplicate header in event', 'event_deserialize')
-            elif header == 'Event-Type':
-                if event_type is None:
-                    event_type = value
-                else:
-                    raise streamsem.StreamsemException(
-                        'Duplicate header in event', 'event_deserialize')
-            elif header == 'Timestamp':
-                if timestamp is None:
-                    timestamp = value
-                else:
-                    raise streamsem.StreamsemException(
-                        'Duplicate header in event', 'event_deserialize')
-            num_headers += 1
-        else:
-            break
-    body = '\n'.join(parts[num_headers + 1:])
-    if event_id is None or source_id is None or syntax is None:
-        raise streamsem.StreamsemException('Missing headers in event',
-                                           'event_deserialize')
-    return Event(source_id, syntax, body, application_id=application_id,
-                 aggregator_id=aggregator_id, event_type=event_type,
-                 timestamp=timestamp, parse_body=parse_body)
 
 def parse_aggregator_id(data):
     return [v.strip() for v in data.split(',') if v != '']

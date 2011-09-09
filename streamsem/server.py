@@ -252,15 +252,16 @@ class NextEventHandler(tornado.web.RequestHandler):
 def main():
     import time
     import tornado.options
+    from streamsem import rdfevents
     source_id = streamsem.random_id()
     application_id = '1111-1111'
 
     def publish_event():
         logging.info('In publish_event')
-        event = events.Event(source_id, 'n3',
-                             '<http://example.com/now> '
-                             '<http://example.com/time> "%s".'%time.time(),
-                             application_id=application_id)
+        event_body = ('<http://example.com/now> '
+                       '<http://example.com/time> "%s".'%time.time())
+        event = rdfevents.RDFEvent(source_id, 'n3', event_body,
+                                   application_id=application_id)
         server.dispatch_event(event)
     def stop_server():
         server.stop()

@@ -43,10 +43,10 @@ class AsyncStreamingClient(object):
                 self._looping = False
 
     def _notify_event(self, data):
-        event = events.deserialize(data, parse_body=self.parse_event_body)
-        if event is not None:
+        ev = events.Event.deserialize(data, parse_body=self.parse_event_body)
+        if ev is not None:
             if self.event_callback is not None:
-                self.event_callback(event)
+                self.event_callback(ev)
         else:
             if self.error_callback is not None:
                 self.error_callback('Error while deserializing event')
