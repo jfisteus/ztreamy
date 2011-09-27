@@ -168,18 +168,30 @@ class EventDispatcher(object):
             logging.info('Client already deregistered')
 
     def dispatch(self, events):
+        num_clients = len(self.streaming_clients) + len(self.one_time_clients)
         logging.info('Sending %r events to %r clients', len(events),
-                     len(self.streaming_clients) + len(self.one_time_clients))
-        for client in self.streaming_clients:
-            try:
-                client.callback(events)
-            except:
-                logging.error("Error in client callback", exc_info=True)
-        for client in self.one_time_clients:
-            try:
-                client.callback(events)
-            except:
-                logging.error("Error in client callback", exc_info=True)
+                     num_clients)
+        if num_clients > 0:
+            if isinstance(events, list):
+                data = []
+                for e in events:
+                    if not isinstance(e, streamsem.events.Event):
+                        raise StreamsemException('Bad event type',
+                                                 'send_event')
+                    data.append(str(e))
+                serialized = ''.join(data)
+            else:
+                raise StreamsemException('Bad event type', 'send_event')
+            for client in self.streaming_clients:
+                try:
+                    client.callback(serialized)
+                except:
+                    logging.error("Error in client callback", exc_info=True)
+            for client in self.one_time_clients:
+                try:
+                    client.callback(serialized)
+                except:
+                    logging.error("Error in client callback", exc_info=True)
         self.one_time_clients = []
         self.event_cache.extend(events)
         if len(self.event_cache) > self.cache_size:
@@ -240,23 +252,14 @@ class EventStreamHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self, self._on_new_event, True)
+        self.client = Client(self, self._on_new_data, True)
         self.dispatcher.register_client(self.client)
 
-    def _on_new_event(self, event):
+    def _on_new_data(self, data):
         if self.request.connection.stream.closed():
             self.dispatcher.deregister_client(self.client)
             return
-        if type(event) == list:
-            data = []
-            for e in event:
-                if not isinstance(e, events.Event):
-                    raise StreamsemException('Bad event type', 'send_event')
-                data.append(str(e))
-            serialized = ''.join(data)
-        else:
-            raise StreamsemException('Bad event type', 'send_event')
-        self.write(serialized)
+        self.write(data)
         self.flush()
 
     def _on_client_close(self):
