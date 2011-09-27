@@ -40,6 +40,12 @@ class StreamServer(object):
         else:
             self._event_buffer.append(event)
 
+    def dispatch_events(self, events):
+        if self.buffering_time is None:
+            self.app.dispatcher.dispatch(events)
+        else:
+            self._event_buffer.extend(events)
+
     def start(self, loop=True):
         assert(not self._started)
         logging.info('Starting server...')
@@ -82,7 +88,8 @@ class RelayServer(StreamServer):
         self.clients = \
             [AsyncStreamingClient(url, event_callback=self._relay_event,
                                   error_callback=self._handle_error,
-                                  parse_event_body=False) \
+                                  parse_event_body=False,
+                                  separate_events=False) \
                  for url in source_urls]
 
     def start(self, loop=True):
@@ -96,9 +103,10 @@ class RelayServer(StreamServer):
                 client.stop()
             super(RelayServer, self).stop()
 
-    def _relay_event(self, event):
-        event.append_aggregator_id(self.aggregator_id)
-        self.dispatch_event(event)
+    def _relay_event(self, events):
+        for e in events:
+            e.append_aggregator_id(self.aggregator_id)
+        self.dispatch_events(events)
 
     def _handle_error(self, message, http_error=None):
         if http_error is not None:
