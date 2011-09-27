@@ -10,28 +10,42 @@ import tornado.httpserver
 
 import streamsem
 from streamsem import events
+from streamsem import StreamsemException
 from streamsem.client import AsyncStreamingClient
 
 import streamsem
 
 class StreamServer(object):
-    def __init__(self, port, ioloop=None, allow_publish=False):
+    def __init__(self, port, ioloop=None, allow_publish=False,
+                 buffering_time=None):
         logging.info('Initializing server...')
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.app = WebApplication(allow_publish=allow_publish)
         self.http_server = tornado.httpserver.HTTPServer(self.app)
+        self.buffering_time = buffering_time
+        self._event_buffer = []
+        if buffering_time:
+            self.buffer_dump_sched = \
+                tornado.ioloop.PeriodicCallback(self._dump_buffer,
+                                                buffering_time,
+                                                self.ioloop)
         self._looping = False
         self._started = False
         self._stopped = False
 
     def dispatch_event(self, event):
-        self.app.dispatcher.dispatch(event)
+        if self.buffering_time is None:
+            self.app.dispatcher.dispatch([event])
+        else:
+            self._event_buffer.append(event)
 
     def start(self, loop=True):
         assert(not self._started)
         logging.info('Starting server...')
         self.http_server.listen(self.port)
+        if self.buffering_time:
+            self.buffer_dump_sched.start()
         if loop:
             self._looping = True
             self._started = True
@@ -43,11 +57,16 @@ class StreamServer(object):
             logging.info('Stopping server...')
             self.http_server.stop()
             self.app.dispatcher.close()
+            if self.buffering_time:
+                self.buffer_dump_sched.stop()
             self._stopped = True
             if self._looping == True:
                 self.ioloop.stop()
                 self._looping = False
 
+    def _dump_buffer(self):
+        self.app.dispatcher.dispatch(self._event_buffer)
+        self._event_buffer = []
 
 class RelayServer(StreamServer):
     """A server that relays events from other servers."""
@@ -148,21 +167,21 @@ class EventDispatcher(object):
         else:
             logging.info('Client already deregistered')
 
-    def dispatch(self, event):
-        logging.info('Sending event to %r clients',
+    def dispatch(self, events):
+        logging.info('Sending %r events to %r clients', len(events),
                      len(self.streaming_clients) + len(self.one_time_clients))
         for client in self.streaming_clients:
             try:
-                client.callback(event)
+                client.callback(events)
             except:
                 logging.error("Error in client callback", exc_info=True)
         for client in self.one_time_clients:
             try:
-                client.callback(event)
+                client.callback(events)
             except:
                 logging.error("Error in client callback", exc_info=True)
         self.one_time_clients = []
-        self.event_cache.append(event)
+        self.event_cache.extend(events)
         if len(self.event_cache) > self.cache_size:
             self.event_cache = self.event_cache[-self.cache_size:]
 
@@ -206,10 +225,11 @@ class EventPublishHandler(tornado.web.RequestHandler):
         if self.request.headers['Content-Type'] != streamsem.mimetype_event:
             raise tornado.web.HTTPError(400, 'Bad content type')
         try:
-            event = events.deserialize(self.request.body)
+            events = events.deserialize(self.request.body)
         except Exception as ex:
             raise tornado.web.HTTPError(400, str(ex))
-        self.dispatcher.dispatch(event)
+        for event in events:
+            self.dispatcher.dispatch(event)
         self.finish()
 
 
@@ -227,7 +247,16 @@ class EventStreamHandler(tornado.web.RequestHandler):
         if self.request.connection.stream.closed():
             self.dispatcher.deregister_client(self.client)
             return
-        self.write(str(event))
+        if type(event) == list:
+            data = []
+            for e in event:
+                if not isinstance(e, events.Event):
+                    raise StreamsemException('Bad event type', 'send_event')
+                data.append(str(e))
+            serialized = ''.join(data)
+        else:
+            raise StreamsemException('Bad event type', 'send_event')
+        self.write(serialized)
         self.flush()
 
     def _on_client_close(self):
@@ -270,7 +299,7 @@ def main():
                            type=int)
     tornado.options.parse_command_line()
     port = tornado.options.options.port
-    server = StreamServer(port, allow_publish=True)
+    server = StreamServer(port, allow_publish=True, buffering_time=5000)
     sched = tornado.ioloop.PeriodicCallback(publish_event, 3000,
                                             io_loop=server.ioloop)
     sched.start()

@@ -85,7 +85,24 @@ class Event(object):
         object.
 
         """
-        parts = data.split('\n')
+        events = []
+        pos = 0
+        while pos < len(data):
+            event, pos = Event._deserialize_event(data, pos, parse_body)
+            events.append(event)
+        return events
+
+    @staticmethod
+    def _deserialize_event(data, pos, parse_body=True):
+        """Deserializes and returns an event from the given string.
+
+        `data` -- the string representing the event
+
+        `parse_body` -- if True, the body of the event is parsed according
+        to its type. If not, it is stored just as a string in the event
+        object.
+
+        """
         event_id = None
         source_id = None
         syntax = None
@@ -93,8 +110,13 @@ class Event(object):
         aggregator_id = []
         event_type = None
         timestamp = None
+        body_length = None
         num_headers = 0
-        for part in parts:
+        # Read headers
+        while pos < len(data):
+            end = data.find('\n', pos)
+            part = data[pos:end]
+            pos = end + 1
             if part == '':
                 break
             comps = part.split(':')
@@ -145,23 +167,38 @@ class Event(object):
                 else:
                     raise StreamsemException('Duplicate header in event',
                                              'event_deserialize')
+            elif header == 'Body-Length':
+                if body_length is None:
+                    body_length = value
+                else:
+                    raise StreamsemException('Duplicate header in event',
+                                             'event_deserialize')
             num_headers += 1
-        body = '\n'.join(parts[num_headers + 1:])
-        if event_id is None or source_id is None or syntax is None:
+        if pos >= len(data):
+            raise StreamsemException('Premature end of event in headers',
+                                     'event_deserialize')
+        if (event_id is None or source_id is None or syntax is None
+            or body_length is None):
             raise StreamsemException('Missing headers in event',
                                      'event_deserialize')
+        end = pos + int(body_length)
+        if end > len(data):
+            raise StreamsemException('Premature end of event in body',
+                                     'event_deserialize')
+        body = data[pos:end]
         if parse_body:
-            return Event.create(source_id, syntax, body,
-                                application_id=application_id,
-                                aggregator_id=aggregator_id,
-                                event_type=event_type,
-                                timestamp=timestamp)
+            event = Event.create(source_id, syntax, body,
+                                 application_id=application_id,
+                                 aggregator_id=aggregator_id,
+                                 event_type=event_type,
+                                 timestamp=timestamp)
         else:
-            return Event(source_id, syntax, body,
-                         application_id=application_id,
-                         aggregator_id=aggregator_id,
-                         event_type=event_type,
-                         timestamp=timestamp)
+            event = Event(source_id, syntax, body,
+                          application_id=application_id,
+                          aggregator_id=aggregator_id,
+                          event_type=event_type,
+                          timestamp=timestamp)
+        return (event, end)
 
     def serialize_body(self):
         """Returns a string representation of the body of the event.
@@ -189,8 +226,10 @@ class Event(object):
             data.append('Event-Type: ' + str(self.event_type))
         if self.timestamp is not None:
             data.append('Timestamp: ' + str(self.timestamp))
+        serialized_body = self.serialize_body()
+        data.append('Body-Length: ' + str(len(serialized_body)))
         data.append('')
-        data.append(self.serialize_body())
+        data.append(serialized_body)
         return '\n'.join(data)
 
 
