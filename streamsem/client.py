@@ -1,8 +1,42 @@
 import tornado.ioloop
 import tornado.httpclient
+import tornado.options
 import logging
 
 from streamsem import events
+
+
+class Client(object):
+    def __init__(self, source_urls, event_callback, error_callback=None,
+                 ioloop=None, parse_event_body=True, separate_events=True):
+        self.source_urls = source_urls
+        self.clients = \
+            [AsyncStreamingClient(url, event_callback=event_callback,
+                                  error_callback=error_callback,
+                                  parse_event_body=parse_event_body,
+                                  separate_events=separate_events) \
+                 for url in source_urls]
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
+        self._closed = False
+        self._looping = False
+
+    def start(self, loop=True):
+        for client in self.clients:
+            client.start(False)
+        if loop:
+            self._looping = True
+            self.ioloop.start()
+            self._looping = False
+
+    def stop(self):
+        if self._started and not self._stopped:
+            for client in self.clients:
+                client.stop()
+        self._closed = True
+        if self._looping:
+            self.ioloop.stop()
+            self._looping = False
+
 
 class AsyncStreamingClient(object):
     def __init__(self, url, event_callback=None, error_callback=None,
@@ -77,6 +111,18 @@ def read_cmd_options():
         parser.error('Stream URL required')
     return options
 
+def read_cmd_options():
+    from optparse import OptionParser, Values
+    parser = OptionParser(usage='usage: %prog [options] source_stream_urls',
+                          version='0.0')
+    remaining = tornado.options.parse_command_line()
+    options = Values()
+    if len(remaining) >= 1:
+        options.stream_urls = remaining
+    else:
+        parser.error('At least one source stream URL required')
+    return options
+
 def main():
     import time
     def handle_event(event):
@@ -89,9 +135,9 @@ def main():
     def stop_client():
         client.stop()
     options = read_cmd_options()
-    client = AsyncStreamingClient(options.stream_url,
-                                  event_callback=handle_event,
-                                  error_callback=handle_error)
+    client = Client(options.stream_urls,
+                    event_callback=filt.filter_event,
+                    error_callback=handle_error)
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     client.start(loop=True)
 
