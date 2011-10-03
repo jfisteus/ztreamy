@@ -4,7 +4,7 @@ import tornado.options
 import logging
 
 from streamsem import events
-
+import streamsem.rdfevents
 
 class Client(object):
     def __init__(self, source_urls, event_callback, error_callback=None,
@@ -12,17 +12,20 @@ class Client(object):
         self.source_urls = source_urls
         self.clients = \
             [AsyncStreamingClient(url, event_callback=event_callback,
-                                  error_callback=error_callback,
-                                  parse_event_body=parse_event_body,
-                                  separate_events=separate_events) \
+                         error_callback=error_callback,
+                         connection_close_callback=self._client_close_callback,
+                         parse_event_body=parse_event_body,
+                         separate_events=separate_events) \
                  for url in source_urls]
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self._closed = False
         self._looping = False
+        self.active_clients = []
 
     def start(self, loop=True):
         for client in self.clients:
             client.start(False)
+            self.active_clients.append(client)
         if loop:
             self._looping = True
             self.ioloop.start()
@@ -32,18 +35,28 @@ class Client(object):
         if self._started and not self._stopped:
             for client in self.clients:
                 client.stop()
+        self.active_clients = []
         self._closed = True
         if self._looping:
             self.ioloop.stop()
             self._looping = False
 
+    def _client_close_callback(self, client):
+        if client in self.active_clients:
+            self.active_clients.remove(client)
+            if len(self.active_clients) == 0 and self._looping:
+                self.ioloop.stop()
+                self._looping = False
+
 
 class AsyncStreamingClient(object):
     def __init__(self, url, event_callback=None, error_callback=None,
+                 connection_close_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True):
         self.url = url
         self.event_callback = event_callback
         self.error_callback = error_callback
+        self.connection_close_callback = connection_close_callback
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.parse_event_body = parse_event_body
         self.separate_events = separate_events
@@ -99,6 +112,9 @@ class AsyncStreamingClient(object):
         logging.info('Connection closed by server')
         if self._looping:
             self.ioloop.stop()
+            self._looping = False
+        if self.connection_close_callback:
+            self.connection_close_callback(self)
 
 def read_cmd_options():
     from optparse import OptionParser
@@ -135,8 +151,12 @@ def main():
     def stop_client():
         client.stop()
     options = read_cmd_options()
+#    import streamsem.filters
+#    filter = streamsem.filters.SimpleTripleFilter(handle_event,
+#                                        predicate='http://example.com/temp')
     client = Client(options.stream_urls,
-                    event_callback=filt.filter_event,
+                    event_callback=handle_event,
+#                    event_callback=filter.filter_event,
                     error_callback=handle_error)
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     client.start(loop=True)

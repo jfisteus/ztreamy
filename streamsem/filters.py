@@ -1,5 +1,7 @@
-from streamsem import events
+import rdflib
 
+from streamsem import events
+from streamsem import rdfevents
 
 class Filter(object):
     def __init__(self, callback):
@@ -66,3 +68,33 @@ class ApplicationFilter(Filter):
     def filter_event(self, event):
         if event.application_id in self.application_ids:
             self.callback(event)
+
+
+class SimpleTripleFilter(Filter):
+    def __init__(self, callback, subject=None, predicate=None, object_=None):
+        """Creates a filter for RDF triples.
+
+        `subject`, `predicate`, `object` can be None. Use None as a
+        wildcard to match any triple.
+
+        """
+        self.callback = callback
+        self.subject = rdflib.term.URIRef(subject) if subject else None
+        self.predicate = rdflib.term.URIRef(predicate) if predicate else None
+        self.object = rdflib.term.URIRef(object_) if object_ else None
+
+    def filter_event(self, event):
+        if isinstance(event, rdfevents.RDFEvent):
+            if self._matches(event.body):
+                self.callback(event)
+
+    def _matches(self, graph):
+        gen = graph.triples((self.subject, self.predicate, self.object))
+        try:
+            gen.next()
+            matches = True
+        except StopIteration:
+            matches = False
+        gen.close()
+        return matches
+
