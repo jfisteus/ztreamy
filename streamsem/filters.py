@@ -71,17 +71,22 @@ class ApplicationFilter(Filter):
 
 
 class SimpleTripleFilter(Filter):
-    def __init__(self, callback, subject=None, predicate=None, object_=None):
+    def __init__(self, callback, subject=None, predicate=None, object_=None,
+                 object_literal=None):
         """Creates a filter for RDF triples.
 
-        `subject`, `predicate`, `object` can be None. Use None as a
-        wildcard to match any triple.
+        `subject`, `predicate`, `object_` can be None. All the three
+        must be strings representing a URI. Use None as a wildcard to
+        match any triple. `object_literal` is a string representing a
+        literal value, and is incompatible with `object_`.
 
         """
+        assert object_ is None or object_literal is None
         self.callback = callback
         self.subject = rdflib.term.URIRef(subject) if subject else None
         self.predicate = rdflib.term.URIRef(predicate) if predicate else None
-        self.object = rdflib.term.URIRef(object_) if object_ else None
+        self.object = rdflib.term.URIRef(object_) \
+            if object_ else object_literal
 
     def filter_event(self, event):
         if isinstance(event, rdfevents.RDFEvent):
