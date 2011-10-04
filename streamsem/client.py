@@ -10,6 +10,8 @@ import streamsem.rdfevents
 transferred_bytes = 0
 data_count = 0
 
+param_max_clients = 1000
+
 class Client(object):
     def __init__(self, source_urls, event_callback, error_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True):
@@ -69,7 +71,8 @@ class AsyncStreamingClient(object):
         self._compressed = False
 
     def start(self, loop=False):
-        self.http_client = tornado.httpclient.AsyncHTTPClient()
+        self.http_client = tornado.httpclient.AsyncHTTPClient(\
+                                                max_clients=param_max_clients)
         req = tornado.httpclient.HTTPRequest(
             self.url, streaming_callback=self._stream_callback,
             request_timeout=None, connect_timeout=None)
@@ -143,9 +146,8 @@ class AsyncStreamingClient(object):
                     return evs
             else:
                 evs.append(event)
-        logging.info('Transferred data: %d/%d (ratio %.3f)'%(transferred_bytes,
-                                                            data_count,
-                                                            float(transferred_bytes)/data_count))
+#        logging.info('Transferred data: %d/%d (ratio %.3f)'%(transferred_bytes,#                                                            data_count,
+#                                                            float(transferred_bytes)/data_count))
         return evs
 
 
