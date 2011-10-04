@@ -7,6 +7,7 @@ import tornado.escape
 import tornado.ioloop
 import tornado.web
 import tornado.httpserver
+import zlib
 
 import streamsem
 from streamsem import events
@@ -15,13 +16,19 @@ from streamsem.client import AsyncStreamingClient
 
 import streamsem
 
+param_max_events_sync = 20
+
 class StreamServer(object):
     def __init__(self, port, ioloop=None, allow_publish=False,
-                 buffering_time=None):
+                 buffering_time=None, source_id=None):
         logging.info('Initializing server...')
+        if source_id is not None:
+            self.source_id = source_id
+        else:
+            self.source_id = streamsem.random_id()
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
-        self.app = WebApplication(allow_publish=allow_publish)
+        self.app = WebApplication(self, allow_publish=allow_publish)
         self.http_server = tornado.httpserver.HTTPServer(self.app)
         self.buffering_time = buffering_time
         self._event_buffer = []
@@ -74,16 +81,13 @@ class StreamServer(object):
         self.app.dispatcher.dispatch(self._event_buffer)
         self._event_buffer = []
 
+
 class RelayServer(StreamServer):
     """A server that relays events from other servers."""
-    def __init__(self, port, source_urls, aggregator_id, ioloop=None,
+    def __init__(self, port, source_urls, ioloop=None,
                  allow_publish=False):
         super(RelayServer, self).__init__(port, ioloop=ioloop,
                                           allow_publish=allow_publish)
-        if aggregator_id is not None:
-            self.aggregator_id = aggregator_id
-        else:
-            self.aggregator_id = streamsem.random_id()
         self.source_urls = source_urls
         self.clients = \
             [AsyncStreamingClient(url, event_callback=self._relay_event,
@@ -105,7 +109,7 @@ class RelayServer(StreamServer):
 
     def _relay_event(self, events):
         for e in events:
-            e.append_aggregator_id(self.aggregator_id)
+            e.append_aggregator_id(self.source_id)
         self.dispatch_events(events)
 
     def _handle_error(self, message, http_error=None):
@@ -116,15 +120,20 @@ class RelayServer(StreamServer):
 
 
 class WebApplication(tornado.web.Application):
-    def __init__(self, allow_publish=False):
+    def __init__(self, server, allow_publish=False):
         self.dispatcher = EventDispatcher()
         handler_kwargs = {
+            'server': server,
             'dispatcher': self.dispatcher,
         }
+        compressed_kwargs = {'compress': True}
+        compressed_kwargs.update(handler_kwargs)
         handlers = [
             tornado.web.URLSpec(r"/", MainHandler),
             tornado.web.URLSpec(r"/events/stream", EventStreamHandler,
                                 kwargs=handler_kwargs),
+            tornado.web.URLSpec(r"/events/compressed", EventStreamHandler,
+                                kwargs=compressed_kwargs),
             tornado.web.URLSpec(r"/events/next", NextEventHandler,
                                 kwargs=handler_kwargs),
         ]
@@ -138,10 +147,23 @@ class WebApplication(tornado.web.Application):
 
 
 class Client(object):
-    def __init__(self, handler, callback, streaming):
+    def __init__(self, handler, callback, streaming=False, compress=False):
+        assert streaming or not compress
         self.handler = handler
         self.callback = callback
         self.streaming = streaming
+        self.compress = compress
+        if self.compress:
+            self.compression_synced = False
+            self.compressor = zlib.compressobj()
+
+    def send(self, data):
+        if self.compress and not self.compression_synced:
+            comp_data = self.compressor.compress(data)
+            comp_data_extra = self.compressor.flush(zlib.Z_SYNC_FLUSH)
+            self.callback(comp_data + comp_data_extra)
+        else:
+            self.callback(data)
 
     def close(self):
         """Closes the connection to this client.
@@ -152,34 +174,64 @@ class Client(object):
         if not self.handler.request.connection.stream.closed():
             logging.info('Finishing a client...')
             self.handler.finish()
+            self.compressor = None
+
+    def sync_compression(self):
+        """Places the object in synced state."""
+        if self.compress and not self.compression_synced:
+            self.send('')
+            self.compressor = None
+            self.compression_synced = True
 
 
 class EventDispatcher(object):
     def __init__(self):
         self.streaming_clients = []
+        self.compressed_streaming_clients = []
+        self.unsynced_compressed_streaming_clients = []
         self.one_time_clients = []
         self.event_cache = []
         self.cache_size = 200
+        self._compressor = zlib.compressobj()
+        self._num_events_since_sync = 0
 
     def register_client(self, client):
         if client.streaming:
-            self.streaming_clients.append(client)
-            logging.info('Streaming client registered')
+            if client.compress:
+                self.unsynced_compressed_streaming_clients.append(client)
+            else:
+                self.streaming_clients.append(client)
+            logging.info('Streaming client registered; stream: %i; comp: %i'\
+                             %(client.streaming, client.compress))
         else:
             self.one_time_clients.append(client)
 
     def deregister_client(self, client):
-        if client.streaming and client in self.streaming_clients:
-            self.streaming_clients.remove(client)
-            logging.info('Client deregistered')
-        else:
-            logging.info('Client already deregistered')
+        if client.streaming:
+            if client in self.streaming_clients:
+                self.streaming_clients.remove(client)
+                logging.info('Client deregistered')
+            elif client in self.compressed_streaming_clients:
+                self.compressed_streaming_clients.remove(client)
+                logging.info('Client deregistered')
+            elif client in self.unsynced_compressed_streaming_clients:
+                self.unsynced_compressed_streaming_clients.remove(client)
+                logging.info('Client deregistered')
 
     def dispatch(self, events):
-        num_clients = len(self.streaming_clients) + len(self.one_time_clients)
+        num_clients = (len(self.streaming_clients) + len(self.one_time_clients)
+                       + len(self.unsynced_compressed_streaming_clients)
+                       + len(self.compressed_streaming_clients))
         logging.info('Sending %r events to %r clients', len(events),
                      num_clients)
+        if len(self.unsynced_compressed_streaming_clients) > 0:
+            if (len(self.compressed_streaming_clients) == 0
+                or self._num_events_since_sync > param_max_events_sync):
+                self._sync_compressor()
         if num_clients > 0:
+            logging.info('Compressed clients: %d synced; %d unsynced'%\
+                             (len(self.compressed_streaming_clients),
+                              len(self.unsynced_compressed_streaming_clients)))
             if isinstance(events, list):
                 data = []
                 for e in events:
@@ -191,25 +243,46 @@ class EventDispatcher(object):
             else:
                 raise StreamsemException('Bad event type', 'send_event')
             for client in self.streaming_clients:
-                try:
-                    client.callback(serialized)
-                except:
-                    logging.error("Error in client callback", exc_info=True)
+                self._send(serialized, client)
+            for client in self.unsynced_compressed_streaming_clients:
+                self._send(serialized, client)
             for client in self.one_time_clients:
-                try:
-                    client.callback(serialized)
-                except:
-                    logging.error("Error in client callback", exc_info=True)
+                self._send(serialized, client)
+            if len(self.compressed_streaming_clients) > 0:
+                compressed_data = (self._compressor.compress(serialized)
+                                   + self._compressor.flush(zlib.Z_SYNC_FLUSH))
+                for client in self.compressed_streaming_clients:
+                    self._send(compressed_data, client)
         self.one_time_clients = []
         self.event_cache.extend(events)
         if len(self.event_cache) > self.cache_size:
             self.event_cache = self.event_cache[-self.cache_size:]
+        self._num_events_since_sync += len(events)
 
     def close(self):
         """Closes every active streaming client."""
         for client in self.streaming_clients:
             client.close()
         self.streaming_clients = []
+
+    def _sync_compressor(self):
+        for client in self.unsynced_compressed_streaming_clients:
+            client.sync_compression()
+        data = self._compressor.flush(zlib.Z_FULL_FLUSH)
+        if len(data) > 0:
+            for client in self.compressed_streaming_clients:
+                self._send(data, client)
+        self.compressed_streaming_clients.extend( \
+            self.unsynced_compressed_streaming_clients)
+        self.unsynced_compressed_streaming_clients = []
+        self._num_events_since_sync = 0
+        logging.info('Compressor synced')
+
+    def _send(self, data, client):
+        try:
+            client.send(data)
+        except:
+            logging.error("Error in client callback", exc_info=True)
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -254,14 +327,22 @@ class EventPublishHandler(tornado.web.RequestHandler):
 
 
 class EventStreamHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, dispatcher=None):
+    def __init__(self, application, request, server=None,
+                 dispatcher=None, compress=False):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
+        self.compress = compress
+        self.server = server
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self, self._on_new_data, True)
+        self.client = Client(self, self._on_new_data, streaming=True,
+                             compress=self.compress)
         self.dispatcher.register_client(self.client)
+        if self.compress:
+            command = events.create_command(self.server.source_id,
+                                            'Set-Compression')
+            self._on_new_data(str(command))
 
     def _on_new_data(self, data):
         if self.request.connection.stream.closed():
@@ -281,7 +362,7 @@ class NextEventHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self.on_new_event, False)
+        self.client = Client(self.on_new_event, streaming=False)
         self.dispatcher.register_client(self.client)
 
     def on_new_event(self, event):

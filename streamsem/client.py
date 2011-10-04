@@ -2,9 +2,13 @@ import tornado.ioloop
 import tornado.httpclient
 import tornado.options
 import logging
+import zlib
 
 from streamsem import events
 import streamsem.rdfevents
+
+transferred_bytes = 0
+data_count = 0
 
 class Client(object):
     def __init__(self, source_urls, event_callback, error_callback=None,
@@ -62,6 +66,7 @@ class AsyncStreamingClient(object):
         self.separate_events = separate_events
         self._closed = False
         self._looping = False
+        self._compressed = False
 
     def start(self, loop=False):
         self.http_client = tornado.httpclient.AsyncHTTPClient()
@@ -91,7 +96,9 @@ class AsyncStreamingClient(object):
                 self._looping = False
 
     def _notify_event(self, data):
-        evs = events.Event.deserialize(data, parse_body=self.parse_event_body)
+        global transferred_bytes
+        transferred_bytes += len(data)
+        evs = self._deserialize(data, parse_body=self.parse_event_body)
         if self.event_callback is not None:
             if not self.separate_events:
                 self.event_callback(evs)
@@ -115,6 +122,32 @@ class AsyncStreamingClient(object):
             self._looping = False
         if self.connection_close_callback:
             self.connection_close_callback(self)
+
+    def _reset_compression(self):
+        self._compressed = True
+        self._decompresser = zlib.decompressobj()
+
+    def _deserialize(self, data, parse_body=True):
+        global data_count
+        evs = []
+        pos = 0
+        if self._compressed:
+            data = self._decompresser.decompress(data)
+        data_count += len(data)
+        while pos < len(data):
+            event, pos = events.Event._deserialize_event(data, pos, parse_body)
+            if isinstance(event, events.Command):
+                if event.command == 'Set-Compression':
+                    self._reset_compression()
+                    evs.extend(self._deserialize(data[pos:], parse_body))
+                    return evs
+            else:
+                evs.append(event)
+        logging.info('Transferred data: %d/%d (ratio %.3f)'%(transferred_bytes,
+                                                            data_count,
+                                                            float(transferred_bytes)/data_count))
+        return evs
+
 
 def read_cmd_options():
     from optparse import OptionParser

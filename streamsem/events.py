@@ -177,8 +177,9 @@ class Event(object):
         if pos >= len(data):
             raise StreamsemException('Premature end of event in headers',
                                      'event_deserialize')
-        if (event_id is None or source_id is None or syntax is None
-            or body_length is None):
+        if body_length is None:
+            body_length = 0
+        if event_id is None or source_id is None or syntax is None:
             raise StreamsemException('Missing headers in event',
                                      'event_deserialize')
         end = pos + int(body_length)
@@ -232,6 +233,38 @@ class Event(object):
         data.append(serialized_body)
         return '\n'.join(data)
 
+
+class Command(Event):
+
+    valid_commands = ['Set-Compression']
+
+    def __init__(self, source_id, syntax, command, application_id=None,
+                 aggregator_id=[], event_type=None, timestamp=None):
+        """Creates a new command event.
+
+        `command` must be the textual representation of the command or
+        provide that textual representation through `str()`. It will
+        be the body of the event.
+
+        """
+        if syntax != 'streamsem-command':
+            raise StreamsemException('Usupported syntax in Command',
+                                     'programming')
+        super(Command, self).__init__(source_id, syntax, None,
+                                      application_id=application_id,
+                                      aggregator_id=[],
+                                      event_type=event_type,
+                                      timestamp=timestamp)
+        self.body = command
+        self.command = command
+        if not command in Command.valid_commands:
+            raise StreamsemException('Usupported command ' + command,
+                                     'programming')
+
+Event.register_syntax('streamsem-command', Command)
+
+def create_command(source_id, command):
+    return Command(source_id, 'streamsem-command', command)
 
 def parse_aggregator_id(data):
     return [v.strip() for v in data.split(',') if v != '']
