@@ -115,6 +115,9 @@ class Event(object):
         # Read headers
         while pos < len(data):
             end = data.find('\n', pos)
+            if end == -1:
+                raise StreamsemException('Bad event syntax',
+                                         'event_deserialize')
             part = data[pos:end]
             pos = end + 1
             if part == '':
