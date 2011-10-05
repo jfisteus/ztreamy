@@ -10,7 +10,7 @@ import streamsem.rdfevents
 transferred_bytes = 0
 data_count = 0
 
-param_max_clients = 1000
+param_max_clients = 32768
 
 class Client(object):
     def __init__(self, source_urls, event_callback, error_callback=None,
