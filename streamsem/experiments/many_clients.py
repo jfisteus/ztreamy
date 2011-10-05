@@ -10,7 +10,7 @@ class _Stats(object):
     def handle_event(self, event):
         self.num_events_received += 1
 
-    def handle_error(message, http_error=None):
+    def handle_error(self, message, http_error=None):
         if http_error is not None:
             logging.error(message + ': ' + str(http_error))
         else:
