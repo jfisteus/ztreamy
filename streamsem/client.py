@@ -4,8 +4,10 @@ import tornado.options
 import logging
 import zlib
 
+import streamsem
 from streamsem import events
 import streamsem.rdfevents
+from streamsem import logger
 
 transferred_bytes = 0
 data_count = 0
@@ -102,6 +104,8 @@ class AsyncStreamingClient(object):
         global transferred_bytes
         transferred_bytes += len(data)
         evs = self._deserialize(data, parse_body=self.parse_event_body)
+        for e in evs:
+            logger.logger.event_delivered(e)
         if self.event_callback is not None:
             if not self.separate_events:
                 self.event_callback(evs)
@@ -194,7 +198,15 @@ def main():
 #                    event_callback=filter.filter_event,
                     error_callback=handle_error)
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
-    client.start(loop=True)
+    node_id = streamsem.random_id()
+    logger.logger = logger.StreamsemLogger(node_id,
+                                           'client-' + node_id + '.log')
+    try:
+        client.start(loop=True)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        logger.logger.close()
 
 if __name__ == "__main__":
     main()

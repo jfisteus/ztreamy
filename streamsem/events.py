@@ -1,7 +1,6 @@
 """ Code related to the modelling and manipulation of events.
 
 """
-
 import streamsem
 from streamsem import StreamsemException
 
@@ -46,15 +45,16 @@ class Event(object):
             subclass = Event
         return subclass(source_id, syntax, body, **kwargs)
 
-    def __init__(self, source_id, syntax, body, application_id=None,
-                 aggregator_id=[], event_type=None, timestamp=None):
+    def __init__(self, source_id, syntax, body, event_id=None,
+                 application_id=None, aggregator_id=[], event_type=None,
+                 timestamp=None):
         """Creates a new event.
 
         `body` must be the textual representation of the event or
         provide that textual representation through `str()`.
 
         """
-        self.event_id = streamsem.random_id()
+        self.event_id = event_id or streamsem.random_id()
         self.source_id = source_id
         self.syntax = syntax
         self.body = body
@@ -195,12 +195,14 @@ class Event(object):
         body = data[pos:end]
         if parse_body or syntax in Event._always_parse:
             event = Event.create(source_id, syntax, body,
+                                 event_id=event_id,
                                  application_id=application_id,
                                  aggregator_id=aggregator_id,
                                  event_type=event_type,
                                  timestamp=timestamp)
         else:
             event = Event(source_id, syntax, body,
+                          event_id=event_id,
                           application_id=application_id,
                           aggregator_id=aggregator_id,
                           event_type=event_type,

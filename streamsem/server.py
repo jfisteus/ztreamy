@@ -13,6 +13,7 @@ import streamsem
 from streamsem import events
 from streamsem import StreamsemException
 from streamsem.client import AsyncStreamingClient
+from streamsem import logger
 
 param_max_events_sync = 20
 
@@ -40,12 +41,15 @@ class StreamServer(object):
         self._stopped = False
 
     def dispatch_event(self, event):
+        logger.logger.event_published(event)
         if self.buffering_time is None:
             self.app.dispatcher.dispatch([event])
         else:
             self._event_buffer.append(event)
 
     def dispatch_events(self, events):
+        for e in events:
+            logger.logger.event_published(e)
         if self.buffering_time is None:
             self.app.dispatcher.dispatch(events)
         else:
@@ -258,6 +262,9 @@ class EventDispatcher(object):
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
                 for client in self.compressed_streaming_clients:
                     self._send(compressed_data, client)
+            for e in events:
+                logger.logger.event_dispatched(e)
+
         self.one_time_clients = []
         self.event_cache.extend(events)
         if len(self.event_cache) > self.cache_size:
@@ -404,6 +411,9 @@ def main():
     tornado.options.parse_command_line()
     port = tornado.options.options.port
     server = StreamServer(port, allow_publish=True, buffering_time=5000)
+    logger.logger = logger.StreamsemLogger(server.source_id,
+                                           'server-' + server.source_id
+                                           + '.log')
     sched = tornado.ioloop.PeriodicCallback(publish_event, 3000,
                                             io_loop=server.ioloop)
     sched2 = tornado.ioloop.PeriodicCallback(publish_event2, 7000,
@@ -413,8 +423,12 @@ def main():
 
      # Uncomment to test StreamServer.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
-
-    server.start()
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        logger.logger.close()
 
 
 if __name__ == "__main__":
