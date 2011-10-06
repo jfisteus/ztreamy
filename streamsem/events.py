@@ -14,9 +14,10 @@ class Event(object):
     """
 
     _subclasses = {}
+    _always_parse = []
 
     @staticmethod
-    def register_syntax(syntax, subclass):
+    def register_syntax(syntax, subclass, always_parse=False):
         """Registers a subclass of `Event` for a specific syntax.
 
         `subclass`should be a subclass of `Event`.  Overrides a
@@ -26,6 +27,8 @@ class Event(object):
         assert issubclass(subclass, Event), \
             '{0} must be a subclass of Event'.format(subclass)
         Event._subclasses[syntax] = subclass
+        if always_parse:
+            Event._always_parse.append(syntax)
 
     @staticmethod
     def create(source_id, syntax, body, **kwargs):
@@ -190,7 +193,7 @@ class Event(object):
             raise StreamsemException('Premature end of event in body',
                                      'event_deserialize')
         body = data[pos:end]
-        if parse_body:
+        if parse_body or syntax in Event._always_parse:
             event = Event.create(source_id, syntax, body,
                                  application_id=application_id,
                                  aggregator_id=aggregator_id,
@@ -264,7 +267,7 @@ class Command(Event):
             raise StreamsemException('Usupported command ' + command,
                                      'programming')
 
-Event.register_syntax('streamsem-command', Command)
+Event.register_syntax('streamsem-command', Command, always_parse=True)
 
 def create_command(source_id, command):
     return Command(source_id, 'streamsem-command', command)

@@ -14,8 +14,6 @@ from streamsem import events
 from streamsem import StreamsemException
 from streamsem.client import AsyncStreamingClient
 
-import streamsem
-
 param_max_events_sync = 20
 
 class StreamServer(object):
@@ -85,12 +83,17 @@ class StreamServer(object):
 class RelayServer(StreamServer):
     """A server that relays events from other servers."""
     def __init__(self, port, source_urls, ioloop=None,
-                 allow_publish=False):
+                 allow_publish=False, filter_=None):
         super(RelayServer, self).__init__(port, ioloop=ioloop,
                                           allow_publish=allow_publish)
+        if filter_ is not None:
+            filter_.callback = self._relay_events
+            event_callback = filter_.filter_events
+        else:
+            event_callback = self._relay_event
         self.source_urls = source_urls
         self.clients = \
-            [AsyncStreamingClient(url, event_callback=self._relay_event,
+            [AsyncStreamingClient(url, event_callback=event_callback,
                                   error_callback=self._handle_error,
                                   parse_event_body=False,
                                   separate_events=False) \
@@ -107,10 +110,12 @@ class RelayServer(StreamServer):
                 client.stop()
             super(RelayServer, self).stop()
 
-    def _relay_event(self, events):
-        for e in events:
+    def _relay_events(self, evs):
+        if isinstance(evs, events.Event):
+            evs = [evs]
+        for e in evs:
             e.append_aggregator_id(self.source_id)
-        self.dispatch_events(events)
+        self.dispatch_events(evs)
 
     def _handle_error(self, message, http_error=None):
         if http_error is not None:

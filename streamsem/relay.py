@@ -23,6 +23,9 @@ def main():
     options = read_cmd_options()
     def stop_server():
         server.stop()
+#    import streamsem.filters
+#    filter_=streamsem.filters.SourceFilter(None,
+#                             source_id='65f0bfeb-cc79-4188-8404-175f3a6be6c3')
     server = RelayServer(tornado.options.options.port, options.stream_urls,
                          tornado.options.options.aggregatorid)
 

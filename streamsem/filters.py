@@ -89,7 +89,7 @@ class SimpleTripleFilter(Filter):
             if object_ else object_literal
 
     def filter_event(self, event):
-        if isinstance(event, rdfevents.RDFEvent):
+        if self.callback is not None and isinstance(event, rdfevents.RDFEvent):
             if self._matches(event.body):
                 self.callback(event)
 
