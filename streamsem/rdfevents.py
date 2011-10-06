@@ -11,8 +11,7 @@ class RDFEvent(events.Event):
 
     supported_syntaxes = ['n3']
 
-    def __init__(self, source_id, syntax, body, application_id=None,
-                 aggregator_id=[], event_type=None, timestamp=None):
+    def __init__(self, source_id, syntax, body, **kwargs):
         """Creates a new event.
 
         `body` must be the textual representation of the event or
@@ -23,11 +22,7 @@ class RDFEvent(events.Event):
             raise StreamsemException('Usupported syntax in RDFEvent',
                                      'programming')
 
-        super(RDFEvent, self).__init__(source_id, syntax, None,
-                                       application_id=application_id,
-                                       aggregator_id=aggregator_id,
-                                       event_type=event_type,
-                                       timestamp=timestamp)
+        super(RDFEvent, self).__init__(source_id, syntax, None, **kwargs)
         self.body = self._parse_body(body)
 
     def serialize_body(self):

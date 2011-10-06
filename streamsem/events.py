@@ -244,8 +244,7 @@ class Command(Event):
 
     valid_commands = ['Set-Compression']
 
-    def __init__(self, source_id, syntax, command, application_id=None,
-                 aggregator_id=[], event_type=None, timestamp=None):
+    def __init__(self, source_id, syntax, command, **kwargs):
         """Creates a new command event.
 
         `command` must be the textual representation of the command or
@@ -256,11 +255,7 @@ class Command(Event):
         if syntax != 'streamsem-command':
             raise StreamsemException('Usupported syntax in Command',
                                      'programming')
-        super(Command, self).__init__(source_id, syntax, None,
-                                      application_id=application_id,
-                                      aggregator_id=[],
-                                      event_type=event_type,
-                                      timestamp=timestamp)
+        super(Command, self).__init__(source_id, syntax, None, **kwargs)
         self.body = command
         self.command = command
         if not command in Command.valid_commands:
