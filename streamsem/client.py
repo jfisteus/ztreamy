@@ -155,16 +155,38 @@ class AsyncStreamingClient(object):
         return evs
 
 
-def read_cmd_options():
-    from optparse import OptionParser
-    parser = OptionParser(usage='usage: %prog [options] stream_url',
-                          version='0.0')
-    (options, args) = parser.parse_args()
-    if len(args) == 1:
-        options.stream_url = args[0]
-    else:
-        parser.error('Stream URL required')
-    return options
+class EventPublisher(object):
+    """Sends events to a server in order to publish them.
+
+    Uses an asynchronous HTTP client, but does not manage an ioloop
+    itself. The ioloop must be run by the calling code.
+
+    """
+    def __init__(self, server_url, io_loop=None):
+        self.server_url = server_url
+        self.http_client = tornado.httpclient.AsyncHTTPClient(io_loop=io_loop)
+        self.headers = {'Content-Type': streamsem.mimetype_event}
+
+    def publish(self, event):
+        logger.logger.event_published(event)
+        body = str(event)
+        req = tornado.httpclient.HTTPRequest(self.server_url,
+                                             body=body,
+                                             method='POST',
+                                             headers=self.headers,
+                                             request_timeout=None,
+                                             connect_timeout=None)
+        self.http_client.fetch(req, self._request_callback)
+
+    def close(self):
+        self.http_client.close()
+        self.http_client=None
+
+    def _request_callback(self, response):
+        if response.error:
+            logging.error(response.error)
+        logging.info('Event successfully sent to server')
+
 
 def read_cmd_options():
     from optparse import OptionParser, Values

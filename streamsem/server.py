@@ -303,9 +303,10 @@ class MainHandler(tornado.web.RequestHandler):
 
 
 class EventPublishHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, dispatcher=None):
+    def __init__(self, application, request, server=None, dispatcher=None):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
+        self.server = server
 
     def get(self):
         event_id = self.get_argument('event-id', default=None)
@@ -323,18 +324,20 @@ class EventPublishHandler(tornado.web.RequestHandler):
                              application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
-        self.dispatcher.dispatch(event)
+        event.aggredator_id.append(server.source_id)
+        self.dispatcher.dispatch([event])
         self.finish()
 
     def post(self):
         if self.request.headers['Content-Type'] != streamsem.mimetype_event:
             raise tornado.web.HTTPError(400, 'Bad content type')
         try:
-            events = events.deserialize(self.request.body)
+            evs = events.Event.deserialize(self.request.body, parse_body=False)
         except Exception as ex:
             raise tornado.web.HTTPError(400, str(ex))
-        for event in events:
-            self.dispatcher.dispatch(event)
+        for event in evs:
+            event.aggregator_id.append(self.server.source_id)
+            self.dispatcher.dispatch([event])
         self.finish()
 
 
@@ -395,14 +398,14 @@ def main():
                        '<http://example.com/time> "%s".'%time.time())
         event = rdfevents.RDFEvent(source_id, 'n3', event_body,
                                    application_id=application_id)
-        server.dispatch_event(event)
+#        server.dispatch_event(event)
     def publish_event2():
         logging.info('In publish_event2')
         event_body = ('<http://example.com/now> '
                        '<http://example.com/temp> "%s".'%25)
         event = rdfevents.RDFEvent(source_id, 'n3', event_body,
                                    application_id=application_id)
-        server.dispatch_event(event)
+#        server.dispatch_event(event)
     def stop_server():
         server.stop()
 
