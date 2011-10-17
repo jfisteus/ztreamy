@@ -147,6 +147,7 @@ class WebApplication(tornado.web.Application):
                                 kwargs=handler_kwargs),
         ]
         if allow_publish:
+            del handler_kwargs['dispatcher']
             handlers.append(tornado.web.URLSpec(r"/events/publish",
                                                 EventPublishHandler,
                                                 kwargs=handler_kwargs))
@@ -303,9 +304,8 @@ class MainHandler(tornado.web.RequestHandler):
 
 
 class EventPublishHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, server=None, dispatcher=None):
+    def __init__(self, application, request, server=None):
         tornado.web.RequestHandler.__init__(self, application, request)
-        self.dispatcher = dispatcher
         self.server = server
 
     def get(self):
@@ -325,7 +325,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
         event.aggredator_id.append(server.source_id)
-        self.dispatcher.dispatch([event])
+        self.server.dispatch_event(event)
         self.finish()
 
     def post(self):
@@ -337,7 +337,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(400, str(ex))
         for event in evs:
             event.aggregator_id.append(self.server.source_id)
-            self.dispatcher.dispatch([event])
+            self.server.dispatch_event(event)
         self.finish()
 
 
