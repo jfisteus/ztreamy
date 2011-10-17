@@ -13,16 +13,21 @@ class StreamsemLogger(object):
 
     def event_published(self, event):
         parts = ['event_publish', event.event_id, timestamp()]
-        self.log_file.write('\t'.join(parts))
-        self.log_file.write('\n')
+        self._log(parts)
 
     def event_dispatched(self, event):
         parts = ['event_dispatch', event.event_id, timestamp()]
-        self.log_file.write('\t'.join(parts))
-        self.log_file.write('\n')
+        self._log(parts)
 
     def event_delivered(self, event):
         parts = ['event_deliver', event.event_id, timestamp()]
+        self._log(parts)
+
+    def data_received(self, compressed, uncompressed):
+        parts = ['data_receive', str(compressed), str(uncompressed)]
+        self._log(parts)
+
+    def _log(self, parts):
         self.log_file.write('\t'.join(parts))
         self.log_file.write('\n')
 

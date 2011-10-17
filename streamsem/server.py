@@ -87,9 +87,11 @@ class StreamServer(object):
 class RelayServer(StreamServer):
     """A server that relays events from other servers."""
     def __init__(self, port, source_urls, ioloop=None,
-                 allow_publish=False, filter_=None):
+                 allow_publish=False, filter_=None,
+                 buffering_time=None):
         super(RelayServer, self).__init__(port, ioloop=ioloop,
-                                          allow_publish=allow_publish)
+                                          allow_publish=allow_publish,
+                                          buffering_time=buffering_time)
         if filter_ is not None:
             filter_.callback = self._relay_events
             event_callback = filter_.filter_events
@@ -147,10 +149,10 @@ class WebApplication(tornado.web.Application):
                                 kwargs=handler_kwargs),
         ]
         if allow_publish:
-            del handler_kwargs['dispatcher']
+            publish_kwargs = {'server': server}
             handlers.append(tornado.web.URLSpec(r"/events/publish",
                                                 EventPublishHandler,
-                                                kwargs=handler_kwargs))
+                                                kwargs=publish_kwargs))
         # No settings by now...
         settings = dict()
         super(WebApplication, self).__init__(handlers, **settings)
@@ -411,9 +413,16 @@ def main():
 
     tornado.options.define('port', default=8888, help='run on the given port',
                            type=int)
+    tornado.options.define('buffer', default=None, help='event buffer time (s)',
+                           type=float)
     tornado.options.parse_command_line()
     port = tornado.options.options.port
-    server = StreamServer(port, allow_publish=True, buffering_time=5000)
+    if tornado.options.options.buffer is not None:
+        buffering_time = tornado.options.options.buffer * 1000
+    else:
+        buffering_time = None
+    server = StreamServer(port, allow_publish=True,
+                          buffering_time=buffering_time)
     logger.logger = logger.StreamsemLogger(server.source_id,
                                            'server-' + server.source_id
                                            + '.log')
