@@ -1,6 +1,7 @@
-""" Analizes log files to obtain performance statistics.
+""" Analyzes log files to obtain performance statistics.
 
 """
+import sys
 
 class Analyzer(object):
     def __init__(self):
@@ -21,6 +22,12 @@ class Analyzer(object):
 
     def register_data_delivery(self, compressed, uncompressed):
         self.data_delivery_log.register_data_delivery(compressed, uncompressed)
+
+    def analyze(self):
+        self.delivery_delays = []
+        for key, event in self.events.iteritems():
+            event.analyze()
+            self.delivery_delays.extend(event.delivery_delays)
 
     def parse_file(self, filename):
         with open(filename) as file_:
@@ -81,8 +88,28 @@ class DataDeliveryLog(object):
         self.uncompressed_data += uncompressed
 
 
+def median(data):
+    data = sorted(data)
+    n = len(data)
+    if n % 2 == 1:
+        return data[n // 2]
+    else:
+        return float(data[(n - 1) // 2] + data[n // 2]) / 2
+
 def main():
-    pass
+    logfiles = sys.argv[1:]
+    analyzer = Analyzer()
+    for logfile in logfiles:
+        analyzer.parse_file(logfile)
+    analyzer.analyze()
+    min_delay = min(analyzer.delivery_delays)
+    max_delay = max(analyzer.delivery_delays)
+    avg_delay = sum(analyzer.delivery_delays) / len(analyzer.delivery_delays)
+    med_delay = median(analyzer.delivery_delays)
+    print 'Delays:', min_delay, avg_delay, max_delay, med_delay
+    data_log = analyzer.data_delivery_log
+    print 'Data:', data_log.uncompressed_data, data_log.compressed_data, \
+        float(data_log.compressed_data) / data_log.uncompressed_data
 
 if __name__ == "__main__":
     main()
