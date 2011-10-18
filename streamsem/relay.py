@@ -26,7 +26,8 @@ def main():
 #    import streamsem.filters
 #    filter_=streamsem.filters.SourceFilter(None,
 #                             source_id='65f0bfeb-cc79-4188-8404-175f3a6be6c3')
-    if tornado.options.options.buffer is not None:
+    if (tornado.options.options.buffer is not None
+        and tornado.options.options.buffer > 0):
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None

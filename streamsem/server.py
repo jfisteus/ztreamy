@@ -417,7 +417,8 @@ def main():
                            type=float)
     tornado.options.parse_command_line()
     port = tornado.options.options.port
-    if tornado.options.options.buffer is not None:
+    if (tornado.options.options.buffer is not None
+        and tornado.options.options.buffer > 0):
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
