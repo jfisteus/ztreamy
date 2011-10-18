@@ -77,6 +77,12 @@ class EventLog(object):
         self.delivery_delays = [deliver - self.publish_times[0] \
                                     for deliver in self.deliver_times]
 
+    def __str__(self):
+        parts = ['publish: %s'%str(self.publish_times),
+                 'dispatch: %s'%str(self.dispatch_times),
+                 'deliver: %s'%str(self.deliver_times)]
+        return '\n'.join(parts)
+
 
 class DataDeliveryLog(object):
     def __init__(self):
