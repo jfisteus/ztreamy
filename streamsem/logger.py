@@ -36,6 +36,9 @@ class StreamsemLoggerStub(object):
     def close(self):
         pass
 
+    def flush(self):
+        pass
+
     def event_published(self, event):
         pass
 

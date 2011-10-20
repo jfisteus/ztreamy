@@ -46,6 +46,9 @@ def read_cmd_options():
     from optparse import Values
     tornado.options.define('distribution', default='exp(5)',
                            help='distribution of the time between events')
+    tornado.options.define('eventlog', default=False,
+                           help='dump event log',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 1:
@@ -79,8 +82,9 @@ def main():
         schedule_next_event()
     application_id = '1111-1111'
     source_id = streamsem.random_id()
-    logger.logger = logger.StreamsemLogger(source_id,
-                                           'source-' + source_id + '.log')
+    if tornado.options.options.eventlog:
+        logger.logger = logger.StreamsemLogger(source_id,
+                                               'source-' + source_id + '.log')
     try:
         io_loop.start()
     except KeyboardInterrupt:

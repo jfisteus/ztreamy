@@ -415,6 +415,9 @@ def main():
                            type=int)
     tornado.options.define('buffer', default=None, help='event buffer time (s)',
                            type=float)
+    tornado.options.define('eventlog', default=False,
+                           help='dump event log',
+                           type=bool)
     tornado.options.parse_command_line()
     port = tornado.options.options.port
     if (tornado.options.options.buffer is not None
@@ -424,9 +427,10 @@ def main():
         buffering_time = None
     server = StreamServer(port, allow_publish=True,
                           buffering_time=buffering_time)
-    logger.logger = logger.StreamsemLogger(server.source_id,
-                                           'server-' + server.source_id
-                                           + '.log')
+    if tornado.options.options.eventlog:
+        logger.logger = logger.StreamsemLogger(server.source_id,
+                                               'server-' + server.source_id
+                                               + '.log')
     sched = tornado.ioloop.PeriodicCallback(publish_event, 3000,
                                             io_loop=server.ioloop)
     sched2 = tornado.ioloop.PeriodicCallback(publish_event2, 7000,

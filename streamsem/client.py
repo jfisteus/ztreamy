@@ -188,8 +188,9 @@ class EventPublisher(object):
 
 def read_cmd_options():
     from optparse import OptionParser, Values
-    parser = OptionParser(usage='usage: %prog [options] source_stream_urls',
-                          version='0.0')
+    tornado.options.define('eventlog', default=False,
+                           help='dump event log',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 1:
@@ -219,8 +220,9 @@ def main():
                     error_callback=handle_error)
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     node_id = streamsem.random_id()
-    logger.logger = logger.StreamsemLogger(node_id,
-                                           'client-' + node_id + '.log')
+    if tornado.options.options.eventlog:
+        logger.logger = logger.StreamsemLogger(node_id,
+                                               'client-' + node_id + '.log')
     try:
         client.start(loop=True)
     except KeyboardInterrupt:
