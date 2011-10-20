@@ -1,5 +1,5 @@
 import tornado.ioloop
-import tornado.httpclient
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import tornado.options
 import logging
 import zlib
@@ -13,6 +13,8 @@ transferred_bytes = 0
 data_count = 0
 
 param_max_clients = 32768
+
+AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
 class Client(object):
     def __init__(self, source_urls, event_callback, error_callback=None,
@@ -73,11 +75,9 @@ class AsyncStreamingClient(object):
         self._compressed = False
 
     def start(self, loop=False):
-        self.http_client = tornado.httpclient.AsyncHTTPClient(\
-                                                max_clients=param_max_clients)
-        req = tornado.httpclient.HTTPRequest(
-            self.url, streaming_callback=self._stream_callback,
-            request_timeout=None, connect_timeout=None)
+        self.http_client = AsyncHTTPClient(max_clients=param_max_clients)
+        req = HTTPRequest(self.url, streaming_callback=self._stream_callback,
+                          request_timeout=0, connect_timeout=0)
         self.http_client.fetch(req, self._request_callback)
         if loop:
             self._looping = True
@@ -164,18 +164,15 @@ class EventPublisher(object):
     """
     def __init__(self, server_url, io_loop=None):
         self.server_url = server_url
-        self.http_client = tornado.httpclient.AsyncHTTPClient(io_loop=io_loop)
+        self.http_client = AsyncHTTPClient(io_loop=io_loop)
         self.headers = {'Content-Type': streamsem.mimetype_event}
 
     def publish(self, event):
         logger.logger.event_published(event)
         body = str(event)
-        req = tornado.httpclient.HTTPRequest(self.server_url,
-                                             body=body,
-                                             method='POST',
-                                             headers=self.headers,
-                                             request_timeout=None,
-                                             connect_timeout=None)
+        req = HTTPRequest(self.server_url, body=body, method='POST',
+                          headers=self.headers, request_timeout=0,
+                          connect_timeout=0)
         self.http_client.fetch(req, self._request_callback)
 
     def close(self):
