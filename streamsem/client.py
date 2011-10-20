@@ -1,5 +1,6 @@
 import tornado.ioloop
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.curl_httpclient import CurlAsyncHTTPClient
 import tornado.options
 import logging
 import zlib
@@ -14,7 +15,7 @@ data_count = 0
 
 param_max_clients = 32768
 
-AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
+AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
 
 class Client(object):
     def __init__(self, source_urls, event_callback, error_callback=None,
@@ -164,7 +165,7 @@ class EventPublisher(object):
     """
     def __init__(self, server_url, io_loop=None):
         self.server_url = server_url
-        self.http_client = AsyncHTTPClient(io_loop=io_loop)
+        self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.headers = {'Content-Type': streamsem.mimetype_event}
 
     def publish(self, event):
