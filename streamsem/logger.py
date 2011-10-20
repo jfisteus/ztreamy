@@ -36,13 +36,16 @@ class StreamsemLoggerStub(object):
     def close(self):
         pass
 
-    def event_created(self, event):
+    def event_published(self, event):
         pass
 
     def event_dispatched(self, event):
         pass
 
     def event_delivered(self, event):
+        pass
+
+    def data_received(self, compressed, uncompressed):
         pass
 
 
