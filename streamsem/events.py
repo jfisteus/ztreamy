@@ -1,6 +1,8 @@
 """ Code related to the modelling and manipulation of events.
 
 """
+import time
+
 import streamsem
 from streamsem import StreamsemException
 
@@ -243,7 +245,12 @@ class Event(object):
 
 
 class Command(Event):
+    """Special event used for control at the middleware layer.
 
+    These events are consumed by the event parser and never delivered
+    to the rest of the application.
+
+    """
     valid_commands = ['Set-Compression']
 
     def __init__(self, source_id, syntax, command, **kwargs):
@@ -265,6 +272,44 @@ class Command(Event):
                                      'programming')
 
 Event.register_syntax('streamsem-command', Command, always_parse=True)
+
+
+class TestEvent(Event):
+    """Special event used for benchmarking and testing.
+
+    The event encapsulates a sequence number and a timestamp.
+
+    """
+    def __init__(self, source_id, syntax, body, sequence_num=0, **kwargs):
+        """Creates a new command event.
+
+        ``sequence_num`` represents the sequence number (integer) of
+        the event, and is transmitted in its body along with the
+        timestamp. It is only used when body is None. If ``body`` is
+        not None, the sequence number is read from ``body`` instead.
+
+        """
+        if syntax != 'streamsem-test':
+            raise StreamsemException('Usupported syntax in TestEvent',
+                                     'programming')
+        super(TestEvent, self).__init__(source_id, syntax, None, **kwargs)
+        if body is not None:
+            self._parse_body(body)
+        else:
+            self.sequence_num = sequence_num
+            self.timestamp = time.time()
+
+    def serialize_body(self):
+        return str(self.sequence_num) + '//' + str(self.timestamp)
+
+    def _parse_body(self, body):
+        parts = body.split('//')
+        assert len(parts) == 2
+        self.sequence_num = int(parts[0])
+        self.timestamp = float(parts[1])
+
+Event.register_syntax('streamsem-test', TestEvent, always_parse=True)
+
 
 def create_command(source_id, command):
     return Command(source_id, 'streamsem-command', command)

@@ -59,25 +59,18 @@ def main():
         io_loop.add_timeout(scheduler.next(), publish_event)
     def publish_event():
         logging.info('In publish_event')
+        num_events_created[0] += 1
         schedule_next_event()
-        event_body = ('<http://example.com/now> '
-                       '<http://example.com/time> "%s".'%time.time())
-        event = rdfevents.RDFEvent(source_id, 'n3', event_body,
-                                   application_id=application_id)
-        for p in publishers:
-            p.publish(event)
-    def publish_event2():
-        logging.info('In publish_event2')
-        event_body = ('<http://example.com/now> '
-                       '<http://example.com/temp> "%s".'%25)
-        event = rdfevents.RDFEvent(source_id, 'n3', event_body,
-                                   application_id=application_id)
+        event = events.TestEvent(source_id, 'streamsem-test', None,
+                                 sequence_num=num_events_created[0])
         for p in publishers:
             p.publish(event)
     def finish():
         for p in publishers:
             p.close()
         tornado.ioloop.IOLoop.instance().stop()
+    # the list is a trick to make the variable writable from publish_event
+    num_events_created = [0]
     options = read_cmd_options()
     publishers = [client.EventPublisher(url) for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
