@@ -17,6 +17,9 @@ from streamsem import logger
 
 param_max_events_sync = 20
 
+# Uncomment to do memory profiling
+#import guppy.heapy.RM
+
 class StreamServer(object):
     def __init__(self, port, ioloop=None, allow_publish=False,
                  buffering_time=None, source_id=None):
