@@ -236,6 +236,11 @@ class EventDispatcher(object):
                        + len(self.compressed_streaming_clients))
         logging.info('Sending %r events to %r clients', len(events),
                      num_clients)
+        if isinstance(events, list):
+            if events == []:
+                return
+        else:
+            raise StreamsemException('Bad event type', 'send_event')
         if len(self.unsynced_compressed_streaming_clients) > 0:
             if (len(self.compressed_streaming_clients) == 0
                 or self._num_events_since_sync > param_max_events_sync):
@@ -244,16 +249,13 @@ class EventDispatcher(object):
             logging.info('Compressed clients: %d synced; %d unsynced'%\
                              (len(self.compressed_streaming_clients),
                               len(self.unsynced_compressed_streaming_clients)))
-            if isinstance(events, list):
-                data = []
-                for e in events:
-                    if not isinstance(e, streamsem.events.Event):
-                        raise StreamsemException('Bad event type',
-                                                 'send_event')
-                    data.append(str(e))
-                serialized = ''.join(data)
-            else:
-                raise StreamsemException('Bad event type', 'send_event')
+            data = []
+            for e in events:
+                if not isinstance(e, streamsem.events.Event):
+                    raise StreamsemException('Bad event type',
+                                             'send_event')
+                data.append(str(e))
+            serialized = ''.join(data)
             for client in self.streaming_clients:
                 self._send(serialized, client)
             for client in self.unsynced_compressed_streaming_clients:
