@@ -43,7 +43,7 @@ class Client(object):
             self._looping = False
 
     def stop(self):
-        if self._started and not self._stopped:
+        if not self._closed:
             for client in self.clients:
                 client.stop()
         self.active_clients = []

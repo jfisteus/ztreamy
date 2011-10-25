@@ -104,7 +104,13 @@ def main():
         c.start(loop=False)
     sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
     sched.start()
-    tornado.ioloop.IOLoop.instance().start()
+    try:
+        tornado.ioloop.IOLoop.instance().start()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for c in clients:
+            c.stop()
 
 if __name__ == "__main__":
     main()
