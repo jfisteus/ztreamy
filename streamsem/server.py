@@ -168,6 +168,7 @@ class Client(object):
         self.callback = callback
         self.streaming = streaming
         self.compress = compress
+        self.closed = False
         if self.compress:
             self.compression_synced = False
             self.compressor = zlib.compressobj()
@@ -186,6 +187,7 @@ class Client(object):
         It does nothing if the connection is already closed.
 
         """
+        self.closed = True
         if not self.handler.request.connection.stream.closed():
             logging.info('Finishing a client...')
             self.handler.finish()
@@ -209,6 +211,7 @@ class EventDispatcher(object):
         self.cache_size = 200
         self._compressor = zlib.compressobj()
         self._num_events_since_sync = 0
+        self._next_client_cleanup = -1
 
     def register_client(self, client):
         if client.streaming:
@@ -223,15 +226,21 @@ class EventDispatcher(object):
 
     def deregister_client(self, client):
         if client.streaming:
-            if client in self.streaming_clients:
-                self.streaming_clients.remove(client)
-                logging.info('Client deregistered')
-            elif client in self.compressed_streaming_clients:
-                self.compressed_streaming_clients.remove(client)
-                logging.info('Client deregistered')
-            elif client in self.unsynced_compressed_streaming_clients:
-                self.unsynced_compressed_streaming_clients.remove(client)
-                logging.info('Client deregistered')
+            client.closed = True
+            logging.info('Client deregistered')
+            if self._next_client_cleanup < 0:
+                self._next_client_cleanup = 5
+
+    def clean_closed_clients(self):
+        self.streaming_clients = \
+            [c for c in self.streaming_clients if not c.closed]
+        self.compressed_streaming_clients = \
+            [c for c in self.compressed_streaming_clients if not c.closed]
+        self.unsynced_compressed_streaming_clients = \
+            [c for c in self.unsynced_compressed_streaming_clients \
+                 if not c.closed]
+        self._next_client_cleanup = -1
+        logging.info('Cleaning up clients')
 
     def dispatch(self, events):
         num_clients = (len(self.streaming_clients) + len(self.one_time_clients)
@@ -272,12 +281,14 @@ class EventDispatcher(object):
                     self._send(compressed_data, client)
             for e in events:
                 logger.logger.event_dispatched(e)
-
         self.one_time_clients = []
         self.event_cache.extend(events)
         if len(self.event_cache) > self.cache_size:
             self.event_cache = self.event_cache[-self.cache_size:]
         self._num_events_since_sync += len(events)
+        self._next_client_cleanup -= 1
+        if self._next_client_cleanup == 0:
+            self.clean_closed_clients()
 
     def close(self):
         """Closes every active streaming client."""
@@ -300,7 +311,8 @@ class EventDispatcher(object):
 
     def _send(self, data, client):
         try:
-            client.send(data)
+            if not client.closed:
+                client.send(data)
         except:
             logging.error("Error in client callback", exc_info=True)
 
