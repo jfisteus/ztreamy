@@ -15,7 +15,8 @@ data_count = 0
 
 param_max_clients = 32768
 
-AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
+#AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
+AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
 class Client(object):
     def __init__(self, source_urls, event_callback, error_callback=None,
@@ -75,6 +76,7 @@ class AsyncStreamingClient(object):
         self._looping = False
         self._compressed = False
         self._deserializer = events.Deserializer()
+#        self.data_history = []
 
     def start(self, loop=False):
         self.http_client = AsyncHTTPClient(max_clients=param_max_clients)
@@ -117,6 +119,12 @@ class AsyncStreamingClient(object):
 
     def _stream_callback(self, data):
         self._notify_event(data)
+#        self.data_history.append(data)
+#        try:
+#            self._notify_event(data)
+#        except:
+#            print repr(''.join(self.data_history))
+#            raise
 
     def _request_callback(self, response):
         if response.error:
@@ -124,6 +132,7 @@ class AsyncStreamingClient(object):
                 self.error_callback('Error in HTTP request',
                                     http_error=response.error)
         elif len(response.body) > 0:
+#            self.data_history.append(response.body)
             self._notify_event(response.body)
         logging.info('Connection closed by server')
         if self._looping:
