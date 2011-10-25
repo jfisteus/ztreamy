@@ -79,12 +79,8 @@ class Deserializer(object):
                 break
             comps = part.split(':')
             if len(comps) < 2:
-                if end_next != -1:
                     raise StreamsemException('Event syntax error',
                                              'event_deserialize')
-                else:
-                    self._data = self._data[pos:]
-                    return None
             header = comps[0].strip()
             value = part[len(comps[0]) + 1:].strip()
             self._update_header(header, value)
