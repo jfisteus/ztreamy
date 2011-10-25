@@ -338,8 +338,10 @@ class EventPublishHandler(tornado.web.RequestHandler):
     def post(self):
         if self.request.headers['Content-Type'] != streamsem.mimetype_event:
             raise tornado.web.HTTPError(400, 'Bad content type')
+        deserializer = events.Deserializer()
         try:
-            evs = events.Event.deserialize(self.request.body, parse_body=False)
+            evs = deserializer.deserialize(self.request.body, parse_body=False,
+                                           complete=True)
         except Exception as ex:
             raise tornado.web.HTTPError(400, str(ex))
         for event in evs:

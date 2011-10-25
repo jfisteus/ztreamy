@@ -74,6 +74,7 @@ class AsyncStreamingClient(object):
         self._closed = False
         self._looping = False
         self._compressed = False
+        self._deserializer = events.Deserializer()
 
     def start(self, loop=False):
         self.http_client = AsyncHTTPClient(max_clients=param_max_clients)
@@ -137,22 +138,24 @@ class AsyncStreamingClient(object):
 
     def _deserialize(self, data, parse_body=True):
         evs = []
-        pos = 0
+        event = None
         compressed_len = len(data)
         if self._compressed:
             data = self._decompresser.decompress(data)
         logger.logger.data_received(compressed_len, len(data))
-        while pos < len(data):
-            event, pos = events.Event._deserialize_event(data, pos, parse_body)
+        self._deserializer.append_data(data)
+        event = self._deserializer.deserialize_next(parse_body=parse_body)
+        while event is not None:
             if isinstance(event, events.Command):
                 if event.command == 'Set-Compression':
                     self._reset_compression()
+                    pos = self._deserializer.data_consumed()
+                    self._deserializer.reset()
                     evs.extend(self._deserialize(data[pos:], parse_body))
                     return evs
             else:
                 evs.append(event)
-#        logging.info('Transferred data: %d/%d (ratio %.3f)'%(transferred_bytes,#                                                            data_count,
-#                                                            float(transferred_bytes)/data_count))
+            event = self._deserializer.deserialize_next(parse_body=parse_body)
         return evs
 
 
