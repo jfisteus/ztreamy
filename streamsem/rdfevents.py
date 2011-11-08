@@ -23,7 +23,10 @@ class RDFEvent(events.Event):
                                      'programming')
 
         super(RDFEvent, self).__init__(source_id, syntax, None, **kwargs)
-        self.body = self._parse_body(body)
+        if isinstance(body, Graph):
+            self.body = body
+        else:
+            self.body = self._parse_body(body)
 
     def serialize_body(self):
         if self.syntax == 'n3':
