@@ -86,9 +86,12 @@ def _strip(data):
     return data
 
 def main():
-    source_id = streamsem.random_id()
+    source_ids = {}
     filename = '../data-abel/EventData.csv.gz'
     for entry in read_logfile(filename, compressed=True):
+        if not entry.subject in source_ids:
+            source_ids[entry.subject] = streamsem.random_id()
+        source_id = source_ids[entry.subject]
         e = rdfevents.RDFEvent(source_id,'n3', entry.graph())
         print e
 
