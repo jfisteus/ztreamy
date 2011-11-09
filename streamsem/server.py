@@ -415,20 +415,6 @@ def main():
     source_id = streamsem.random_id()
     application_id = '1111-1111'
 
-    def publish_event():
-        logging.info('In publish_event')
-        event_body = ('<http://example.com/now> '
-                       '<http://example.com/time> "%s".'%time.time())
-        event = rdfevents.RDFEvent(source_id, 'n3', event_body,
-                                   application_id=application_id)
-#        server.dispatch_event(event)
-    def publish_event2():
-        logging.info('In publish_event2')
-        event_body = ('<http://example.com/now> '
-                       '<http://example.com/temp> "%s".'%25)
-        event = rdfevents.RDFEvent(source_id, 'n3', event_body,
-                                   application_id=application_id)
-#        server.dispatch_event(event)
     def stop_server():
         server.stop()
 
@@ -452,12 +438,6 @@ def main():
         logger.logger = logger.StreamsemLogger(server.source_id,
                                                'server-' + server.source_id
                                                + '.log')
-    sched = tornado.ioloop.PeriodicCallback(publish_event, 3000,
-                                            io_loop=server.ioloop)
-    sched2 = tornado.ioloop.PeriodicCallback(publish_event2, 7000,
-                                             io_loop=server.ioloop)
-    sched.start()
-    sched2.start()
 
      # Uncomment to test StreamServer.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
