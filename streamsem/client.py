@@ -195,7 +195,8 @@ class EventPublisher(object):
     def _request_callback(self, response):
         if response.error:
             logging.error(response.error)
-        logging.info('Event successfully sent to server')
+        else:
+            logging.info('Event successfully sent to server')
 
 
 def read_cmd_options():

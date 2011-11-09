@@ -1,5 +1,4 @@
 import tornado.ioloop
-import tornado.httpclient
 import tornado.options
 import logging
 import time

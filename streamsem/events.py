@@ -119,7 +119,7 @@ class Deserializer(object):
                 body,
                 event_id=self._event.get('Event-Id'),
                 application_id=self._event.get('Application-Id'),
-                aggregator_id=self._event.get('Aggregator-Id', default=[]),
+                aggregator_id=self._event.get('Aggregator-Id', []),
                 event_type=self._event.get('Event-Type'),
                 timestamp=self._event.get('Timestamp'))
         self._event = {}

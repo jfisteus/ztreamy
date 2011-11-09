@@ -8,6 +8,7 @@ import tornado.ioloop
 import tornado.web
 import tornado.httpserver
 import zlib
+import traceback
 
 import streamsem
 from streamsem import events
@@ -355,6 +356,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
             evs = deserializer.deserialize(self.request.body, parse_body=False,
                                            complete=True)
         except Exception as ex:
+            traceback.print_exc()
             raise tornado.web.HTTPError(400, str(ex))
         for event in evs:
             event.aggregator_id.append(self.server.source_id)
