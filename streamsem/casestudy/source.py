@@ -7,6 +7,7 @@ import csv
 import gzip
 import tornado.options
 import tornado.ioloop
+import re
 
 import streamsem
 import streamsem.rdfevents as rdfevents
@@ -14,8 +15,10 @@ import streamsem.client as client
 
 ns_slog = Namespace('http://www.it.uc3m.es/jaf/ns/slog/#')
 ns_person = Namespace('http://www.it.uc3m.es/jaf/ns/slog/person#')
+ns_command = Namespace('http://www.it.uc3m.es/jaf/ns/slog/command#')
 
 class LogEntry(object):
+    _re_clean = re.compile('\<|\>')
     _date_format = "%Y-%m-%d %H:%M:%S"
     _entry_types = {
         'BA': ns_slog['event_shell'],
@@ -53,7 +56,8 @@ class LogEntry(object):
         if self.entry_type == 'UR':
             g.add((entry, ns_slog.url, term.Literal(self.data2)))
         elif self.entry_type == 'BA':
-            g.add((entry, ns_slog.command, term.Literal(self.data1)))
+            g.add((entry, ns_slog.command,
+                   ns_command[self._escape(self.data1)]))
             g.add((entry, ns_slog.command_line, term.Literal(self.data2)))
         elif self.entry_type == 'PO':
             pass
@@ -69,6 +73,9 @@ class LogEntry(object):
             return LogEntry._entry_types[self.entry_type]
         else:
             raise StreamsemException('Unknown event type')
+
+    def _escape(self, text):
+        return LogEntry._re_clean.sub('', text)
 
 
 class EventPublisher(object):
@@ -167,7 +174,7 @@ def main():
     options = read_cmd_options()
     publishers = [client.EventPublisher(url) for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
-    filename = '../data-abel/EventData.csv.gz'
+    filename = '../data-abel/EventData-sorted.csv.gz'
     scheduler = EventScheduler(filename, io_loop, publishers,
                                tornado.options.options.timescale,
                                compressed=True)
