@@ -1,6 +1,7 @@
 import tornado.ioloop
 import tornado.options
 import logging
+from rdflib.graph import Graph
 
 import streamsem
 from streamsem import events
@@ -12,19 +13,28 @@ class Processor(object):
     def __init__(self, stream_urls):
         self.client = client.Client(stream_urls,
                                     event_callback=self._handle_event,
-                                    error_callback=self._handle_error)
+                                    error_callback=self._handle_error,
+                                    separate_events=False)
+        self.triple_store = Graph('Sleepycat',
+                                  'http://www.it.uc3m.es/jaf/ns/slog/db')
+        self.db_dir = 'dbdir'
 
     def start(self, loop=False):
+        self.triple_store.open(self.db_dir)
         self.client.start(loop=loop)
 
     def stop(self):
+        self.triple_store.close()
         self.client.stop()
 
     def _handle_error(self, message, http_error=None):
         pass
 
-    def _handle_event(self, event):
-        print event
+    def _handle_event(self, evs):
+        print 'Received %d events.'%len(evs)
+        for event in evs:
+            self.triple_store += event.body
+        print len(self.triple_store)
 
 
 def read_cmd_options():
