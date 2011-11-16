@@ -4,6 +4,7 @@ from tornado.curl_httpclient import CurlAsyncHTTPClient
 import tornado.options
 import logging
 import zlib
+import sys
 
 import streamsem
 from streamsem import events
@@ -215,7 +216,7 @@ def read_cmd_options():
 def main():
     import time
     def handle_event(event):
-        print event
+        sys.stdout.write(str(event))
     def handle_error(message, http_error=None):
         if http_error is not None:
             logging.error(message + ': ' + str(http_error))

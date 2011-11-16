@@ -146,6 +146,7 @@ class EventScheduler(object):
             if parts[0] != 'n':
                 parts = parts[0:5] + [','.join(parts[5:])]
                 yield LogEntry(*parts)
+        file_.close()
 
 
 def _strip(data):
@@ -172,6 +173,7 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
+    entity_id = streamsem.random_id()
     publishers = [client.EventPublisher(url) for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
     filename = '../data-abel/EventData-sorted.csv.gz'
@@ -179,8 +181,8 @@ def main():
                                tornado.options.options.timescale,
                                compressed=True)
     if tornado.options.options.eventlog:
-        logger.logger = logger.StreamsemLogger(source_id,
-                                               'source-' + source_id + '.log')
+        logger.logger = logger.StreamsemLogger(entity_id,
+                                               'replay-' + entity_id + '.log')
     try:
         io_loop.start()
     except KeyboardInterrupt:

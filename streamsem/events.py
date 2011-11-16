@@ -49,16 +49,13 @@ class Deserializer(object):
             self.reset()
             raise StreamsemException('Spurious data in the input event',
                                      'event_deserialize')
-
         return events
 
     def deserialize_next(self, parse_body=True):
-        """Deserializes and returns an event from the given string.
+        """Deserializes and returns an event from the data buffer.
 
         Returns None and keeps the pending data stored when a complete
         event is not in the stored data fragment.
-
-        `data` -- the string representing the event
 
         `parse_body` -- if True, the body of the event is parsed according
         to its type. If not, it is stored just as a string in the event
@@ -236,6 +233,18 @@ class Event(object):
             return str(self.body)
         else:
             raise StreamsemException('Empty body in event', 'even_serialize')
+
+    def time(self):
+        """Returns the event timestamp as a seconds since the epoch value.
+
+        Note that the timezone information from the timestamp is
+        lost. Returns None if the event has no timestamp set.
+
+        """
+        if self.timestamp is not None:
+            return streamsem.rfc3339_as_time(self.timestamp)
+        else:
+            return None
 
     def _serialize(self):
         data = []

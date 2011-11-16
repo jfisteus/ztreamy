@@ -40,3 +40,13 @@ def get_timestamp(date=None):
         return rfc3339(date)
     else:
         return rfc3339(time.time())
+
+_date_format = "%Y-%m-%dT%H:%M:%S"
+
+def rfc3339_as_time(timestamp):
+    """Returns the given RFC 3339 timestamp as a seconds since the epoch value.
+
+    Note that the timezone information from the timestamp is lost.
+
+    """
+    return time.mktime(time.strptime(timestamp[:-6], _date_format))
