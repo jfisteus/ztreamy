@@ -1,11 +1,15 @@
 import pycurl
 import cjson as json
 import rdflib
+import tornado
+import traceback
 
 from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
+from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 import streamsem
 from streamsem import events
@@ -79,14 +83,26 @@ class TwitterRDFEncoder():
 	conn.setopt(pycurl.WRITEFUNCTION, self.on_receive)
 	conn.perform()
 
+    def start_async(self):
+        http_client = SimpleAsyncHTTPClient()
+        req = HTTPRequest(self.STREAM_URL,
+                          streaming_callback=self.on_receive,
+                          auth_username=self.USER,
+                          auth_password=self.PASS,
+                          request_timeout=0, connect_timeout=0)
+        http_client.fetch(req, self.on_receive)
+        print "Launched Twitter request"
+
     def on_receive(self, data):
+        if isinstance(data, HTTPResponse):
+            data = data.body
 	try:
 		graph = self.decode(data)
 		self.publish(graph)	
 	except:
-		# Forget the tweets that produce processing errors	
-		return
-
+            # Forget the tweets that produce processing errors	
+            #traceback.print_exc()
+            return
 
     def publish(self, graph):	
 	event = rdfevents.RDFEvent(self.source_id, 'n3', graph)
@@ -96,7 +112,8 @@ class TwitterRDFEncoder():
 def main():
     publisher = client.EventPublisher("http://localhost:9001/events/publish")
     enc = TwitterRDFEncoder(publisher,"AppID","SrcID")
-    enc.start()
+    enc.start_async()
+    tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
     main()
