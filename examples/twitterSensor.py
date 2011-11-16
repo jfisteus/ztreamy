@@ -14,13 +14,13 @@ from streamsem import client
 
 class TwitterRDFEncoder():
    
-    def __init__(self, url, app_id = "TwitterSensor", source_id = "TwitterSensor0"):
+    def __init__(self, publisher, app_id = "TwitterSensor", source_id = "TwitterSensor0"):
     	self.STREAM_URL = "https://stream.twitter.com/1/statuses/sample.json"
 	self.USER = "gimi_uc3m"
 	self.PASS = "qabasabslc10"
 	self.NS = Namespace("http://webtlab.it.uc3m.es/")
 	self.DC = Namespace("http://purl.org/dc/elements/1.1/")
-	self.url = url
+	self.publisher = publisher
 	self.app_id = app_id
 	self.source_id = source_id
 
@@ -64,14 +64,13 @@ class TwitterRDFEncoder():
 		if str(tweet_dict["geo"]) != "None":
 			graph.add( ( tweet_id, self.NS["position"], Literal(str(tweet_dict["geo"])) ))
 
-	print graph.serialize(format='n3')
-	self.publish(tweet_id, graph)
+	return graph
 
     def decode(self, tweet):
 	tweet_dict = json.decode(tweet)
 	# Forget tweets that do not contain id or timestamp
 	if "id" in tweet_dict and "created_at" in tweet_dict:
-	   self.toN3(tweet_dict)
+	   return self.toN3(tweet_dict)
 
     def start (self):
 	conn = pycurl.Curl()
@@ -81,18 +80,22 @@ class TwitterRDFEncoder():
 	conn.perform()
 
     def on_receive(self, data):
-	self.decode(data)
+	try:
+		graph = self.decode(data)
+		self.publish(graph)	
+	except:
+		# Forget the tweets that produce processing errors	
+		return
 
-    def publish(self, event_id, graph):
-	p = client.EventPublisher(self.url)
-	event = events.Event(self.source_id, 'n3', event_id, self.app_id)
-	#self, source_id, syntax, body, event_id=None,
-        #         application_id=None, aggregator_id=[], event_type=None,
-        #         timestamp=None
-	p.publish(event)
+
+    def publish(self, graph):	
+	event = rdfevents.RDFEvent(self.source_id, 'n3', graph)
+	print event
+	self.publisher.publish(event)
 
 def main():
-    enc = TwitterRDFEncoder("http://localhost:9001/events/publish","AppID","SrcID")
+    publisher = client.EventPublisher("http://localhost:9001/events/publish")
+    enc = TwitterRDFEncoder(publisher,"AppID","SrcID")
     enc.start()
 
 if __name__ == "__main__":
