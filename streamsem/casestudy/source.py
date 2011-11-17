@@ -83,12 +83,26 @@ class EventPublisher(object):
         self.log_entry = log_entry
         self.source_id = source_id
         self.publishers = publishers
+        self.finished = False
+        self.error = False
+        self._num_pending = 0
 
     def publish(self):
         event = rdfevents.RDFEvent(self.source_id, 'n3',
                                    self.log_entry.graph())
         for publisher in self.publishers:
             publisher.publish(event)
+        self._num_pending = len(self.publishers)
+
+    def _callback(self, response):
+        self._num_pending -= 1
+        if self._num_pending == 0:
+            self.finished = True
+        if response.error:
+            self.error = True
+            logging.error(response.error)
+        else:
+            logging.info('Event successfully sent to server')
 
 
 class EventScheduler(object):
@@ -102,6 +116,7 @@ class EventScheduler(object):
         self.finished = False
         self.logfile_reader = self._read_logfile(filename,
                                                  compressed=compressed)
+        self._pending_events = []
         self.sched = tornado.ioloop.PeriodicCallback(self._schedule_next_events,
                                                      self.period * 1000)
         self.sched.start()
@@ -115,15 +130,20 @@ class EventScheduler(object):
         self._schedule_next_events()
 
     def _schedule_next_events(self):
-        try:
-            limit = time.time() + 2 * self.period
-            while True:
-                fire_time = self._schedule_entry(self.logfile_reader.next())
-                if fire_time > limit:
-                    break
-        except StopIteration:
+        self._pending_events = [p for p in self._pending_events \
+                                    if not p.finished]
+        if not self.finished:
+            try:
+                limit = time.time() + 2 * self.period
+                while True:
+                    fire_time = self._schedule_entry(self.logfile_reader.next())
+                    if fire_time > limit:
+                        break
+            except StopIteration:
+                self.finished = True
+        elif len(self._pending_events) == 0:
             self.sched.stop()
-            self.finished = True
+            self.io_loop.stop()
 
     def _schedule_entry(self, entry):
         if not entry.subject in self.source_ids:

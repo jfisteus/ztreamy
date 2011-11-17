@@ -181,13 +181,14 @@ class EventPublisher(object):
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.headers = {'Content-Type': streamsem.mimetype_event}
 
-    def publish(self, event):
+    def publish(self, event, callback=None):
         logger.logger.event_published(event)
         body = str(event)
         req = HTTPRequest(self.server_url, body=body, method='POST',
                           headers=self.headers, request_timeout=0,
                           connect_timeout=0)
-        self.http_client.fetch(req, self._request_callback)
+        callback = callback or self._request_callback
+        self.http_client.fetch(req, callback)
 
     def close(self):
         self.http_client.close()
