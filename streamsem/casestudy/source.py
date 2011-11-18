@@ -12,6 +12,7 @@ import re
 import streamsem
 import streamsem.rdfevents as rdfevents
 import streamsem.client as client
+import streamsem.logger as logger
 
 ns_slog = Namespace('http://www.it.uc3m.es/jaf/ns/slog/#')
 ns_person = Namespace('http://www.it.uc3m.es/jaf/ns/slog/person#')
