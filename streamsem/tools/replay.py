@@ -11,14 +11,17 @@ import streamsem.logger as logger
 from streamsem.tools import utils
 
 class EventPublisher(object):
-    def __init__(self, event, publishers):
+    def __init__(self, event, publishers, add_timestamp=False):
         self.event = event
         self.publishers = publishers
+        self.add_timestamp = add_timestamp
         self.finished = False
         self.error = False
         self._num_pending = 0
 
     def publish(self):
+        if self.add_timestamp:
+            self.event.extra_headers['X-Float-Timestamp'] = str(time.time())
         for publisher in self.publishers:
             publisher.publish(self.event, self._callback)
         self._num_pending = len(self.publishers)
@@ -36,7 +39,7 @@ class EventPublisher(object):
 
 class EventScheduler(object):
     def __init__(self, filename, io_loop, publishers,
-                 time_scale, time_generator=None):
+                 time_scale, time_generator=None, add_timestamp=False):
         """ Schedules the events of the given file and sends.
 
         `filename`: name of the file.  `io_loop`: instance of the
@@ -52,6 +55,8 @@ class EventScheduler(object):
         self.time_scale = time_scale
         self.publishers = publishers
         self.io_loop = io_loop
+        self.add_timestamp = add_timestamp
+        self.last_sequence_num = 0
         self.finished = False
         self._file_reader = self._read_event_file(filename)
         self._pending_events = []
@@ -85,7 +90,7 @@ class EventScheduler(object):
             self.io_loop.stop()
 
     def _schedule_event(self, event):
-        pub = EventPublisher(event, self.publishers)
+        pub = EventPublisher(event, self.publishers, self.add_timestamp)
         self._pending_events.append(pub)
         if self._time_generator is None:
             fire_time = (self.t0_new
@@ -108,6 +113,11 @@ class EventScheduler(object):
             evs = deserializer.deserialize(data, parse_body=False,
                                            complete=False)
             for event in evs:
+                self.last_sequence_num += 1
+                if self.add_timestamp:
+                    # The timestamp header is set later, just before sending
+                    event.extra_headers['X-Sequence-Num'] = \
+                        str(self.last_sequence_num)
                 yield event
         file_.close()
 
@@ -118,6 +128,9 @@ def read_cmd_options():
                            help='distribution of the time between events')
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
+                           type=bool)
+    tornado.options.define('timestamp', default=False,
+                           help='add an X-Float-Timestamp header to events',
                            type=bool)
     tornado.options.define('timescale', default=1.0,
                            help='accelerate time by this factor',
@@ -143,7 +156,8 @@ def main():
         time_generator = None
     scheduler = EventScheduler(options.filename, io_loop, publishers,
                                tornado.options.options.timescale,
-                               time_generator=time_generator)
+                               time_generator=time_generator,
+                               add_timestamp=tornado.options.options.timestamp)
     if tornado.options.options.eventlog:
         logger.logger = logger.StreamsemLogger(entity_id,
                                                'replay-' + entity_id + '.log')

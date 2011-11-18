@@ -6,6 +6,8 @@ def compression_ratio(filename):
     ratios = []
     with open(filename, 'r') as file_:
         for line in file_:
+            if line.startswith('#'):
+                continue
             data = [s.strip() for s in line.split('\t')]
             if data[0] == 'data_receive':
                 comp_size += int(data[1])

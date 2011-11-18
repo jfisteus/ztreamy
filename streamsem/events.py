@@ -28,10 +28,16 @@ class Deserializer(object):
         return self._previous_len - len(self._data)
 
     def reset(self):
+        """This method resets the state of the parser and dumps pending data"""
         self._data = ''
-        self._event = {}
-        self._header_complete = False
         self.previous_len = 0
+        self._event_reset()
+
+    def _event_reset(self):
+        """Method to be called internally after an event is read."""
+        self._event = {}
+        self._extra_headers = {}
+        self._header_complete = False
 
     def deserialize(self, data, parse_body=True, complete=False):
         """Deserializes and returns a list of events.
@@ -108,7 +114,8 @@ class Deserializer(object):
                 application_id=self._event.get('Application-Id'),
                 aggregator_id=self._event.get('Aggregator-Id', []),
                 event_type=self._event.get('Event-Type'),
-                timestamp=self._event.get('Timestamp'))
+                timestamp=self._event.get('Timestamp'),
+                extra_headers=self._extra_headers)
         else:
             event = Event( \
                 self._event.get('Source-Id'),
@@ -118,15 +125,14 @@ class Deserializer(object):
                 application_id=self._event.get('Application-Id'),
                 aggregator_id=self._event.get('Aggregator-Id', []),
                 event_type=self._event.get('Event-Type'),
-                timestamp=self._event.get('Timestamp'))
-        self._event = {}
-        self._header_complete = False
+                timestamp=self._event.get('Timestamp'),
+                extra_headers=self._extra_headers)
+        self._event_reset()
         return event
 
     def _update_header(self, header, value):
         if header not in Event.headers:
-            raise StreamsemException('Unknown header: ' + header,
-                                     'event_deserialize')
+            self._extra_headers[header] = value
         if header == 'Aggregator-Ids':
             if header not in self._event:
                 self._event[header] = []
@@ -191,7 +197,7 @@ class Event(object):
 
     def __init__(self, source_id, syntax, body, event_id=None,
                  application_id=None, aggregator_id=[], event_type=None,
-                 timestamp=None):
+                 timestamp=None, extra_headers={}):
         """Creates a new event.
 
         `body` must be the textual representation of the event or
@@ -212,6 +218,7 @@ class Event(object):
         self.event_type = event_type
         self.timestamp = timestamp or streamsem.get_timestamp()
         self.application_id = application_id
+        self.extra_headers = extra_headers
 
     def append_aggregator_id(self, aggregator_id):
         """Appends a new aggregator id to the event."""
@@ -259,6 +266,8 @@ class Event(object):
             data.append('Event-Type: ' + str(self.event_type))
         if self.timestamp is not None:
             data.append('Timestamp: ' + str(self.timestamp))
+        for header, value in self.extra_headers.iteritems():
+            data.append(header + ': ' + value)
         serialized_body = self.serialize_body()
         data.append('Body-Length: ' + str(len(serialized_body)))
         data.append('')
@@ -317,18 +326,20 @@ class TestEvent(Event):
         super(TestEvent, self).__init__(source_id, syntax, None, **kwargs)
         if body is not None:
             self._parse_body(body)
+            self.float_time = float(self.extra_headers['X-Float-Timestamp'])
+            self.sequence_num = int(self.extra_headers['X-Sequence-Num'])
         else:
+            self.float_time = time.time()
             self.sequence_num = sequence_num
-            self.timestamp = time.time()
+            self.extra_headers['X-Float-Timestamp'] = str(self.float_time)
+            self.extra_headers['X-Sequence-Num'] = str(sequence_num)
 
     def serialize_body(self):
-        return str(self.sequence_num) + '//' + str(self.timestamp)
+        return ''
 
     def _parse_body(self, body):
-        parts = body.split('//')
-        assert len(parts) == 2
-        self.sequence_num = int(parts[0])
-        self.timestamp = float(parts[1])
+        # This event has an empty body
+        pass
 
 Event.register_syntax('streamsem-test', TestEvent, always_parse=True)
 

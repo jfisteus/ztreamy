@@ -16,7 +16,7 @@ class _Stats(object):
         self.min_delay = 1e99
 
     def handle_event(self, event):
-        delay = time.time() - event.timestamp
+        delay = time.time() - float(event.extra_headers['X-Float-Timestamp'])
         self.sum_delays += delay
         if delay > self.max_delay:
             self.max_delay = delay
@@ -57,15 +57,16 @@ class _PendingEvents(object):
         self.most_recent = 0
 
     def event_received(self, event):
-        if event.sequence_num in self.unfinished:
-            self.unfinished[event.sequence_num] += 1
+        sequence_num = int(event.extra_headers['X-Sequence-Num'])
+        if sequence_num in self.unfinished:
+            self.unfinished[sequence_num] += 1
         else:
-            for i in range(self.most_recent + 1, event.sequence_num):
+            for i in range(self.most_recent + 1, sequence_num):
                 self.unfinished[i] = 0
-            self.unfinished[event.sequence_num] = 1
-            self.most_recent = event.sequence_num
-        if self.unfinished[event.sequence_num] == self.num_clients:
-            del self.unfinished[event.sequence_num]
+            self.unfinished[sequence_num] = 1
+            self.most_recent = sequence_num
+        if self.unfinished[sequence_num] == self.num_clients:
+            del self.unfinished[sequence_num]
             self.finished_events += 1
 
     def count_unfinished(self):
