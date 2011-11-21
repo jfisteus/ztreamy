@@ -111,7 +111,8 @@ def main():
     for i in range(0, options.num_clients):
         clients.append(client.Client([options.stream_url],
                                      event_callback=stats.handle_event,
-                                     error_callback=stats.handle_error))
+                                     error_callback=stats.handle_error,
+                                     parse_event_body=False))
     for c in clients:
         c.start(loop=False)
     sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
