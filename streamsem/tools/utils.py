@@ -1,5 +1,6 @@
 import time
 import numpy
+import math
 
 import streamsem
 from streamsem import StreamsemException
@@ -33,3 +34,21 @@ def get_scheduler(description):
             raise StreamsemException('const distribution needs 1 param',
                                      'event_source params')
         return constant_event_scheduler(params[0])
+
+def median(data):
+    """Returns the statistic median of a list of values."""
+    data = sorted(data)
+    n = len(data)
+    if n % 2 == 0:
+        return float(data[n // 2 - 1] + data[n // 2]) / 2
+    else:
+        return float(data[n // 2])
+
+def average_and_std_dev(data):
+    """Returns the average and sample standard deviation of data."""
+    n = len(data)
+    total = sum(data)
+    average = float(total) / n
+    std_dev = math.sqrt((sum([(d - average) * (d - average) for d in data])
+                         / (n - 1)))
+    return average, std_dev

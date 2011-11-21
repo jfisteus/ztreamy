@@ -2,7 +2,9 @@ import tornado.ioloop
 import logging
 import time
 
+import streamsem
 from streamsem import client
+from streamsem import logger
 
 class _Stats(object):
     def __init__(self, num_clients):
@@ -23,7 +25,7 @@ class _Stats(object):
         if delay < self.min_delay:
             self.min_delay = delay
         self.num_events_received += 1
-        self.pending.event_received(event)
+        self.pending.event_received(event, delay)
 
     def handle_error(self, message, http_error=None):
         if http_error is not None:
@@ -52,21 +54,28 @@ class _Stats(object):
 class _PendingEvents(object):
     def __init__(self, num_clients):
         self.unfinished = {}
+        self.delays = {}
         self.num_clients = num_clients
         self.finished_events = 0
         self.most_recent = 0
 
-    def event_received(self, event):
+    def event_received(self, event, delay):
         sequence_num = int(event.extra_headers['X-Sequence-Num'])
         if sequence_num in self.unfinished:
             self.unfinished[sequence_num] += 1
+            self.delays[sequence_num].append(delay)
         else:
-            for i in range(self.most_recent + 1, sequence_num):
+            for i in range(self.most_recent + 1, sequence_num + 1):
                 self.unfinished[i] = 0
+                self.delays[i] = []
             self.unfinished[sequence_num] = 1
+            self.delays[sequence_num].append(delay)
             self.most_recent = sequence_num
         if self.unfinished[sequence_num] == self.num_clients:
+            logger.logger.manyc_event_finished(sequence_num,
+                                               self.delays[sequence_num])
             del self.unfinished[sequence_num]
+            del self.delays[sequence_num]
             self.finished_events += 1
 
     def count_unfinished(self):
@@ -80,9 +89,10 @@ class _PendingEvents(object):
 
 
 def read_cmd_options():
-    from optparse import OptionParser, Values
-    parser = OptionParser(usage='usage: %prog [options] source_stream_url num',
-                          version='0.0')
+    from optparse import Values
+    tornado.options.define('eventlog', default=False,
+                           help='dump event log',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) == 2:
@@ -95,6 +105,7 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
+    entity_id = streamsem.random_id()
     stats = _Stats(options.num_clients)
     clients = []
     for i in range(0, options.num_clients):
@@ -105,6 +116,9 @@ def main():
         c.start(loop=False)
     sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
     sched.start()
+    if tornado.options.options.eventlog:
+        logger.logger = logger.StreamsemManycLogger(entity_id,
+                                                'manyc-' + entity_id + '.log')
     try:
         tornado.ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
