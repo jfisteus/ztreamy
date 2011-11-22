@@ -282,7 +282,7 @@ class Command(Event):
     to the rest of the application.
 
     """
-    valid_commands = ['Set-Compression']
+    valid_commands = ['Set-Compression', 'Test-Connection']
 
     def __init__(self, source_id, syntax, command, **kwargs):
         """Creates a new command event.

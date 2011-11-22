@@ -213,6 +213,7 @@ class EventDispatcher(object):
         self._compressor = zlib.compressobj()
         self._num_events_since_sync = 0
         self._next_client_cleanup = -1
+        self._periods_since_last_event = 0
 
     def register_client(self, client):
         if client.streaming:
@@ -230,7 +231,7 @@ class EventDispatcher(object):
             client.closed = True
             logging.info('Client deregistered')
             if self._next_client_cleanup < 0:
-                self._next_client_cleanup = 5
+                self._next_client_cleanup = 10
 
     def clean_closed_clients(self):
         self.streaming_clients = \
@@ -243,17 +244,28 @@ class EventDispatcher(object):
         self._next_client_cleanup = -1
         logging.info('Cleaning up clients')
 
-    def dispatch(self, events):
+    def dispatch(self, evs):
         num_clients = (len(self.streaming_clients) + len(self.one_time_clients)
                        + len(self.unsynced_compressed_streaming_clients)
                        + len(self.compressed_streaming_clients))
-        logging.info('Sending %r events to %r clients', len(events),
+        logging.info('Sending %r events to %r clients', len(evs),
                      num_clients)
-        if isinstance(events, list):
-            if events == []:
-                return
+        self._next_client_cleanup -= 1
+        if self._next_client_cleanup == 0:
+            self.clean_closed_clients()
+        if isinstance(evs, list):
+            if evs == [] and num_clients > 0:
+                self._periods_since_last_event += 1
+                if self._periods_since_last_event > 20:
+                    logging.info('Sending Test-Connection event')
+                    evs = [events.Command('', 'streamsem-command',
+                                          'Test-Connection')]
+                    self._periods_since_last_event = 0
+                else:
+                    return
         else:
             raise StreamsemException('Bad event type', 'send_event')
+        self._periods_since_last_event = 0
         if len(self.unsynced_compressed_streaming_clients) > 0:
             if (len(self.compressed_streaming_clients) == 0
                 or self._num_events_since_sync > param_max_events_sync):
@@ -263,8 +275,8 @@ class EventDispatcher(object):
                              (len(self.compressed_streaming_clients),
                               len(self.unsynced_compressed_streaming_clients)))
             data = []
-            for e in events:
-                if not isinstance(e, streamsem.events.Event):
+            for e in evs:
+                if not isinstance(e, events.Event):
                     raise StreamsemException('Bad event type',
                                              'send_event')
                 data.append(str(e))
@@ -280,16 +292,13 @@ class EventDispatcher(object):
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
                 for client in self.compressed_streaming_clients:
                     self._send(compressed_data, client)
-            for e in events:
+            for e in evs:
                 logger.logger.event_dispatched(e)
         self.one_time_clients = []
-        self.event_cache.extend(events)
+        self.event_cache.extend(evs)
         if len(self.event_cache) > self.cache_size:
             self.event_cache = self.event_cache[-self.cache_size:]
-        self._num_events_since_sync += len(events)
-        self._next_client_cleanup -= 1
-        if self._next_client_cleanup == 0:
-            self.clean_closed_clients()
+        self._num_events_since_sync += len(evs)
 
     def close(self):
         """Closes every active streaming client."""
