@@ -86,10 +86,14 @@ class BogusClient(client.AsyncStreamingClient):
 
     """
 
-    def __init__(self, url, stats, ioloop=None):
+    def __init__(self, url, stats, no_parse, ioloop=None):
         super(BogusClient, self).__init__(url, ioloop=ioloop)
         self.stats = stats
         self._deserializer = BogusDeserializer()
+        if no_parse:
+            self._stream_callback = None
+        else:
+            self._deserializer = BogusDeserializer()
 
     def _stream_callback(self, data):
         evs = self._deserialize(data)
@@ -192,10 +196,32 @@ class _PendingEvents(object):
             return 0
 
 
+class SaturationMonitor(object):
+    def __init__(self, period):
+        self.last_fire = None
+        self.period = period
+        self.delayed = False
+
+    def fire(self):
+        now = time.time()
+        if self.last_fire is not None:
+            diff = now - self.last_fire
+            if diff > 1.2 * self.period:
+                if not self.delayed:
+                    self.delayed = True
+                    logging.info('In delay')
+            elif self.delayed:
+                self.delayed = False
+                logging.info('Normal operation again')
+
+
 def read_cmd_options():
     from optparse import Values
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
+                           type=bool)
+    tornado.options.define('noparse', default=False,
+                           help='quick client that does not parse events',
                            type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
@@ -209,16 +235,21 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
+    no_parse = tornado.options.options.noparse
     entity_id = streamsem.random_id()
     stats = _Stats(options.num_clients)
     clients = []
     for i in range(0, options.num_clients):
-        clients.append(BogusClient(options.stream_url, stats))
+        clients.append(BogusClient(options.stream_url, stats, no_parse))
     for c in clients:
         c.start(loop=False)
-    sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
+    if not no_parse:
+        sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
+    else:
+        saturation_mon = SaturationMonitor(5.0)
+        sched = tornado.ioloop.PeriodicCallback(saturation_mon.fire, 5000)
     sched.start()
-    if tornado.options.options.eventlog:
+    if tornado.options.options.eventlog and not no_parse:
         logger.logger = logger.StreamsemManycLogger(entity_id,
                                                 'manyc-' + entity_id + '.log')
     try:
