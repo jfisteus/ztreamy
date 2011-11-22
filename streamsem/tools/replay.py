@@ -21,7 +21,8 @@ class EventPublisher(object):
 
     def publish(self):
         if self.add_timestamp:
-            self.event.extra_headers['X-Float-Timestamp'] = str(time.time())
+            self.event.extra_headers['X-Float-Timestamp'] = \
+                str(self.event.seq_num) + '/' + str(time.time())
         for publisher in self.publishers:
             publisher.publish(self.event, self._callback)
         self._num_pending = len(self.publishers)
@@ -116,8 +117,7 @@ class EventScheduler(object):
                 self.last_sequence_num += 1
                 if self.add_timestamp:
                     # The timestamp header is set later, just before sending
-                    event.extra_headers['X-Sequence-Num'] = \
-                        str(self.last_sequence_num)
+                    event.seq_num = self.last_sequence_num
                 yield event
         file_.close()
 

@@ -326,13 +326,14 @@ class TestEvent(Event):
         super(TestEvent, self).__init__(source_id, syntax, None, **kwargs)
         if body is not None:
             self._parse_body(body)
-            self.float_time = float(self.extra_headers['X-Float-Timestamp'])
-            self.sequence_num = int(self.extra_headers['X-Sequence-Num'])
+            parts = self.extra_headers['X-Float-Timestamp'].split('/')
+            self.float_time = float(parts[1])
+            self.sequence_num = int(parts[0])
         else:
             self.float_time = time.time()
             self.sequence_num = sequence_num
-            self.extra_headers['X-Float-Timestamp'] = str(self.float_time)
-            self.extra_headers['X-Sequence-Num'] = str(sequence_num)
+            self.extra_headers['X-Float-Timestamp'] = \
+                str(sequence_num) + '/' + str(self.float_time)
 
     def serialize_body(self):
         return ''

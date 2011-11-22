@@ -105,7 +105,7 @@ class AsyncStreamingClient(object):
                 self.ioloop.stop()
                 self._looping = False
 
-    def _notify_event(self, data):
+    def _stream_callback(self, data):
         global transferred_bytes
         transferred_bytes += len(data)
         evs = self._deserialize(data, parse_body=self.parse_event_body)
@@ -117,15 +117,6 @@ class AsyncStreamingClient(object):
             else:
                 for ev in evs:
                     self.event_callback(ev)
-
-    def _stream_callback(self, data):
-        self._notify_event(data)
-#        self.data_history.append(data)
-#        try:
-#            self._notify_event(data)
-#        except:
-#            print repr(''.join(self.data_history))
-#            raise
 
     def _request_callback(self, response):
         if response.error:

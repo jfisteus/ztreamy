@@ -1,10 +1,115 @@
 import tornado.ioloop
 import logging
 import time
+import zlib
 
 import streamsem
 from streamsem import client
 from streamsem import logger
+from streamsem import events
+
+class BogusDeserializer(object):
+    tokens = ['X-Float-Timestamp:', 'Set-Compression']
+
+    def __init__(self):
+        """Creates a new `Deserializer` object."""
+        self.reset()
+
+    def reset(self):
+        """This method resets the state of the parser and dumps pending data"""
+        self.parse_state = [-1, -1]
+        self.param_data = ''
+
+    def deserialize(self, data):
+        """Deserializes and returns a list of events.
+
+        Deserializes all the events until no more events can be parsed.
+
+        """
+        evs = []
+        ev = self._match_token(0, data, 0)
+        if ev is not None:
+            evs.append(ev)
+        ev = self._match_token(1, data, 0)
+        if ev is not None:
+            evs.append(ev)
+            return evs
+        pos = data.find('\n')
+        while pos != -1:
+            self.parse_state = [0, 0]
+            ev = self._match_token(0, data, pos + 1)
+            if ev is not None:
+                evs.append(ev)
+            ev = self._match_token(1, data, pos + 1)
+            if ev is not None:
+                evs.append(ev)
+                return evs
+            pos = data.find('\n', pos + 1)
+        return evs
+
+    def _match_token(self, token, data, ini):
+        pos = ini
+        if self.parse_state[token] >= 0:
+            end = len(BogusDeserializer.tokens[token])
+            if end > len(data) - ini + self.parse_state[token]:
+                end = len(data) - ini + self.parse_state[token]
+            text = BogusDeserializer.tokens[token][self.parse_state[token]:end]
+            if data[ini:ini + end - self.parse_state[token]] == text:
+                pos = ini + end - self.parse_state[token]
+                self.parse_state[token] = end
+                if self.parse_state[token] == \
+                        len(BogusDeserializer.tokens[token]):
+                    self.parse_state = [-1, -1]
+                    self.parse_state[token] = -2
+            else:
+                self.parse_state[token] = -1
+        if token == 0 and self.parse_state[0] == -2:
+            end = data.find('\n', pos)
+            if end == -1:
+                self.param_data += data[pos:]
+            else:
+                self.param_data += data[pos:end]
+                parts = self.param_data.split('/')
+                self.reset()
+                return int(parts[0]), float(parts[1])
+        elif token == 1 and self.parse_state[1] == -2:
+            self.reset()
+            self.consumed_data = pos
+            return events.Command('', 'streamsem-command', 'Set-Compression')
+        return None
+
+
+class BogusClient(client.AsyncStreamingClient):
+    """A quick client that only scans for the key data needed.
+
+    It should allow increasing CPU efficiency when using many clients.
+
+    """
+
+    def __init__(self, url, stats, ioloop=None):
+        super(BogusClient, self).__init__(url, ioloop=ioloop)
+        self.stats = stats
+        self._deserializer = BogusDeserializer()
+
+    def _stream_callback(self, data):
+        evs = self._deserialize(data)
+        for e in evs:
+            self.stats.handle_event(e)
+
+    def _deserialize(self, data):
+        evs = []
+        if self._compressed:
+            data = self._decompresser.decompress(data)
+        evs = self._deserializer.deserialize(data)
+        if (len(evs) > 0 and isinstance(evs[-1], events.Command)
+            and evs[-1].command == 'Set-Compression'):
+                self._reset_compression()
+                pos = self._deserializer.consumed_data
+                self._deserializer.reset()
+                del evs[-1]
+                evs.extend(self._deserialize(data[pos:]))
+        return evs
+
 
 class _Stats(object):
     def __init__(self, num_clients):
@@ -18,14 +123,14 @@ class _Stats(object):
         self.min_delay = 1e99
 
     def handle_event(self, event):
-        delay = time.time() - float(event.extra_headers['X-Float-Timestamp'])
+        delay = time.time() - event[1]
         self.sum_delays += delay
         if delay > self.max_delay:
             self.max_delay = delay
         if delay < self.min_delay:
             self.min_delay = delay
         self.num_events_received += 1
-        self.pending.event_received(event, delay)
+        self.pending.event_received(event[0], delay)
 
     def handle_error(self, message, http_error=None):
         if http_error is not None:
@@ -59,8 +164,7 @@ class _PendingEvents(object):
         self.finished_events = 0
         self.most_recent = 0
 
-    def event_received(self, event, delay):
-        sequence_num = int(event.extra_headers['X-Sequence-Num'])
+    def event_received(self, sequence_num, delay):
         if sequence_num in self.unfinished:
             self.unfinished[sequence_num] += 1
             self.delays[sequence_num].append(delay)
@@ -109,10 +213,7 @@ def main():
     stats = _Stats(options.num_clients)
     clients = []
     for i in range(0, options.num_clients):
-        clients.append(client.Client([options.stream_url],
-                                     event_callback=stats.handle_event,
-                                     error_callback=stats.handle_error,
-                                     parse_event_body=False))
+        clients.append(BogusClient(options.stream_url, stats))
     for c in clients:
         c.start(loop=False)
     sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
