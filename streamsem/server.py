@@ -46,6 +46,7 @@ class StreamServer(object):
 
     def dispatch_event(self, event):
         logger.logger.event_published(event)
+        self.app.dispatcher.dispatch_priority([event])
         if self.buffering_time is None:
             self.app.dispatcher.dispatch([event])
         else:
@@ -54,6 +55,7 @@ class StreamServer(object):
     def dispatch_events(self, events):
         for e in events:
             logger.logger.event_published(e)
+        self.app.dispatcher.dispatch_priority([event])
         if self.buffering_time is None:
             self.app.dispatcher.dispatch(events)
         else:
@@ -143,12 +145,16 @@ class WebApplication(tornado.web.Application):
         }
         compressed_kwargs = {'compress': True}
         compressed_kwargs.update(handler_kwargs)
+        priority_kwargs = {'compress': False, 'priority': True}
+        priority_kwargs.update(handler_kwargs)
         handlers = [
             tornado.web.URLSpec(r"/", MainHandler),
             tornado.web.URLSpec(r"/events/stream", EventStreamHandler,
                                 kwargs=handler_kwargs),
             tornado.web.URLSpec(r"/events/compressed", EventStreamHandler,
                                 kwargs=compressed_kwargs),
+            tornado.web.URLSpec(r"/events/priority", EventStreamHandler,
+                                kwargs=priority_kwargs),
             tornado.web.URLSpec(r"/events/next", NextEventHandler,
                                 kwargs=handler_kwargs),
         ]
@@ -163,12 +169,17 @@ class WebApplication(tornado.web.Application):
 
 
 class Client(object):
-    def __init__(self, handler, callback, streaming=False, compress=False):
+    def __init__(self, handler, callback, streaming=False, compress=False,
+                 priority=False):
         assert streaming or not compress
         self.handler = handler
         self.callback = callback
         self.streaming = streaming
-        self.compress = compress
+        if not priority:
+            self.compress = compress
+        else:
+            self.compress = False
+        self.priority = priority
         self.closed = False
         if self.compress:
             self.compression_synced = False
@@ -204,6 +215,7 @@ class Client(object):
 
 class EventDispatcher(object):
     def __init__(self):
+        self.priority_clients = []
         self.streaming_clients = []
         self.compressed_streaming_clients = []
         self.unsynced_compressed_streaming_clients = []
@@ -217,7 +229,9 @@ class EventDispatcher(object):
 
     def register_client(self, client):
         if client.streaming:
-            if client.compress:
+            if client.priority:
+                self.priority_clients.append(client)
+            elif client.compress:
                 self.unsynced_compressed_streaming_clients.append(client)
             else:
                 self.streaming_clients.append(client)
@@ -234,6 +248,8 @@ class EventDispatcher(object):
                 self._next_client_cleanup = 10
 
     def clean_closed_clients(self):
+        self.priority_clients = \
+            [c for c in self.priority_clients if not c.closed]
         self.streaming_clients = \
             [c for c in self.streaming_clients if not c.closed]
         self.compressed_streaming_clients = \
@@ -243,6 +259,12 @@ class EventDispatcher(object):
                  if not c.closed]
         self._next_client_cleanup = -1
         logging.info('Cleaning up clients')
+
+    def dispatch_priority(self, evs):
+        if len(self.priority_clients) > 0 and len(evs) > 0:
+            serialized = self._serialize_events(evs)
+            for client in self.priority_clients:
+                self._send(serialized, client)
 
     def dispatch(self, evs):
         num_clients = (len(self.streaming_clients) + len(self.one_time_clients)
@@ -261,6 +283,7 @@ class EventDispatcher(object):
                     evs = [events.Command('', 'streamsem-command',
                                           'Test-Connection')]
                     self._periods_since_last_event = 0
+                    self.dispatch_priority(evs[0])
                 else:
                     return
         else:
@@ -274,13 +297,7 @@ class EventDispatcher(object):
             logging.info('Compressed clients: %d synced; %d unsynced'%\
                              (len(self.compressed_streaming_clients),
                               len(self.unsynced_compressed_streaming_clients)))
-            data = []
-            for e in evs:
-                if not isinstance(e, events.Event):
-                    raise StreamsemException('Bad event type',
-                                             'send_event')
-                data.append(str(e))
-            serialized = ''.join(data)
+            serialized = self._serialize_events(evs)
             for client in self.streaming_clients:
                 self._send(serialized, client)
             for client in self.unsynced_compressed_streaming_clients:
@@ -305,6 +322,14 @@ class EventDispatcher(object):
         for client in self.streaming_clients:
             client.close()
         self.streaming_clients = []
+
+    def _serialize_events(self, evs):
+        data = []
+        for e in evs:
+            if not isinstance(e, events.Event):
+                raise StreamsemException('Bad event type', 'send_event')
+            data.append(str(e))
+        return ''.join(data)
 
     def _sync_compressor(self):
         for client in self.unsynced_compressed_streaming_clients:
@@ -375,16 +400,17 @@ class EventPublishHandler(tornado.web.RequestHandler):
 
 class EventStreamHandler(tornado.web.RequestHandler):
     def __init__(self, application, request, server=None,
-                 dispatcher=None, compress=False):
+                 dispatcher=None, compress=False, priority=False):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
         self.compress = compress
         self.server = server
+        self.priority = priority
 
     @tornado.web.asynchronous
     def get(self):
         self.client = Client(self, self._on_new_data, streaming=True,
-                             compress=self.compress)
+                             compress=self.compress, priority=self.priority)
         self.dispatcher.register_client(self.client)
         if self.compress:
             command = events.create_command(self.server.source_id,
