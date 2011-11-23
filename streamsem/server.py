@@ -106,7 +106,7 @@ class RelayServer(StreamServer):
             filter_.callback = self._relay_events
             event_callback = filter_.filter_events
         else:
-            event_callback = self._relay_event
+            event_callback = self._relay_events
         self.source_urls = source_urls
         self.clients = \
             [AsyncStreamingClient(url, event_callback=event_callback,
