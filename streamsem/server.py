@@ -40,6 +40,8 @@ class StreamServer(object):
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
                                                 buffering_time,
                                                 self.ioloop)
+        self.stats_sched = tornado.ioloop.PeriodicCallback( \
+            self.app.dispatcher.stats, 10000, self.ioloop)
         self._looping = False
         self._started = False
         self._stopped = False
@@ -67,6 +69,7 @@ class StreamServer(object):
         self.http_server.listen(self.port)
         if self.buffering_time:
             self.buffer_dump_sched.start()
+        self.stats_sched.start()
         if loop:
             self._looping = True
             self._started = True
@@ -80,6 +83,7 @@ class StreamServer(object):
             self.app.dispatcher.close()
             if self.buffering_time:
                 self.buffer_dump_sched.stop()
+            self.stats_sched.stop()
             self._stopped = True
             if self._looping == True:
                 self.ioloop.stop()
@@ -226,6 +230,7 @@ class EventDispatcher(object):
         self._num_events_since_sync = 0
         self._next_client_cleanup = -1
         self._periods_since_last_event = 0
+        self.sent_bytes = 0
 
     def register_client(self, client):
         if client.streaming:
@@ -323,6 +328,10 @@ class EventDispatcher(object):
             client.close()
         self.streaming_clients = []
 
+    def stats(self):
+        logging.info('Bytes sent %d'%self.sent_bytes)
+        self.sent_bytes = 0
+
     def _serialize_events(self, evs):
         data = []
         for e in evs:
@@ -348,6 +357,7 @@ class EventDispatcher(object):
         try:
             if not client.closed:
                 client.send(data)
+                self.sent_bytes += len(data)
         except:
             logging.error("Error in client callback", exc_info=True)
 
