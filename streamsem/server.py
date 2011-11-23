@@ -282,7 +282,7 @@ class EventDispatcher(object):
             self.clean_closed_clients()
         if isinstance(evs, list):
             if evs == [] and (num_clients > 0
-                              or len(self.priority_clients > 0)):
+                              or len(self.priority_clients) > 0):
                 self._periods_since_last_event += 1
                 if self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
