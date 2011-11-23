@@ -57,7 +57,7 @@ class StreamServer(object):
     def dispatch_events(self, events):
 #        for e in events:
 #            logger.logger.event_published(e)
-        self.app.dispatcher.dispatch_priority([event])
+        self.app.dispatcher.dispatch_priority(events)
         if self.buffering_time is None:
             self.app.dispatcher.dispatch(events)
         else:
