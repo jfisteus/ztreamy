@@ -16,7 +16,7 @@ from streamsem import events
 from streamsem import rdfevents
 from streamsem import client
 
-class TwitterRDFEncoder():
+class TwitterStreamSensor():
    
     def __init__(self, publisher, app_id = "TwitterSensor", source_id = "TwitterSensor0"):
     	self.STREAM_URL = "https://stream.twitter.com/1/statuses/sample.json"
@@ -111,7 +111,7 @@ class TwitterRDFEncoder():
 
 def main():
     publisher = client.EventPublisher("http://localhost:9001/events/publish")
-    enc = TwitterRDFEncoder(publisher,"AppID","SrcID")
+    enc = TwitterStreamSensor(publisher,"AppID","SrcID")
     enc.start_async()
     tornado.ioloop.IOLoop.instance().start()
 
