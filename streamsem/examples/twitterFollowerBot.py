@@ -14,7 +14,9 @@ from streamsem import client
 from streamsem import logger
 from streamsem.tools import utils
 
+from optparse import OptionParser
 from twitterRESTclient import TwitterRESTclient
+
 
 class TwitterFollowerBot():
 
@@ -29,6 +31,7 @@ class TwitterFollowerBot():
 	self.num_events_created = 0
 	self.scheduler = utils.get_scheduler("const[" + str(time) + "]")
 	self.client = TwitterRESTclient(user)
+	self.last_id = 0
 
 
     def toN3(self, tweet):
@@ -57,10 +60,16 @@ class TwitterFollowerBot():
     def publish_event(self):        
 	
 	self.schedule_next_event()
-	tweets = self.client.get_tweets()
-	for tweet in tweets:
-	   event = self.toN3(tweet)
-	   self.publisher.publish(event)  				
+	tweets = self.client.get_tweets(self.last_id)
+	if len(tweets) > 0:
+	  print "Generando ",len(tweets)," eventos..."
+	  for tweet in tweets:
+	    n3rdf = self.toN3(tweet)
+	    event = rdfevents.RDFEvent(self.source_id, 'n3', n3rdf)
+	    self.publisher.publish(event)  
+	    self.last_id = tweet.id			
+	else:
+	  print "No hay nuevos eventos que generar"	
         
 
     def start(self):    	
@@ -75,8 +84,19 @@ class TwitterFollowerBot():
 
 def main():
 
+    parser = OptionParser()
+    parser.add_option("-t", "--time", dest="period",
+                  help="Period between two sucessive queries to Twitter API")
+    parser.add_option("-u", "--user", dest="user",
+                  help="Print name of the Twitter user to follow")
+    parser.add_option("-i", "--appid", dest="appid",
+                  help="App identifier (to be used in generated events")
+    parser.add_option("-s", "--source", dest="source",
+                  help="Source identifier (to be used in generated events")
+    (options, args) = parser.parse_args()
+
     publisher = client.EventPublisher("http://localhost:9001/events/publish")    
-    bot = TwitterFollowerBot(publisher, "nordez", 10, "AppID","SrcID")
+    bot = TwitterFollowerBot(publisher, options.user, options.period, options.appid, options.source)
 
     try:
         bot.start()

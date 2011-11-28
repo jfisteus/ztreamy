@@ -18,24 +18,23 @@ class TwitterRESTclient():
 	  auth = tweepy.OAuthHandler(self.consumer_key, self.consumer_key_secret)
 	  auth.set_access_token(self.access_token, self.access_token_secret)
 	  return tweepy.API(auth)
+	  
 
-
-	def get_tweets(self):  
+	def get_tweets(self, last_id = 0):  
 
 	  rate_limit = self.api.rate_limit_status()
-          remaining_hits = rate_limit['remaining_hits']
-	  print "Quedan: ",remaining_hits," consultas"
+          remaining_hits = rate_limit['remaining_hits']	  
           tweets_list = []
 
           if remaining_hits > 0: 
 	    try:
-	      # No quiero descargarlos todos... solo los ultimos
-	      #
-    	      # for page in tweepy.Cursor(self.api.user_timeline, screen_name=self.user, count=100).pages():
-	      # print 'len page', len(page)
-      	      # for status in page:
-	      #  tweets_list.append(status)
-	      public_tweets = self.api.user_timeline(screen_name=self.user, count=100)
+	      # No quiero descargarlos todos... solo los ultimos (Desde un ID dado, 200 como maximo)
+	      if last_id == 0:
+	      	public_tweets = self.api.user_timeline(screen_name=self.user, count=200)
+	      else:
+		public_tweets = self.api.user_timeline(screen_name=self.user, count=200, since_id=last_id)
+		
+	      public_tweets.reverse()
 	      for tweet in public_tweets:
 		tweets_list.append(tweet)
 
@@ -50,7 +49,7 @@ def main():
     client = TwitterRESTclient("cnn")
     tweets = client.get_tweets()
     for tweet in tweets:
-	print tweet.id
+	print tweet.id,"\t",tweet.created_at
 
 if __name__ == "__main__":
     main()
