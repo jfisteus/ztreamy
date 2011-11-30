@@ -9,7 +9,7 @@ from streamsem import StreamsemException
 
 class RDFEvent(events.Event):
 
-    supported_syntaxes = ['n3']
+    supported_syntaxes = ['text/n3']
 
     def __init__(self, source_id, syntax, body, **kwargs):
         """Creates a new event.
@@ -29,14 +29,14 @@ class RDFEvent(events.Event):
             self.body = self._parse_body(body)
 
     def serialize_body(self):
-        if self.syntax == 'n3':
+        if self.syntax == 'text/n3':
             return self.body.serialize(format='n3')
         else:
             raise StreamsemException('Bad RDFEvent syntax', 'event_serialize')
 
     def _parse_body(self, body):
-        if self.syntax == 'n3':
-            return self._parse_body_rdflib(body, syntax='n3')
+        if self.syntax == 'text/n3':
+            return self._parse_body_rdflib(body, syntax=self.syntax)
         else:
             raise StreamsemException('Unsupported syntax',
                                                'event_syntax')

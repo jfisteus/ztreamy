@@ -65,7 +65,7 @@ class TwitterFollowerBot():
 	  print "Generando ",len(tweets)," eventos..."
 	  for tweet in tweets:
 	    n3rdf = self.toN3(tweet)
-	    event = rdfevents.RDFEvent(self.source_id, 'n3', n3rdf)
+	    event = rdfevents.RDFEvent(self.source_id, 'text/n3', n3rdf)
 	    self.publisher.publish(event)  
 	    self.last_id = tweet.id			
 	else:

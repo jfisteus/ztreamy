@@ -89,7 +89,7 @@ class EventPublisher(object):
         self._num_pending = 0
 
     def publish(self):
-        event = rdfevents.RDFEvent(self.source_id, 'n3',
+        event = rdfevents.RDFEvent(self.source_id, 'text/n3',
                                    self.log_entry.graph())
         for publisher in self.publishers:
             publisher.publish(event)
