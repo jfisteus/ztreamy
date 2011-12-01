@@ -105,6 +105,7 @@ class BogusClient(client.AsyncStreamingClient):
         evs = []
         if self._compressed:
             data = self._decompresser.decompress(data)
+        logger.logger.data_received(compressed_len, len(data))
         evs = self._deserializer.deserialize(data)
         if (len(evs) > 0 and isinstance(evs[-1], events.Command)
             and evs[-1].command == 'Set-Compression'):
@@ -258,6 +259,7 @@ def main():
         sched = tornado.ioloop.PeriodicCallback(saturation_mon.fire, 5000)
     sched.start()
     if tornado.options.options.eventlog and not no_parse:
+        print entity_id
         logger.logger = logger.StreamsemManycLogger(entity_id,
                                                 'manyc-' + entity_id + '.log')
     try:
