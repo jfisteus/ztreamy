@@ -25,6 +25,16 @@ class StreamsemDefaultLogger(object):
     def manyc_event_finished(self, sequence_num, delays):
         pass
 
+    def server_traffic_sent(self, timestamp, num_bytes):
+        pass
+
+    def server_timing(self, cpu_time, real_time):
+        pass
+
+    def _open_file(self, node_id, filename):
+        self.log_file = open(filename, 'a')
+        self.log_file.write('# Node: %s\n#\n'%node_id)
+
     def _log(self, parts):
         self.log_file.write('\t'.join(parts))
         self.log_file.write('\n')
@@ -32,8 +42,7 @@ class StreamsemDefaultLogger(object):
 
 class StreamsemLogger(StreamsemDefaultLogger):
     def __init__(self, node_id, filename):
-        self.log_file = open(filename, 'a')
-        self.log_file.write('# Node: %s\n#\n'%node_id)
+        self._open_file(node_id, filename)
 
     def close(self):
         self.log_file.close()
@@ -65,12 +74,24 @@ class StreamsemLogger(StreamsemDefaultLogger):
 
 class StreamsemManycLogger(StreamsemDefaultLogger):
     def __init__(self, node_id, filename):
-        self.log_file = open(filename, 'a')
-        self.log_file.write('# Node: %s\n#\n'%node_id)
+        self._open_file(node_id, filename)
 
     def manyc_event_finished(self, sequence_num, delays):
         parts = ['manyc_event_finish', str(sequence_num)]
         parts.extend([str(delay) for delay in delays])
+        self._log(parts)
+
+
+class CompactServerLogger(StreamsemDefaultLogger):
+    def __init__(self, node_id, filename):
+        self._open_file(node_id, filename)
+
+    def server_traffic_sent(self, timestamp, num_bytes):
+        parts = ['server_traffic_sent', str(timestamp), str(num_bytes)]
+        self._log(parts)
+
+    def server_timing(self, cpu_time, real_time):
+        parts = ['server_timing', str(cpu_time), str(real_time)]
         self._log(parts)
 
 
