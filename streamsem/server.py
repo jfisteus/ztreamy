@@ -99,7 +99,8 @@ class StreamServer(object):
         real_timer_stop = time.time()
         cpu_time = cpu_timer_stop - self._cpu_timer_start
         real_time = real_timer_stop - self._real_timer_start
-        logger.logger.server_timing(cpu_time, real_time)
+        logger.logger.server_timing(cpu_time, real_time,
+                                    self._real_timer_start)
 
     def _dump_buffer(self):
         self.app.dispatcher.dispatch(self._event_buffer)

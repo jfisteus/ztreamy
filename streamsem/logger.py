@@ -28,7 +28,7 @@ class StreamsemDefaultLogger(object):
     def server_traffic_sent(self, timestamp, num_bytes):
         pass
 
-    def server_timing(self, cpu_time, real_time):
+    def server_timing(self, cpu_time, real_time, init_time):
         pass
 
     def _open_file(self, node_id, filename):
@@ -90,8 +90,9 @@ class CompactServerLogger(StreamsemDefaultLogger):
         parts = ['server_traffic_sent', str(timestamp), str(num_bytes)]
         self._log(parts)
 
-    def server_timing(self, cpu_time, real_time):
-        parts = ['server_timing', str(cpu_time), str(real_time)]
+    def server_timing(self, cpu_time, real_time, init_time):
+        parts = ['server_timing', str(cpu_time), str(real_time),
+                 str(init_time)]
         self._log(parts)
 
 
