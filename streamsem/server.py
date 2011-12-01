@@ -402,7 +402,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
                              application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
-        event.aggredator_id.append(server.source_id)
+        event.aggregator_id.append(server.source_id)
         self.server.dispatch_event(event)
         self.finish()
 
@@ -511,6 +511,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        server.stop()
         logger.logger.close()
 
 
