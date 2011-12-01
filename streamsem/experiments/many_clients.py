@@ -86,8 +86,9 @@ class BogusClient(client.AsyncStreamingClient):
 
     """
 
-    def __init__(self, url, stats, no_parse, ioloop=None):
-        super(BogusClient, self).__init__(url, ioloop=ioloop)
+    def __init__(self, url, stats, no_parse, ioloop=None, close_callback=None):
+        super(BogusClient, self).__init__(url, ioloop=ioloop,
+                                    connection_close_callback=close_callback)
         self.stats = stats
         self._deserializer = BogusDeserializer()
         if no_parse:
@@ -197,9 +198,10 @@ class _PendingEvents(object):
 
 
 class SaturationMonitor(object):
-    def __init__(self, period):
-        self.last_fire = None
+    def __init__(self, period, clients):
         self.period = period
+        self.clients = clients
+        self.last_fire = None
         self.delayed = False
 
     def fire(self):
@@ -213,6 +215,7 @@ class SaturationMonitor(object):
             elif self.delayed:
                 self.delayed = False
                 logging.info('Normal operation again')
+        print 'Clients:', len(self.clients)
 
 
 def read_cmd_options():
@@ -230,23 +233,28 @@ def read_cmd_options():
         options.num_clients = int(remaining[1])
     else:
         parser.error('A source stream URL required')
-    print options.stream_url, options.num_clients
     return options
 
 def main():
+    def close_callback(client):
+        clients.remove(client)
+        if len(clients) == 0:
+            tornado.ioloop.IOLoop.instance().stop()
+
     options = read_cmd_options()
     no_parse = tornado.options.options.noparse
     entity_id = streamsem.random_id()
     stats = _Stats(options.num_clients)
     clients = []
     for i in range(0, options.num_clients):
-        clients.append(BogusClient(options.stream_url, stats, no_parse))
+        clients.append(BogusClient(options.stream_url, stats, no_parse,
+                                   close_callback=close_callback))
     for c in clients:
         c.start(loop=False)
     if not no_parse:
         sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
     else:
-        saturation_mon = SaturationMonitor(5.0)
+        saturation_mon = SaturationMonitor(5.0, clients)
         sched = tornado.ioloop.PeriodicCallback(saturation_mon.fire, 5000)
     sched.start()
     if tornado.options.options.eventlog and not no_parse:
