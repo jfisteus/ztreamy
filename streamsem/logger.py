@@ -80,6 +80,10 @@ class StreamsemManycLogger(StreamsemDefaultLogger):
     def __init__(self, node_id, filename):
         self._open_file(node_id, filename)
 
+    def data_received(self, compressed, uncompressed):
+        parts = ['data_receive', str(compressed), str(uncompressed)]
+        self._log(parts)
+
     def manyc_event_finished(self, sequence_num, delays):
         parts = ['manyc_event_finish', str(sequence_num)]
         parts.extend([str(delay) for delay in delays])

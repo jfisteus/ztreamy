@@ -91,6 +91,7 @@ class StreamServer(object):
                 self._looping = False
 
     def _start_timing(self):
+        self.app.dispatcher.stats()
         self._cpu_timer_start = time.clock()
         self._real_timer_start = time.time()
 
@@ -99,6 +100,7 @@ class StreamServer(object):
         real_timer_stop = time.time()
         cpu_time = cpu_timer_stop - self._cpu_timer_start
         real_time = real_timer_stop - self._real_timer_start
+        self.app.dispatcher.stats()
         logger.logger.server_timing(cpu_time, real_time,
                                     self._real_timer_start)
 
