@@ -103,6 +103,7 @@ class BogusClient(client.AsyncStreamingClient):
 
     def _deserialize(self, data):
         evs = []
+        compressed_len = len(data)
         if self._compressed:
             data = self._decompresser.decompress(data)
         logger.logger.data_received(compressed_len, len(data))

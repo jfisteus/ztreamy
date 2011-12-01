@@ -504,7 +504,7 @@ def main():
     server = StreamServer(port, allow_publish=True,
                           buffering_time=buffering_time)
     if tornado.options.options.eventlog:
-        print entity_id
+        print server.source_id
         comments = {'Buffer time (ms)': buffering_time}
 #        logger.logger = logger.StreamsemLogger(server.source_id,
         logger.logger = logger.CompactServerLogger(server.source_id,
