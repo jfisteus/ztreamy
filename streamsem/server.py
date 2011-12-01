@@ -500,11 +500,11 @@ def main():
     server = StreamServer(port, allow_publish=True,
                           buffering_time=buffering_time)
     if tornado.options.options.eventlog:
+        comments = {'Buffer time (ms)': buffering_time}
 #        logger.logger = logger.StreamsemLogger(server.source_id,
         logger.logger = logger.CompactServerLogger(server.source_id,
                                                    'server-' + server.source_id
-                                                   + '.log')
-
+                                                   + '.log', comments)
      # Uncomment to test StreamServer.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
     try:

@@ -35,6 +35,10 @@ class StreamsemDefaultLogger(object):
         self.log_file = open(filename, 'a')
         self.log_file.write('# Node: %s\n#\n'%node_id)
 
+    def _write_comments(self, dict_data):
+        for key, value in dict_data.iteritems():
+            self.log_file.write('# %s: %s\n'%(key, str(value)))
+
     def _log(self, parts):
         self.log_file.write('\t'.join(parts))
         self.log_file.write('\n')
@@ -83,8 +87,9 @@ class StreamsemManycLogger(StreamsemDefaultLogger):
 
 
 class CompactServerLogger(StreamsemDefaultLogger):
-    def __init__(self, node_id, filename):
+    def __init__(self, node_id, filename, comments):
         self._open_file(node_id, filename)
+        self._write_comments(comments)
 
     def server_traffic_sent(self, timestamp, num_bytes):
         parts = ['server_traffic_sent', str(timestamp), str(num_bytes)]
