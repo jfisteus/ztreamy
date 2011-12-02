@@ -108,6 +108,9 @@ class StreamServer(object):
         self.app.dispatcher.dispatch(self._event_buffer)
         self._event_buffer = []
 
+    def _finish_when_possible(self):
+        self.app.dispatcher._auto_finish = True
+
 
 class RelayServer(StreamServer):
     """A server that relays events from other servers."""
@@ -246,6 +249,7 @@ class EventDispatcher(object):
         self._next_client_cleanup = -1
         self._periods_since_last_event = 0
         self.sent_bytes = 0
+        self._auto_finish = False
 
     def register_client(self, client):
         if client.streaming:
@@ -300,6 +304,8 @@ class EventDispatcher(object):
                               or len(self.priority_clients) > 0):
                 self._periods_since_last_event += 1
                 # Temporarily disabled to avoid extra traffic in experiments
+                if self._periods_since_last_event > 20 and self._auto_finish:
+                    tornado.ioloop.IOLoop.instance().stop()
                 if False:
 #                if self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
@@ -427,6 +433,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
                     self.server._start_timing()
                 elif event.command == 'Event-Source-Finished':
                     self.server._stop_timing()
+                    self.server._finish_when_possible()
             event.aggregator_id.append(self.server.source_id)
             self.server.dispatch_event(event)
         self.finish()
