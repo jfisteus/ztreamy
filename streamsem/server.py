@@ -297,9 +297,7 @@ class EventDispatcher(object):
             if evs == [] and (num_clients > 0
                               or len(self.priority_clients) > 0):
                 self._periods_since_last_event += 1
-                # Temporarily disabled to avoid extra traffic in experiments
-                if False:
-#                if self._periods_since_last_event > 20:
+                if self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
                     evs = [events.Command('', 'streamsem-command',
                                           'Test-Connection')]
