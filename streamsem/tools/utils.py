@@ -20,8 +20,8 @@ class EventPublisher(object):
 
     def publish(self):
         if self.add_timestamp:
-            self.event.extra_headers['X-Float-Timestamp'] = \
-                str(self.event.sequence_num) + '/' + str(time.time())
+            self.event.set_extra_header('X-Float-Timestamp',
+                         str(self.event.sequence_num) + '/' + str(time.time()))
         for publisher in self.publishers:
             publisher.publish(self.event, self._callback)
         self._num_pending = len(self.publishers)
@@ -103,7 +103,8 @@ class EventScheduler(object):
             self.io_loop.stop()
 
     def _schedule_event(self, event):
-        pub = EventPublisher(event, self.publishers, self.add_timestamp)
+        pub = EventPublisher(event, self.publishers,
+                             add_timestamp=self.add_timestamp)
         self._pending_events.append(pub)
         if self._time_generator is None:
             fire_time = (self.t0_new

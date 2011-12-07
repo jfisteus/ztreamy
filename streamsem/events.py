@@ -195,7 +195,7 @@ class Event(object):
 
     def __init__(self, source_id, syntax, body, event_id=None,
                  application_id=None, aggregator_id=[], event_type=None,
-                 timestamp=None, extra_headers={}):
+                 timestamp=None, extra_headers=None):
         """Creates a new event.
 
         `body` must be the textual representation of the event or
@@ -216,7 +216,13 @@ class Event(object):
         self.event_type = event_type
         self.timestamp = timestamp or streamsem.get_timestamp()
         self.application_id = application_id
-        self.extra_headers = extra_headers
+        if extra_headers is not None:
+            self.extra_headers = extra_headers
+        else:
+            self.extra_headers = {}
+
+    def set_extra_header(self, header, value):
+        self.extra_headers[header] = value
 
     def append_aggregator_id(self, aggregator_id):
         """Appends a new aggregator id to the event."""
