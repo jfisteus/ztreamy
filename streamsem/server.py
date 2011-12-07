@@ -303,6 +303,7 @@ class EventDispatcher(object):
                 self._periods_since_last_event += 1
                 # Temporarily disabled to avoid extra traffic in experiments
                 if self._periods_since_last_event > 20 and self._auto_finish:
+                    logger.logger.server_closed(num_clients)
                     tornado.ioloop.IOLoop.instance().stop()
                 if False:
 #                if self._periods_since_last_event > 20:

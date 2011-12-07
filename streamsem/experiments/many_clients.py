@@ -295,8 +295,8 @@ def main():
         for c in clients:
             c.stop()
         if num_disconnected_clients[0] > 0:
-            logging.error((str(num_disconnected_clients[0])
-                           + ' clients got disconnected'))
+            logging.warning((str(num_disconnected_clients[0])
+                             + ' clients got disconnected'))
 
 if __name__ == "__main__":
     main()
