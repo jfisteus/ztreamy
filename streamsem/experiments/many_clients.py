@@ -9,7 +9,7 @@ from streamsem import logger
 from streamsem import events
 
 class BogusDeserializer(object):
-    tokens = ['X-Float-Timestamp:', 'Set-Compression']
+    tokens = ['X-Float-Timestamp:', 'Event-Source-Finished', 'Set-Compression']
 
     def __init__(self):
         """Creates a new `Deserializer` object."""
@@ -17,7 +17,7 @@ class BogusDeserializer(object):
 
     def reset(self):
         """This method resets the state of the parser and dumps pending data"""
-        self.parse_state = [-1, -1]
+        self.parse_state = [-1, -1, -1]
         self.param_data = ''
 
     def deserialize(self, data):
@@ -34,13 +34,21 @@ class BogusDeserializer(object):
         if ev is not None:
             evs.append(ev)
             return evs
+        ev = self._match_token(2, data, 0)
+        if ev is not None:
+            evs.append(ev)
+            return evs
         pos = data.find('\n')
         while pos != -1:
-            self.parse_state = [0, 0]
+            self.parse_state = [0, 0, 0]
             ev = self._match_token(0, data, pos + 1)
             if ev is not None:
                 evs.append(ev)
             ev = self._match_token(1, data, pos + 1)
+            if ev is not None:
+                evs.append(ev)
+                return evs
+            ev = self._match_token(2, data, pos + 1)
             if ev is not None:
                 evs.append(ev)
                 return evs
@@ -59,7 +67,7 @@ class BogusDeserializer(object):
                 self.parse_state[token] = end
                 if self.parse_state[token] == \
                         len(BogusDeserializer.tokens[token]):
-                    self.parse_state = [-1, -1]
+                    self.parse_state = [-1, -1, -1]
                     self.parse_state[token] = -2
             else:
                 self.parse_state[token] = -1
@@ -73,6 +81,11 @@ class BogusDeserializer(object):
                 self.reset()
                 return int(parts[0]), float(parts[1])
         elif token == 1 and self.parse_state[1] == -2:
+            self.reset()
+            self.consumed_data = pos
+            return events.Command('', 'streamsem-command',
+                                  'Event-Source-Finished')
+        elif token == 2 and self.parse_state[2] == -2:
             self.reset()
             self.consumed_data = pos
             return events.Command('', 'streamsem-command', 'Set-Compression')
@@ -95,6 +108,7 @@ class BogusClient(client.AsyncStreamingClient):
             self._stream_callback = None
         else:
             self._deserializer = BogusDeserializer()
+        self.finished = False
 
     def _stream_callback(self, data):
         evs = self._deserialize(data)
@@ -108,11 +122,17 @@ class BogusClient(client.AsyncStreamingClient):
             data = self._decompresser.decompress(data)
         logger.logger.data_received(compressed_len, len(data))
         evs = self._deserializer.deserialize(data)
-        if (len(evs) > 0 and isinstance(evs[-1], events.Command)
-            and evs[-1].command == 'Set-Compression'):
+        if len(evs) > 0 and isinstance(evs[-1], events.Command):
+            if evs[-1].command == 'Set-Compression':
                 self._reset_compression()
                 pos = self._deserializer.consumed_data
                 self._deserializer.reset()
+                del evs[-1]
+                evs.extend(self._deserialize(data[pos:]))
+            elif evs[-1].command == 'Event-Source-Finished':
+                pos = self._deserializer.consumed_data
+                self._deserializer.reset()
+                self.finished = True
                 del evs[-1]
                 evs.extend(self._deserialize(data[pos:]))
         return evs
@@ -181,7 +201,8 @@ class _PendingEvents(object):
                 self.delays[i] = []
             self.unfinished[sequence_num] = 1
             self.delays[sequence_num].append(delay)
-            self.most_recent = sequence_num
+            if sequence_num > self.most_recent:
+                self.most_recent = sequence_num
         if self.unfinished[sequence_num] == self.num_clients:
             logger.logger.manyc_event_finished(sequence_num,
                                                self.delays[sequence_num])
@@ -242,10 +263,13 @@ def main():
         clients.remove(client)
         if len(clients) == 0:
             tornado.ioloop.IOLoop.instance().stop()
+        if not client.finished:
+            num_disconnected_clients[0] += 1
 
     options = read_cmd_options()
     no_parse = tornado.options.options.noparse
     entity_id = streamsem.random_id()
+    num_disconnected_clients = [0]
     stats = _Stats(options.num_clients)
     clients = []
     for i in range(0, options.num_clients):
@@ -270,6 +294,9 @@ def main():
     finally:
         for c in clients:
             c.stop()
+        if num_disconnected_clients[0] > 0:
+            logging.error((str(num_disconnected_clients[0])
+                           + ' clients got disconnected'))
 
 if __name__ == "__main__":
     main()
