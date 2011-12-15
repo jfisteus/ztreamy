@@ -4,6 +4,7 @@ import rdflib
 import tornado
 import traceback
 
+# from geopy import geocoders
 from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
@@ -27,6 +28,7 @@ class TwitterStreamSensor():
 	self.publisher = publisher
 	self.app_id = app_id
 	self.source_id = source_id
+	# self.geo = geocoders.GeoNames()
 
     def toN3(self, tweet_dict):
 
@@ -64,9 +66,11 @@ class TwitterStreamSensor():
 			graph.add( ( tweet_id, self.NS["retweets"], Literal(str(tweet_dict["retweet_count"])) ))
 
 	# Look for geographic information
-	if "geo" in tweet_dict:
-		if str(tweet_dict["geo"]) != "None":
-			graph.add( ( tweet_id, self.NS["position"], Literal(str(tweet_dict["geo"])) ))
+	if "coordinates" in tweet_dict:
+		if str(tweet_dict["coordinates"]) != "None":
+			(longitude,latitude) = tweet_dict["coordinates"]["coordinates"]
+			coordinates = "(%s,%s)" % (longitude,latitude)
+			graph.add( ( tweet_id, self.NS["position"], Literal(coordinates) ) )
 
 	return graph
 
