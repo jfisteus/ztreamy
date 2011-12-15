@@ -9,6 +9,7 @@ import tornado.web
 import tornado.httpserver
 import zlib
 import traceback
+import time
 
 import streamsem
 from streamsem import events
@@ -70,9 +71,9 @@ class StreamServer(object):
         if self.buffering_time:
             self.buffer_dump_sched.start()
         self.stats_sched.start()
+        self._started = True
         if loop:
             self._looping = True
-            self._started = True
             self.ioloop.start()
             self._looping = False
 
@@ -88,6 +89,18 @@ class StreamServer(object):
             if self._looping == True:
                 self.ioloop.stop()
                 self._looping = False
+
+    def _start_timing(self):
+        self._cpu_timer_start = time.clock()
+        self._real_timer_start = time.time()
+
+    def _stop_timing(self):
+        cpu_timer_stop = time.clock()
+        real_timer_stop = time.time()
+        cpu_time = cpu_timer_stop - self._cpu_timer_start
+        real_time = real_timer_stop - self._real_timer_start
+        logger.logger.server_timing(cpu_time, real_time,
+                                    self._real_timer_start)
 
     def _dump_buffer(self):
         self.app.dispatcher.dispatch(self._event_buffer)
@@ -282,7 +295,7 @@ class EventDispatcher(object):
             self.clean_closed_clients()
         if isinstance(evs, list):
             if evs == [] and (num_clients > 0
-                              or len(self.priority_clients > 0)):
+                              or len(self.priority_clients) > 0):
                 self._periods_since_last_event += 1
                 if self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
@@ -328,9 +341,10 @@ class EventDispatcher(object):
         for client in self.streaming_clients:
             client.close()
         self.streaming_clients = []
+        self.stats()
 
     def stats(self):
-        logging.info('Bytes sent %d'%self.sent_bytes)
+        logger.logger.server_traffic_sent(time.time(), self.sent_bytes)
         self.sent_bytes = 0
 
     def _serialize_events(self, evs):
@@ -389,7 +403,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
                              application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
-        event.aggredator_id.append(server.source_id)
+        event.aggregator_id.append(server.source_id)
         self.server.dispatch_event(event)
         self.finish()
 
@@ -404,6 +418,11 @@ class EventPublishHandler(tornado.web.RequestHandler):
             traceback.print_exc()
             raise tornado.web.HTTPError(400, str(ex))
         for event in evs:
+            if event.syntax == 'streamsem-command':
+                if event.command == 'Event-Source-Started':
+                    self.server._start_timing()
+                elif event.command == 'Event-Source-Finished':
+                    self.server._stop_timing()
             event.aggregator_id.append(self.server.source_id)
             self.server.dispatch_event(event)
         self.finish()
@@ -481,10 +500,12 @@ def main():
     server = StreamServer(port, allow_publish=True,
                           buffering_time=buffering_time)
     if tornado.options.options.eventlog:
-        logger.logger = logger.StreamsemLogger(server.source_id,
-                                               'server-' + server.source_id
-                                               + '.log')
-
+        print server.source_id
+        comments = {'Buffer time (ms)': buffering_time}
+#        logger.logger = logger.StreamsemLogger(server.source_id,
+        logger.logger = logger.CompactServerLogger(server.source_id,
+                                                   'server-' + server.source_id
+                                                   + '.log', comments)
      # Uncomment to test StreamServer.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
     try:
@@ -492,6 +513,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        server.stop()
         logger.logger.close()
 
 

@@ -13,6 +13,7 @@ import streamsem
 import streamsem.rdfevents as rdfevents
 import streamsem.client as client
 import streamsem.logger as logger
+from streamsem.tools import utils
 
 ns_slog = Namespace('http://www.it.uc3m.es/jaf/ns/slog/#')
 ns_person = Namespace('http://www.it.uc3m.es/jaf/ns/slog/person#')
@@ -79,33 +80,6 @@ class LogEntry(object):
         return LogEntry._re_clean.sub('', text)
 
 
-class EventPublisher(object):
-    def __init__(self, log_entry, source_id, publishers):
-        self.log_entry = log_entry
-        self.source_id = source_id
-        self.publishers = publishers
-        self.finished = False
-        self.error = False
-        self._num_pending = 0
-
-    def publish(self):
-        event = rdfevents.RDFEvent(self.source_id, 'n3',
-                                   self.log_entry.graph())
-        for publisher in self.publishers:
-            publisher.publish(event)
-        self._num_pending = len(self.publishers)
-
-    def _callback(self, response):
-        self._num_pending -= 1
-        if self._num_pending == 0:
-            self.finished = True
-        if response.error:
-            self.error = True
-            logging.error(response.error)
-        else:
-            logging.info('Event successfully sent to server')
-
-
 class EventScheduler(object):
     def __init__(self, filename, io_loop, publishers,
                  time_scale, compressed=True):
@@ -149,8 +123,8 @@ class EventScheduler(object):
     def _schedule_entry(self, entry):
         if not entry.subject in self.source_ids:
             self.source_ids[entry.subject] = streamsem.random_id()
-        pub = EventPublisher(entry, self.source_ids[entry.subject],
-                             self.publishers)
+        pub = utils.EventPublisher(entry, self.source_ids[entry.subject],
+                                   self.publishers)
         fire_time = (self.t0_new
                      + (entry.timestamp - self.t0_original) / self.time_scale)
         self.io_loop.add_timeout(fire_time, pub.publish)

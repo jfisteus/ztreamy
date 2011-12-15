@@ -31,6 +31,7 @@ def process_file(filename, stats):
             if data[0] == 'manyc_event_finish':
                 event_num = int(data[1])
                 delays = [float(d) for d in data[2:]]
+                stats[-1].append_delays(delays)
                 if event_num in stats:
                     stats[event_num].append_delays(delays)
                 else:
@@ -38,6 +39,7 @@ def process_file(filename, stats):
 
 def manyc_delays(filenames):
     stats = {}
+    stats[-1] = DelayStats(-1, [])
     for filename in filenames:
         process_file(filename, stats)
     for entry in stats.itervalues():

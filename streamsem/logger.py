@@ -25,6 +25,20 @@ class StreamsemDefaultLogger(object):
     def manyc_event_finished(self, sequence_num, delays):
         pass
 
+    def server_traffic_sent(self, timestamp, num_bytes):
+        pass
+
+    def server_timing(self, cpu_time, real_time, init_time):
+        pass
+
+    def _open_file(self, node_id, filename):
+        self.log_file = open(filename, 'a')
+        self.log_file.write('# Node: %s\n#\n'%node_id)
+
+    def _write_comments(self, dict_data):
+        for key, value in dict_data.iteritems():
+            self.log_file.write('# %s: %s\n'%(key, str(value)))
+
     def _log(self, parts):
         self.log_file.write('\t'.join(parts))
         self.log_file.write('\n')
@@ -32,8 +46,7 @@ class StreamsemDefaultLogger(object):
 
 class StreamsemLogger(StreamsemDefaultLogger):
     def __init__(self, node_id, filename):
-        self.log_file = open(filename, 'a')
-        self.log_file.write('# Node: %s\n#\n'%node_id)
+        self._open_file(node_id, filename)
 
     def close(self):
         self.log_file.close()
@@ -65,12 +78,30 @@ class StreamsemLogger(StreamsemDefaultLogger):
 
 class StreamsemManycLogger(StreamsemDefaultLogger):
     def __init__(self, node_id, filename):
-        self.log_file = open(filename, 'a')
-        self.log_file.write('# Node: %s\n#\n'%node_id)
+        self._open_file(node_id, filename)
+
+    def data_received(self, compressed, uncompressed):
+        parts = ['data_receive', str(compressed), str(uncompressed)]
+        self._log(parts)
 
     def manyc_event_finished(self, sequence_num, delays):
         parts = ['manyc_event_finish', str(sequence_num)]
         parts.extend([str(delay) for delay in delays])
+        self._log(parts)
+
+
+class CompactServerLogger(StreamsemDefaultLogger):
+    def __init__(self, node_id, filename, comments):
+        self._open_file(node_id, filename)
+        self._write_comments(comments)
+
+    def server_traffic_sent(self, timestamp, num_bytes):
+        parts = ['server_traffic_sent', str(timestamp), str(num_bytes)]
+        self._log(parts)
+
+    def server_timing(self, cpu_time, real_time, init_time):
+        parts = ['server_timing', str(cpu_time), str(real_time),
+                 str(init_time)]
         self._log(parts)
 
 

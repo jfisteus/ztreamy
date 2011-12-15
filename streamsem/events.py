@@ -112,7 +112,7 @@ class Deserializer(object):
                 body,
                 event_id=self._event.get('Event-Id'),
                 application_id=self._event.get('Application-Id'),
-                aggregator_id=self._event.get('Aggregator-Id', []),
+                aggregator_id=self._event.get('Aggregator-Ids', []),
                 event_type=self._event.get('Event-Type'),
                 timestamp=self._event.get('Timestamp'),
                 extra_headers=self._extra_headers)
@@ -123,7 +123,7 @@ class Deserializer(object):
                 body,
                 event_id=self._event.get('Event-Id'),
                 application_id=self._event.get('Application-Id'),
-                aggregator_id=self._event.get('Aggregator-Id', []),
+                aggregator_id=self._event.get('Aggregator-Ids', []),
                 event_type=self._event.get('Event-Type'),
                 timestamp=self._event.get('Timestamp'),
                 extra_headers=self._extra_headers)
@@ -133,10 +133,8 @@ class Deserializer(object):
     def _update_header(self, header, value):
         if header not in Event.headers:
             self._extra_headers[header] = value
-        if header == 'Aggregator-Ids':
-            if header not in self._event:
-                self._event[header] = []
-            self._event[header].append(value)
+        elif header == 'Aggregator-Ids':
+            self._event[header] = value.split(',')
         elif header not in self._event:
             self._event[header] = value
         else:
@@ -197,7 +195,7 @@ class Event(object):
 
     def __init__(self, source_id, syntax, body, event_id=None,
                  application_id=None, aggregator_id=[], event_type=None,
-                 timestamp=None, extra_headers={}):
+                 timestamp=None, extra_headers=None):
         """Creates a new event.
 
         `body` must be the textual representation of the event or
@@ -218,7 +216,13 @@ class Event(object):
         self.event_type = event_type
         self.timestamp = timestamp or streamsem.get_timestamp()
         self.application_id = application_id
-        self.extra_headers = extra_headers
+        if extra_headers is not None:
+            self.extra_headers = extra_headers
+        else:
+            self.extra_headers = {}
+
+    def set_extra_header(self, header, value):
+        self.extra_headers[header] = value
 
     def append_aggregator_id(self, aggregator_id):
         """Appends a new aggregator id to the event."""
@@ -282,7 +286,12 @@ class Command(Event):
     to the rest of the application.
 
     """
-    valid_commands = ['Set-Compression', 'Test-Connection']
+    valid_commands = [
+        'Set-Compression',
+        'Test-Connection',
+        'Event-Source-Started',
+        'Event-Source-Finished',
+        ]
 
     def __init__(self, source_id, syntax, command, **kwargs):
         """Creates a new command event.
