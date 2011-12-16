@@ -19,7 +19,7 @@ from streamsem import client
 
 class TwitterStreamSensor():
    
-    def __init__(self, publisher, app_id = "TwitterSensor", source_id = "TwitterSensor0"):
+    def __init__(self, publisher, app_id = "TwitterSensor", source_id = "TwitterSensor0", only_geo = False):
     	self.STREAM_URL = "https://stream.twitter.com/1/statuses/sample.json"
 	self.USER = "gimi_uc3m"
 	self.PASS = "qabasabslc10"
@@ -28,6 +28,7 @@ class TwitterStreamSensor():
 	self.publisher = publisher
 	self.app_id = app_id
 	self.source_id = source_id
+	self.only_geo = only_geo
 	# self.geo = geocoders.GeoNames()
 
     def toN3(self, tweet_dict):
@@ -42,6 +43,14 @@ class TwitterStreamSensor():
 
 	# Add the creation timestamp
 	graph.add( ( tweet_id, self.DC["created"], Literal(tweet_dict["created_at"]) ))
+
+	# Get the id and screen name of the tweet author
+	if "user" in tweet_dict:
+		user = tweet_dict["user"]
+		if "id" in user:
+			graph.add( ( tweet_id, self.DC["author"], Literal(str(user["id"])) ))
+		if "screen_name" in user:
+			graph.add( ( tweet_id, self.NS["userName"], Literal("@" + user["screen_name"]) ))
 
 	# Get the text of the tweet
 	if "text" in tweet_dict:
@@ -68,9 +77,9 @@ class TwitterStreamSensor():
 	# Look for geographic information
 	if "coordinates" in tweet_dict:
 		if str(tweet_dict["coordinates"]) != "None":
-			(longitude,latitude) = tweet_dict["coordinates"]["coordinates"]
-			coordinates = "(%s,%s)" % (longitude,latitude)
-			graph.add( ( tweet_id, self.NS["position"], Literal(coordinates) ) )
+			(longitude,latitude) = tweet_dict["coordinates"]["coordinates"]		
+			graph.add( ( tweet_id, self.NS["longitude"], Literal(longitude) ) )
+			graph.add( ( tweet_id, self.NS["latitude"], Literal(latitude) ) )
 
 	return graph
 
@@ -102,6 +111,10 @@ class TwitterStreamSensor():
             data = data.body
 	try:
 		graph = self.decode(data)
+		# if self.only_geo:
+		#   if self.NS["position"] in graph.predicates():
+		#	self.publish(graph)
+		# else:
 		self.publish(graph)	
 	except:
             # Forget the tweets that produce processing errors	
