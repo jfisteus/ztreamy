@@ -36,7 +36,7 @@ class RDFEvent(events.Event):
 
     def _parse_body(self, body):
         if self.syntax == 'text/n3':
-            return self._parse_body_rdflib(body, syntax=self.syntax)
+            return self._parse_body_rdflib(body, syntax='n3')
         else:
             raise StreamsemException('Unsupported syntax',
                                                'event_syntax')
