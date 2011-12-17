@@ -111,11 +111,11 @@ class TwitterStreamSensor():
             data = data.body
 	try:
 		graph = self.decode(data)
-		# if self.only_geo:
-		#   if self.NS["position"] in graph.predicates():
-		#	self.publish(graph)
-		# else:
-		self.publish(graph)	
+		if self.only_geo:
+		  if self.NS["longitude"] in graph.predicates() and self.NS["latitude"] in graph.predicates():
+		     self.publish(graph)
+		else:
+		  self.publish(graph)	
 	except:
             # Forget the tweets that produce processing errors	
             #traceback.print_exc()
@@ -128,7 +128,7 @@ class TwitterStreamSensor():
 
 def main():
     publisher = client.EventPublisher("http://localhost:9001/events/publish")
-    enc = TwitterStreamSensor(publisher,"AppID","SrcID")
+    enc = TwitterStreamSensor(publisher,"AppID","SrcID", only_geo = True)
     enc.start_async()
     tornado.ioloop.IOLoop.instance().start()
 
