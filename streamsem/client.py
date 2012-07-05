@@ -135,14 +135,14 @@ class AsyncStreamingClient(object):
 
     def _reset_compression(self):
         self._compressed = True
-        self._decompresser = zlib.decompressobj()
+        self._decompressor = zlib.decompressobj()
 
     def _deserialize(self, data, parse_body=True):
         evs = []
         event = None
         compressed_len = len(data)
         if self._compressed:
-            data = self._decompresser.decompress(data)
+            data = self._decompressor.decompress(data)
         logger.logger.data_received(compressed_len, len(data))
         self._deserializer.append_data(data)
         event = self._deserializer.deserialize_next(parse_body=parse_body)
