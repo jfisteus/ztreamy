@@ -403,7 +403,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
                              application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
-        event.aggregator_id.append(server.source_id)
+        event.aggregator_id.append(self.server.source_id)
         self.server.dispatch_event(event)
         self.finish()
 
