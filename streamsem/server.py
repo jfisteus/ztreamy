@@ -16,6 +16,7 @@ from streamsem import events
 from streamsem import StreamsemException
 from streamsem.client import AsyncStreamingClient
 from streamsem import logger
+from rdzutils import EventCompressor
 
 param_max_events_sync = 20
 
@@ -162,6 +163,8 @@ class WebApplication(tornado.web.Application):
         }
         compressed_kwargs = {'compress': True}
         compressed_kwargs.update(handler_kwargs)
+        rdz_kwargs = {'rdz': True}
+        rdz_kwargs.update(handler_kwargs)
         priority_kwargs = {'compress': False, 'priority': True}
         priority_kwargs.update(handler_kwargs)
         handlers = [
@@ -170,6 +173,8 @@ class WebApplication(tornado.web.Application):
                                 kwargs=handler_kwargs),
             tornado.web.URLSpec(r"/events/compressed", EventStreamHandler,
                                 kwargs=compressed_kwargs),
+            tornado.web.URLSpec(r"/events/rdz", EventStreamHandler,
+                                kwargs=rdz_kwargs),
             tornado.web.URLSpec(r"/events/priority", EventStreamHandler,
                                 kwargs=priority_kwargs),
             tornado.web.URLSpec(r"/events/next", NextEventHandler,
@@ -187,25 +192,35 @@ class WebApplication(tornado.web.Application):
 
 class Client(object):
     def __init__(self, handler, callback, streaming=False, compress=False,
-                 priority=False):
+                 rdz=False, priority=False):
         assert streaming or not compress
         self.handler = handler
         self.callback = callback
         self.streaming = streaming
         if not priority:
             self.compress = compress
+            self.rdz = rdz
         else:
             self.compress = False
+            self.rdz = False
         self.priority = priority
         self.closed = False
         if self.compress:
             self.compression_synced = False
             self.compressor = zlib.compressobj()
+        elif self.rdz:
+            self.compression_synced = False
+            self.compressor = EventCompressor()
 
     def send(self, data):
         if self.compress and not self.compression_synced:
             comp_data = self.compressor.compress(data)
             comp_data_extra = self.compressor.flush(zlib.Z_SYNC_FLUSH)
+            self.callback(comp_data + comp_data_extra)
+        elif self.rdz and not self.compression_synced:
+            assert isinstance(data, events.Event)
+            comp_data = self.compressor.compress(data)
+            comp_data_extra = self.compressor.sync_flush()
             self.callback(comp_data + comp_data_extra)
         else:
             self.callback(data)
@@ -228,6 +243,9 @@ class Client(object):
             self.send('')
             self.compressor = None
             self.compression_synced = True
+        elif self.rdz and not self.compression_synced:
+            self.compressor = None
+            self.compression_synced = True
 
 
 class EventDispatcher(object):
@@ -235,11 +253,14 @@ class EventDispatcher(object):
         self.priority_clients = []
         self.streaming_clients = []
         self.compressed_streaming_clients = []
+        self.unsynced_rdz_streaming_clients = []
+        self.rdz_streaming_clients = []
         self.unsynced_compressed_streaming_clients = []
         self.one_time_clients = []
         self.event_cache = []
         self.cache_size = 200
         self._compressor = zlib.compressobj()
+        self._rdz_compressor = EventCompressor()
         self._num_events_since_sync = 0
         self._next_client_cleanup = -1
         self._periods_since_last_event = 0
@@ -251,6 +272,8 @@ class EventDispatcher(object):
                 self.priority_clients.append(client)
             elif client.compress:
                 self.unsynced_compressed_streaming_clients.append(client)
+            elif client.rdz:
+                self.unsynced_rdz_streaming_clients.append(client)
             else:
                 self.streaming_clients.append(client)
             logging.info('Streaming client registered; stream: %i; comp: %i'\
@@ -287,7 +310,9 @@ class EventDispatcher(object):
     def dispatch(self, evs):
         num_clients = (len(self.streaming_clients) + len(self.one_time_clients)
                        + len(self.unsynced_compressed_streaming_clients)
-                       + len(self.compressed_streaming_clients))
+                       + len(self.compressed_streaming_clients)
+                       + len(self.unsynced_rdz_streaming_clients)
+                       + len(self.rdz_streaming_clients))
         logging.info('Sending %r events to %r clients', len(evs),
                      num_clients)
         self._next_client_cleanup -= 1
@@ -308,25 +333,37 @@ class EventDispatcher(object):
         else:
             raise StreamsemException('Bad event type', 'send_event')
         self._periods_since_last_event = 0
-        if len(self.unsynced_compressed_streaming_clients) > 0:
-            if (len(self.compressed_streaming_clients) == 0
+        if (len(self.unsynced_compressed_streaming_clients)
+            + len(self.unsynced_rdz_streaming_clients)) > 0:
+            if ((len(self.compressed_streaming_clients)
+                 + len(self.rdz_streaming_clients)) == 0
                 or self._num_events_since_sync > param_max_events_sync):
                 self._sync_compressor()
         if num_clients > 0:
             logging.info('Compressed clients: %d synced; %d unsynced'%\
                              (len(self.compressed_streaming_clients),
                               len(self.unsynced_compressed_streaming_clients)))
+            logging.info('RDZ clients: %d synced; %d unsynced'%\
+                             (len(self.rdz_streaming_clients),
+                              len(self.unsynced_rdz_streaming_clients)))
             serialized = self._serialize_events(evs)
             for client in self.streaming_clients:
                 self._send(serialized, client)
             for client in self.unsynced_compressed_streaming_clients:
                 self._send(serialized, client)
+            for client in self.unsynced_rdz_streaming_clients:
+                self._send(evs, client)
             for client in self.one_time_clients:
                 self._send(serialized, client)
             if len(self.compressed_streaming_clients) > 0:
                 compressed_data = (self._compressor.compress(serialized)
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
                 for client in self.compressed_streaming_clients:
+                    self._send(compressed_data, client)
+            if len(self.rdz_streaming_clients) > 0:
+                compressed_data = (self._rdz_compressor.compress(evs)
+                                   + self._rdz_compressor.sync_flush())
+                for client in self.rdz_streaming_clients:
                     self._send(compressed_data, client)
             for e in evs:
                 logger.logger.event_dispatched(e)
@@ -356,6 +393,10 @@ class EventDispatcher(object):
         return ''.join(data)
 
     def _sync_compressor(self):
+        self._sync_zlib_compressor()
+        self._sync_rdz_compressor()
+
+    def _sync_zlib_compressor(self):
         for client in self.unsynced_compressed_streaming_clients:
             client.sync_compression()
         data = self._compressor.flush(zlib.Z_FULL_FLUSH)
@@ -366,7 +407,19 @@ class EventDispatcher(object):
             self.unsynced_compressed_streaming_clients)
         self.unsynced_compressed_streaming_clients = []
         self._num_events_since_sync = 0
-        logging.info('Compressor synced')
+        logging.info('zlib compressor synced')
+
+    def _sync_rdz_compressor(self):
+        for client in self.unsynced_rdz_streaming_clients:
+            client.sync_compression()
+        data = self._rdz_compressor.full_flush()
+        if len(data) > 0:
+            for client in self.rdz_streaming_clients:
+                self._send(data, client)
+        self.rdz_streaming_clients.extend(self.unsynced_rdz_streaming_clients)
+        self.unsynced_rdz_streaming_clients = []
+        self._num_events_since_sync = 0
+        logging.info('rdz compressor synced')
 
     def _send(self, data, client):
         try:
@@ -412,7 +465,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(400, 'Bad content type')
         deserializer = events.Deserializer()
         try:
-            evs = deserializer.deserialize(self.request.body, parse_body=False,
+            evs = deserializer.deserialize(self.request.body, parse_body=True,
                                            complete=True)
         except Exception as ex:
             traceback.print_exc()
@@ -430,21 +483,27 @@ class EventPublishHandler(tornado.web.RequestHandler):
 
 class EventStreamHandler(tornado.web.RequestHandler):
     def __init__(self, application, request, server=None,
-                 dispatcher=None, compress=False, priority=False):
+                 dispatcher=None, compress=False, rdz=False, priority=False):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
         self.compress = compress
+        self.rdz = rdz
         self.server = server
         self.priority = priority
 
     @tornado.web.asynchronous
     def get(self):
         self.client = Client(self, self._on_new_data, streaming=True,
-                             compress=self.compress, priority=self.priority)
+                             compress=self.compress, rdz=self.rdz,
+                             priority=self.priority)
         self.dispatcher.register_client(self.client)
         if self.compress:
             command = events.create_command(self.server.source_id,
                                             'Set-Compression')
+            self._on_new_data(str(command))
+        elif self.rdz:
+            command = events.create_command(self.server.source_id,
+                                            'Set-Compression-rdz')
             self._on_new_data(str(command))
 
     def _on_new_data(self, data):

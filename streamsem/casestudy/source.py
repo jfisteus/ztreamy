@@ -123,8 +123,9 @@ class EventScheduler(object):
     def _schedule_entry(self, entry):
         if not entry.subject in self.source_ids:
             self.source_ids[entry.subject] = streamsem.random_id()
-        pub = utils.EventPublisher(entry, self.source_ids[entry.subject],
-                                   self.publishers)
+        event = rdfevents.RDFEvent(self.source_ids[entry.subject], 'text/n3',
+                                   entry.graph())
+        pub = utils.EventPublisher(event, self.publishers)
         fire_time = (self.t0_new
                      + (entry.timestamp - self.t0_original) / self.time_scale)
         self.io_loop.add_timeout(fire_time, pub.publish)

@@ -142,6 +142,7 @@ def constant_event_scheduler(mean_time):
         yield last
 
 def get_scheduler(description):
+    print(description)
     pos = description.find('[')
     if pos == -1 or description[-1] != ']':
         raise StreamsemException('error in distribution specification',

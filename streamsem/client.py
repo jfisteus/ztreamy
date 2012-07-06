@@ -10,6 +10,7 @@ import streamsem
 from streamsem import events
 import streamsem.rdfevents
 from streamsem import logger
+from streamsem.rdzutils import EventDecompressor
 
 transferred_bytes = 0
 data_count = 0
@@ -76,6 +77,7 @@ class AsyncStreamingClient(object):
         self._closed = False
         self._looping = False
         self._compressed = False
+        self._rdz = False
         self._deserializer = events.Deserializer()
 #        self.data_history = []
 
@@ -137,7 +139,21 @@ class AsyncStreamingClient(object):
         self._compressed = True
         self._decompressor = zlib.decompressobj()
 
+    def _reset_rdz(self):
+        self._rdz = True
+        self._decompressor = EventDecompressor()
+
     def _deserialize(self, data, parse_body=True):
+        if self._rdz:
+            return self._deserialize_rdz(data, parse_body=parse_body)
+        else:
+            return self._deserialize_others(data, parse_body=parse_body)
+
+    def _deserialize_rdz(self, data, parse_body=True):
+        logger.logger.data_received(len(data), 0)
+        return self._decompressor.decompress(data)
+
+    def _deserialize_others(self, data, parse_body=True):
         evs = []
         event = None
         compressed_len = len(data)
@@ -152,7 +168,14 @@ class AsyncStreamingClient(object):
                     self._reset_compression()
                     pos = self._deserializer.data_consumed()
                     self._deserializer.reset()
-                    evs.extend(self._deserialize(data[pos:], parse_body))
+                    evs.extend(self._deserialize_others(data[pos:],
+                                                        parse_body))
+                    return evs
+                elif event.command == 'Set-Compression-rdz':
+                    print 'activated rdz support'
+                    self._reset_rdz()
+                    pos = self._deserializer.data_consumed()
+                    evs.extend(self._deserialize_rdz(data[pos:], parse_body))
                     return evs
             else:
                 evs.append(event)

@@ -94,11 +94,7 @@ class Deserializer(object):
             body_length = 0
         else:
             body_length = int(self._event['Body-Length'])
-        if (not 'Event-Id' in self._event
-            or not 'Source-Id' in self._event
-            or not 'Syntax' in self._event):
-            raise StreamsemException('Missing headers in event',
-                                     'event_deserialize')
+        Deserializer._check_mandatory_headers(self._event)
         end = pos + int(body_length)
         if end > len(self._data):
             self._data = self._data[pos:]
@@ -106,16 +102,8 @@ class Deserializer(object):
         body = self._data[pos:end]
         self._data = self._data[end:]
         if parse_body or self._event['Syntax'] in Event._always_parse:
-            event = Event.create( \
-                self._event.get('Source-Id'),
-                self._event.get('Syntax'),
-                body,
-                event_id=self._event.get('Event-Id'),
-                application_id=self._event.get('Application-Id'),
-                aggregator_id=self._event.get('Aggregator-Ids', []),
-                event_type=self._event.get('Event-Type'),
-                timestamp=self._event.get('Timestamp'),
-                extra_headers=self._extra_headers)
+            event = Deserializer.create_event(self._event, self._extra_headers,
+                                              body)
         else:
             event = Event( \
                 self._event.get('Source-Id'),
@@ -140,6 +128,58 @@ class Deserializer(object):
         else:
             raise StreamsemException('Duplicate header in event',
                                      'event_deserialize')
+
+    @staticmethod
+    def _check_mandatory_headers(headers):
+        if (not 'Event-Id' in headers
+            or not 'Source-Id' in headers
+            or not 'Syntax' in headers):
+            raise StreamsemException('Missing headers in event',
+                                     'event_deserialize')
+
+    @staticmethod
+    def deserialize_headers(text):
+        """A simple deserializer just for event headers.
+
+        It parses from a string the headers of a single event. It does
+        not support streaming situations. There cannot be blank lines
+        (even at the end).
+
+        """
+        headers = {}
+        extra_headers = {}
+        parts = text.split('\n')
+        for part in parts:
+            pos = part.find(':')
+            if pos == -1:
+                raise StreamsemException('Syntax error in event header',
+                                         error_type='event_syntax')
+            header = part[:pos].strip()
+            value = part[pos + 1:].strip()
+            if header not in Event.headers:
+                extra_headers[header] = value
+            elif header == 'Aggregator-Ids':
+                headers[header] = value.split(',')
+            elif header not in headers:
+                headers[header] = value
+            else:
+                raise StreamsemException('Duplicate header in event',
+                                         'event_deserialize')
+        Deserializer._check_mandatory_headers(headers)
+        return headers, extra_headers
+
+    @staticmethod
+    def create_event(headers, extra_headers, body):
+        return Event.create( \
+            headers.get('Source-Id'),
+            headers.get('Syntax'),
+            body,
+            event_id=headers.get('Event-Id'),
+            application_id=headers.get('Application-Id'),
+            aggregator_id=headers.get('Aggregator-Ids', []),
+            event_type=headers.get('Event-Type'),
+            timestamp=headers.get('Timestamp'),
+            extra_headers=extra_headers)
 
 
 class Event(object):
@@ -245,6 +285,11 @@ class Event(object):
         else:
             raise StreamsemException('Empty body in event', 'even_serialize')
 
+    def serialize_headers(self):
+        data = []
+        self._serialize_headers_internal(data)
+        return '\n'.join(data)
+
     def time(self):
         """Returns the event timestamp as a seconds since the epoch value.
 
@@ -259,6 +304,14 @@ class Event(object):
 
     def _serialize(self):
         data = []
+        self._serialize_headers_internal(data)
+        serialized_body = self.serialize_body()
+        data.append('Body-Length: ' + str(len(serialized_body)))
+        data.append('')
+        data.append(serialized_body)
+        return '\n'.join(data)
+
+    def _serialize_headers_internal(self, data):
         data.append('Event-Id: ' + self.event_id)
         data.append('Source-Id: ' + str(self.source_id))
         data.append('Syntax: ' + str(self.syntax))
@@ -272,11 +325,6 @@ class Event(object):
             data.append('Timestamp: ' + str(self.timestamp))
         for header, value in self.extra_headers.iteritems():
             data.append(header + ': ' + value)
-        serialized_body = self.serialize_body()
-        data.append('Body-Length: ' + str(len(serialized_body)))
-        data.append('')
-        data.append(serialized_body)
-        return '\n'.join(data)
 
 
 class Command(Event):
@@ -288,6 +336,7 @@ class Command(Event):
     """
     valid_commands = [
         'Set-Compression',
+        'Set-Compression-rdz',
         'Test-Connection',
         'Event-Source-Started',
         'Event-Source-Finished',
