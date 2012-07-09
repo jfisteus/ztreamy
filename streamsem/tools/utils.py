@@ -4,7 +4,6 @@ import math
 import logging
 import tornado.ioloop
 
-import streamsem
 from streamsem import StreamsemException
 from streamsem import events
 

@@ -202,7 +202,7 @@ def read_cmd_options():
     if len(remaining) >= 1:
         options.stream_urls = remaining
     else:
-        parser.error('At least one source stream URL required')
+        OptionParser().error('At least one source stream URL required')
     return options
 
 def main():

@@ -1,8 +1,6 @@
-import time
 import gzip
 import tornado.options
 import tornado.ioloop
-import logging
 
 import streamsem
 import streamsem.client as client
@@ -45,7 +43,7 @@ class RelayScheduler(utils.EventScheduler):
 
 
 def read_cmd_options():
-    from optparse import Values
+    from optparse import OptionParser, Values
     tornado.options.define('distribution', default=None,
                            help='distribution of the time between events')
     tornado.options.define('limit', default=0, type=int,
@@ -65,7 +63,8 @@ def read_cmd_options():
         options.filename = remaining[0]
         options.server_urls = remaining[1:]
     else:
-        parser.error('At least one file name and one server URL required')
+        OptionParser().error('At least one file name and one '
+                             'server URL required')
     return options
 
 def main():

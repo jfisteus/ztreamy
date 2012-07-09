@@ -1,6 +1,5 @@
 import rdflib
 
-from streamsem import events
 from streamsem import rdfevents
 
 class Filter(object):

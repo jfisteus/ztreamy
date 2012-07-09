@@ -1,11 +1,8 @@
 import tornado.ioloop
 import tornado.options
-import logging
 from rdflib.graph import Graph
 
 import streamsem
-from streamsem import events
-from streamsem import rdfevents
 from streamsem import logger
 from streamsem import client
 
@@ -47,11 +44,12 @@ def read_cmd_options():
     if len(remaining) >= 1:
         options.stream_urls = remaining
     else:
-        parser.error('At least one source stream URL required')
+        OptionParser.error('At least one source stream URL required')
     return options
 
 def main():
     options = read_cmd_options()
+    node_id = streamsem.random_id()
 #    import streamsem.filters
 #    filter = streamsem.filters.SimpleTripleFilter(handle_event,
 #                                        predicate='http://example.com/temp')

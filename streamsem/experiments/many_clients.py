@@ -1,7 +1,6 @@
 import tornado.ioloop
 import logging
 import time
-import zlib
 
 import streamsem
 from streamsem import client
@@ -242,7 +241,7 @@ class SaturationMonitor(object):
 
 
 def read_cmd_options():
-    from optparse import Values
+    from optparse import OptionParser, Values
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
                            type=bool)
@@ -255,7 +254,7 @@ def read_cmd_options():
         options.stream_url = remaining[0]
         options.num_clients = int(remaining[1])
     else:
-        parser.error('A source stream URL required')
+        OptionParser().error('A source stream URL required')
     return options
 
 def main():

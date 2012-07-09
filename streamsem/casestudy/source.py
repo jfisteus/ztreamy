@@ -3,17 +3,16 @@ from rdflib.graph import Graph
 from rdflib import RDF
 import rdflib.term as term
 import time
-import csv
 import gzip
 import tornado.options
 import tornado.ioloop
 import re
 
 import streamsem
-import streamsem.rdfevents as rdfevents
 import streamsem.client as client
 import streamsem.logger as logger
 from streamsem.tools import utils
+from streamsem import StreamsemException
 
 ns_slog = Namespace('http://www.it.uc3m.es/jaf/ns/slog/#')
 ns_person = Namespace('http://www.it.uc3m.es/jaf/ns/slog/person#')
@@ -151,7 +150,7 @@ def _strip(data):
     return data
 
 def read_cmd_options():
-    from optparse import Values
+    from optparse import OptionParser, Values
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
                            type=bool)
@@ -163,7 +162,7 @@ def read_cmd_options():
     if len(remaining) >= 1:
         options.server_urls = remaining
     else:
-        parser.error('At least one server URL required')
+        OptionParser.error('At least one server URL required')
     return options
 
 def main():

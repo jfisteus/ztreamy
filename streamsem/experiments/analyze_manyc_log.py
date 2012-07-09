@@ -16,7 +16,6 @@ class DelayStats(object):
         self.delays.extend(new_delays)
 
     def analyze(self):
-        total = sum(self.delays)
         self.average, self.std_dev = utils.average_and_std_dev(self.delays)
         self.median = utils.median(self.delays)
         self.minimum = min(self.delays)

@@ -1,10 +1,8 @@
 import tornado.ioloop
 import tornado.options
-import logging
 
 import streamsem
 from streamsem import events
-from streamsem import rdfevents
 from streamsem import client
 from streamsem import logger
 from streamsem.tools import utils
@@ -27,7 +25,7 @@ class Scheduler(utils.EventScheduler):
 
 
 def read_cmd_options():
-    from optparse import Values
+    from optparse import OptionParser, Values
     tornado.options.define('distribution', default='exp(5)',
                            help='distribution of the time between events')
     tornado.options.define('limit', default=0, type=int,
@@ -40,7 +38,7 @@ def read_cmd_options():
     if len(remaining) >= 1:
         options.server_urls = remaining
     else:
-        parser.error('At least one server URL required')
+        OptionParser().error('At least one server URL required')
     return options
 
 def main():

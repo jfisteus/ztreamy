@@ -3,7 +3,7 @@ import tornado.options
 from streamsem.server import RelayServer
 
 def read_cmd_options():
-    from optparse import Values
+    from optparse import Values, OptionParser
     tornado.options.define('port', default=8888, help='run on the given port',
                            type=int)
     tornado.options.define('aggregatorid', default=None,
@@ -15,7 +15,7 @@ def read_cmd_options():
     if len(remaining) >= 1:
         options.stream_urls = remaining
     else:
-        parser.error('At least one source stream URL required')
+        OptionParser().error('At least one source stream URL required')
     return options
 
 def main():
