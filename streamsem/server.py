@@ -1,4 +1,4 @@
-""" Code for event stream servers.
+""" Implementation of stream servers.
 
 """
 
@@ -23,8 +23,58 @@ param_max_events_sync = 20
 #import guppy.heapy.RM
 
 class StreamServer(object):
+    """Serves a stream of events through HTTP.
+
+    Clients connect to this server in order to listen to the events
+    it sends. The server provides several HTTP paths which clients
+    may use:
+
+    '/': not implemented yet. Intended for human readable
+        information about the stream.
+
+    '/events/stream': uncompressed stream with long-lived response.
+        The response is not closed by the server, and events are sent
+        to the client as they are available. A client library able
+        to notify the user as new chunks of data are received is needed
+        in order to follow this stream.
+
+    '/events/compressed': zlib-compressed stream with long-lived
+        response.  Similar to how the previous path works with the
+        only difference of compression.
+
+    '/events/priority': uncompressed stream with lower delays intended
+        for clients with priority, typically relay servers.
+
+    '/events/next': available events are sent to the client uncompressed.
+        The request is closed immediately. The client can specify the latest
+        event it has received in order to get the events that follow it.
+
+    '/events/publish': receives events from event sources in order to be
+        published in the stream.
+
+    """
     def __init__(self, port, ioloop=None, allow_publish=False,
                  buffering_time=None, source_id=None):
+        """Creates a stream server object.
+
+        The server object will to start to process requests until
+        the 'start()' method is invoked.
+
+        The server listens on the given 'port' for HTTP requests. It
+        does not accept events from clients, unless 'allow_publish' is
+        set to 'True'.
+
+        'buffering_time' controls the period for which events are
+        accumulated in a buffer before sending them to the
+        clients. Higher times improve CPU performance in the server
+        and compression ratios, but increase the latency in the
+        delivery of events.
+
+        If a 'ioloop' object is given, the client will block on it
+        apon calling the 'start()' method. If not, it will block on
+        the default 'ioloop' of Tornado.
+
+        """
         logging.info('Initializing server...')
         if source_id is not None:
             self.source_id = source_id
@@ -32,7 +82,7 @@ class StreamServer(object):
             self.source_id = streamsem.random_id()
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
-        self.app = WebApplication(self, allow_publish=allow_publish)
+        self.app = _WebApplication(self, allow_publish=allow_publish)
         self.http_server = tornado.httpserver.HTTPServer(self.app)
         self.buffering_time = buffering_time
         self._event_buffer = []
@@ -48,6 +98,13 @@ class StreamServer(object):
         self._stopped = False
 
     def dispatch_event(self, event):
+        """Publishes an event in this stream.
+
+        The event may not be sent immediately to normal clients if the
+        server is configured to do buffering. However, it will be sent
+        immediately to priority clients.
+
+        """
 #        logger.logger.event_published(event)
         self.app.dispatcher.dispatch_priority([event])
         if self.buffering_time is None:
@@ -56,6 +113,13 @@ class StreamServer(object):
             self._event_buffer.append(event)
 
     def dispatch_events(self, events):
+        """Publishes a list of events in this stream.
+
+        The events may not be sent immediately to normal clients if
+        the server is configured to do buffering. However, they will
+        be sent immediately to priority clients.
+
+        """
 #        for e in events:
 #            logger.logger.event_published(e)
         self.app.dispatcher.dispatch_priority(events)
@@ -65,6 +129,14 @@ class StreamServer(object):
             self._event_buffer.extend(events)
 
     def start(self, loop=True):
+        """Starts the server.
+
+        The server begins to listen to HTTP requests.
+
+        If 'loop' is true (which is the default), the server will
+        block on the ioloop until 'close()' is called.
+
+        """
         assert(not self._started)
         logging.info('Starting server...')
         self.http_server.listen(self.port)
@@ -78,6 +150,14 @@ class StreamServer(object):
             self._looping = False
 
     def stop(self):
+        """Stops the server.
+
+        If the server is blocked on the ioloop in the 'start()'
+        method, it is released.
+
+        The server object cannot be used again after been closed.
+
+        """
         if self._started and not self._stopped:
             logging.info('Stopping server...')
             self.http_server.stop()
@@ -108,10 +188,28 @@ class StreamServer(object):
 
 
 class RelayServer(StreamServer):
-    """A server that relays events from other servers."""
+    """A server that relays events from other servers.
+
+    This server listens to other event streams and publishes their
+    events as a new stream. A filter can optionally be apply in order
+    to select which events are published.
+
+    """
     def __init__(self, port, source_urls, ioloop=None,
                  allow_publish=False, filter_=None,
                  buffering_time=None):
+        """Creates a new server, but does not start it.
+
+        The server will transmit the events of the streams specified
+        in 'source_urls' (either a list or a string with just one
+        URL).  A filter may be specified in 'filter_' in order to
+        select which events are relayed (see the 'filters' module for
+        more information).
+
+        The rest of the parameters are as described in the constructor
+        of the StreamServer class.
+
+        """
         super(RelayServer, self).__init__(port, ioloop=ioloop,
                                           allow_publish=allow_publish,
                                           buffering_time=buffering_time)
@@ -120,7 +218,10 @@ class RelayServer(StreamServer):
             event_callback = filter_.filter_events
         else:
             event_callback = self._relay_events
-        self.source_urls = source_urls
+        if isinstance(source_urls, basestring):
+            self.source_urls = [source_urls]
+        else:
+            self.source_urls = source_urls
         self.clients = \
             [AsyncStreamingClient(url, event_callback=event_callback,
                                   error_callback=self._handle_error,
@@ -129,11 +230,21 @@ class RelayServer(StreamServer):
                  for url in source_urls]
 
     def start(self, loop=True):
+        """Starts the relay server.
+
+        See 'start()' in StreamServer for more information.
+
+        """
         for client in self.clients:
             client.start(loop=False)
         super(RelayServer, self).start(loop)
 
     def stop(self):
+        """Stops the relay server.
+
+        See 'start()' in StreamServer for more information.
+
+        """
         if self._started and not self._stopped:
             for client in self.clients:
                 client.stop()
@@ -153,9 +264,9 @@ class RelayServer(StreamServer):
             logging.error(message)
 
 
-class WebApplication(tornado.web.Application):
+class _WebApplication(tornado.web.Application):
     def __init__(self, server, allow_publish=False):
-        self.dispatcher = EventDispatcher()
+        self.dispatcher = _EventDispatcher()
         handler_kwargs = {
             'server': server,
             'dispatcher': self.dispatcher,
@@ -165,27 +276,27 @@ class WebApplication(tornado.web.Application):
         priority_kwargs = {'compress': False, 'priority': True}
         priority_kwargs.update(handler_kwargs)
         handlers = [
-            tornado.web.URLSpec(r"/", MainHandler),
-            tornado.web.URLSpec(r"/events/stream", EventStreamHandler,
+            tornado.web.URLSpec(r"/", _MainHandler),
+            tornado.web.URLSpec(r"/events/stream", _EventStreamHandler,
                                 kwargs=handler_kwargs),
-            tornado.web.URLSpec(r"/events/compressed", EventStreamHandler,
+            tornado.web.URLSpec(r"/events/compressed", _EventStreamHandler,
                                 kwargs=compressed_kwargs),
-            tornado.web.URLSpec(r"/events/priority", EventStreamHandler,
+            tornado.web.URLSpec(r"/events/priority", _EventStreamHandler,
                                 kwargs=priority_kwargs),
-            tornado.web.URLSpec(r"/events/next", NextEventHandler,
+            tornado.web.URLSpec(r"/events/next", _NextEventHandler,
                                 kwargs=handler_kwargs),
         ]
         if allow_publish:
             publish_kwargs = {'server': server}
             handlers.append(tornado.web.URLSpec(r"/events/publish",
-                                                EventPublishHandler,
+                                                _EventPublishHandler,
                                                 kwargs=publish_kwargs))
         # No settings by now...
         settings = dict()
-        super(WebApplication, self).__init__(handlers, **settings)
+        super(_WebApplication, self).__init__(handlers, **settings)
 
 
-class Client(object):
+class _Client(object):
     def __init__(self, handler, callback, streaming=False, compress=False,
                  priority=False):
         assert streaming or not compress
@@ -230,7 +341,7 @@ class Client(object):
             self.compression_synced = True
 
 
-class EventDispatcher(object):
+class _EventDispatcher(object):
     def __init__(self):
         self.priority_clients = []
         self.streaming_clients = []
@@ -377,12 +488,12 @@ class EventDispatcher(object):
             logging.error("Error in client callback", exc_info=True)
 
 
-class MainHandler(tornado.web.RequestHandler):
+class _MainHandler(tornado.web.RequestHandler):
     def get(self):
         raise tornado.web.HTTPError(404)
 
 
-class EventPublishHandler(tornado.web.RequestHandler):
+class _EventPublishHandler(tornado.web.RequestHandler):
     def __init__(self, application, request, server=None):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.server = server
@@ -428,7 +539,7 @@ class EventPublishHandler(tornado.web.RequestHandler):
         self.finish()
 
 
-class EventStreamHandler(tornado.web.RequestHandler):
+class _EventStreamHandler(tornado.web.RequestHandler):
     def __init__(self, application, request, server=None,
                  dispatcher=None, compress=False, priority=False):
         tornado.web.RequestHandler.__init__(self, application, request)
@@ -439,8 +550,8 @@ class EventStreamHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self, self._on_new_data, streaming=True,
-                             compress=self.compress, priority=self.priority)
+        self.client = _Client(self, self._on_new_data, streaming=True,
+                              compress=self.compress, priority=self.priority)
         self.dispatcher.register_client(self.client)
         if self.compress:
             command = events.create_command(self.server.source_id,
@@ -458,14 +569,14 @@ class EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.deregister_client(self.client)
 
 
-class NextEventHandler(tornado.web.RequestHandler):
+class _NextEventHandler(tornado.web.RequestHandler):
     def __init__(self, application, request, dispatcher=None):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self.on_new_event, streaming=False)
+        self.client = _Client(self.on_new_event, streaming=False)
         self.dispatcher.register_client(self.client)
 
     def on_new_event(self, event):

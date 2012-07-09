@@ -1,3 +1,15 @@
+""" Clients that communicate with stream servers to send or receive events.
+
+There are two clients that receive events ('Client' and
+'AsyncStreamingClient') and another one that sends events to an event
+server. All of them are asynchronous and are implemented on top HTTP
+clients from the module 'tornado.httpclient'.
+
+The fifferent between 'Client' and 'AsyncStreamingClient' is that
+'Client' can listen to several event streams at the same time. It is
+implemented as a wrapper on top of 'AsyncStreamingClient'.
+
+"""
 import tornado.ioloop
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.curl_httpclient import CurlAsyncHTTPClient
@@ -20,22 +32,58 @@ param_max_clients = 32768
 AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
 class Client(object):
+    """Asynchronous client for multiple stream sources.
+
+    This client is able to receive events from multiple streams. Its
+    internal implementation is based on the 'AsyncStreamingClient'
+    class.
+
+    """
     def __init__(self, source_urls, event_callback, error_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True):
-        self.source_urls = source_urls
+        """Creates a new client for one or more stream URLs.
+
+        The client connects to the stream URLs in the list
+        'source_urls' (although a single string is also accepted).
+        For every single received event, the 'event_callback' function
+        is invoked. It receives an event object as parameter.
+
+        If 'separate_events' is set to None, then the event callback
+        will receive a list of events instead of a single events.
+
+        If a 'ioloop' object is given, the client will block on it
+        apon calling the 'start()' method. If not, it will block on
+        the default 'ioloop' of Tornado.
+
+        """
+        if isinstance(source_urls, basestring):
+            self.source_urls = [source_urls]
+        else:
+            self.source_urls = source_urls
         self.clients = \
             [AsyncStreamingClient(url, event_callback=event_callback,
                          error_callback=error_callback,
                          connection_close_callback=self._client_close_callback,
                          parse_event_body=parse_event_body,
                          separate_events=separate_events) \
-                 for url in source_urls]
+                 for url in self.source_urls]
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self._closed = False
         self._looping = False
         self.active_clients = []
 
     def start(self, loop=True):
+        """Starts the client.
+
+        This function has to be called in order to connect to the
+        streams and begin to receive events.
+
+        If 'loop' is true (which is the default), the server will
+        block on the ioloop until 'close()' is called.
+
+        """
+        if self._closed:
+            raise Exception('This client has already been closed.')
         for client in self.clients:
             client.start(False)
             self.active_clients.append(client)
@@ -45,6 +93,14 @@ class Client(object):
             self._looping = False
 
     def stop(self):
+        """Stops and closes this client.
+
+        The client can no longer be used in the future.
+
+        If the server is blocked on the ioloop in the 'start()'
+        method, it is released.
+
+        """
         if not self._closed:
             for client in self.clients:
                 client.stop()
@@ -63,9 +119,29 @@ class Client(object):
 
 
 class AsyncStreamingClient(object):
+    """Asynchronous client for a single event source.
+
+    If you need to receive events from several sources, use the class
+    'Client' instead.
+
+    """
     def __init__(self, url, event_callback=None, error_callback=None,
                  connection_close_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True):
+        """Creates a new client for a given stream URLs.
+
+        The client connects to the stream URL given by 'url'.  For
+        every single received event, the 'event_callback' function is
+        invoked. It receives an event object as parameter.
+
+        If 'separate_events' is set to None, then the event callback
+        will receive a list of events instead of a single events.
+
+        If a 'ioloop' object is given, the client will block on it
+        apon calling the 'start()' method. If not, it will block on
+        the default 'ioloop' of Tornado.
+
+        """
         self.url = url
         self.event_callback = event_callback
         self.error_callback = error_callback
@@ -80,6 +156,15 @@ class AsyncStreamingClient(object):
 #        self.data_history = []
 
     def start(self, loop=False):
+        """Starts the client.
+
+        This function has to be called in order to connect to the
+        streams and begin to receive events.
+
+        If 'loop' is true (which is the default), the server will
+        block on the ioloop until 'close()' is called.
+
+        """
         self.http_client = AsyncHTTPClient(max_clients=param_max_clients)
         req = HTTPRequest(self.url, streaming_callback=self._stream_callback,
                           request_timeout=0, connect_timeout=0)
@@ -90,11 +175,16 @@ class AsyncStreamingClient(object):
             self._looping = False
 
     def stop(self):
-        """Stops the HTTP client and, if looping, the ioloop instance.
+        """Stops and closes this client.
+
+        The client can no longer be used in the future.
+
+        If the server is blocked on the ioloop in the 'start()'
+        method, it is released.
 
         Note: if the backend behind
-        tornado.httpclient.AsyncHTTPClient() is SimpleHTTPClient,
-        invoking stop() does not actually close the HTTP connections
+        'tornado.httpclient.AsyncHTTPClient()' is 'SimpleHTTPClient',
+        invoking 'stop()' does not actually close the HTTP connections
         (as of Tornado branch master september 1st 2011).
 
         """
@@ -161,18 +251,32 @@ class AsyncStreamingClient(object):
 
 
 class EventPublisher(object):
-    """Sends events to a server in order to publish them.
+    """Publishes events by sending them to a server.
 
     Uses an asynchronous HTTP client, but does not manage an ioloop
     itself. The ioloop must be run by the calling code.
 
     """
     def __init__(self, server_url, io_loop=None):
+        """Creates a new 'EventPublisher' object.
+
+        Events are sent in separate HTTP requests to the server given
+        by 'server_url'.
+
+        """
         self.server_url = server_url
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.headers = {'Content-Type': streamsem.mimetype_event}
 
     def publish(self, event, callback=None):
+        """Publishes a new event.
+
+        The event is sent to the server in a new HTTP request. If a
+        'callback' is given, it will be called when the response is
+        received from the server. The callback receives a
+        tornado.httpclient.HTTPResponse parameter.
+
+        """
         logger.logger.event_published(event)
         body = str(event)
         req = HTTPRequest(self.server_url, body=body, method='POST',
@@ -182,6 +286,11 @@ class EventPublisher(object):
         self.http_client.fetch(req, callback)
 
     def close(self):
+        """Closes the event publisher.
+
+        This object should not be used anymore.
+
+        """
         self.http_client.close()
         self.http_client=None
 

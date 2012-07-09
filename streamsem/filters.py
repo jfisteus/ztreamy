@@ -1,12 +1,39 @@
+"""General-purpose event filters.
+
+This module defines filters that select events according to specific
+criteria.
+
+Filters are expected to have:
+
+(1) A constructor that receives a callback function. The callback
+function is called for those events that are not blocked by the
+filter.
+
+(2) A 'filter_event()' method that receives an event and, it the event
+is not filtered out, invokes the callback function with it.
+
+(3) A 'filter_events()' method, with a similar behaviour, that
+receives a list or iterable of events instead of a single event.
+
+A way of implementing a custom filter is to extend the 'Filter' class
+and override its 'filter_event()' method.
+
+"""
 import rdflib
 
 from streamsem import rdfevents
 
 class Filter(object):
+    """ A default filter that filters out every event.
+
+    This class can be used for extending other filters from it.
+
+    """
     def __init__(self, callback):
         """Creates a new filter.
 
-        `callback`: function to call for every event matchinf the filter.
+        `callback` is the function to call for every event matching
+        the filter.
 
         """
         self.callback = callback
@@ -31,8 +58,8 @@ class SourceFilter(Filter):
     def __init__(self, callback, source_id=None, source_ids=[]):
         """Creates a filter for source ids.
 
-        `source_id` must be only one id, whereas `source_ids` must be
-        a list of ids. If both are present, `source_id`is appended to
+        'source_id' must be only one id, whereas 'source_ids' must be
+        a list of ids. If both are present, 'source_id' is appended to
         the list of ids.
 
         """
@@ -52,9 +79,9 @@ class ApplicationFilter(Filter):
     def __init__(self, callback, application_id=None, application_ids=[]):
         """Creates a filter for application ids.
 
-        `application_id` must be only one id, whereas
-        `application_ids` must be a list of ids. If both are present,
-        `application_id`is appended to the list of ids.
+        'application_id' must be only one id, whereas
+        'application_ids' must be a list of ids. If both are present,
+        'application_id' is appended to the list of ids.
 
         """
         super(ApplicationFilter, self).__init__(callback)
@@ -101,4 +128,3 @@ class SimpleTripleFilter(Filter):
             matches = False
         gen.close()
         return matches
-
