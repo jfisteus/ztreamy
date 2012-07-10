@@ -15,7 +15,7 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/
 #
-""" Code related to the modelling and manipulation of events.
+"""Representation and  manipulation of events.
 
 """
 import time
@@ -27,25 +27,38 @@ from streamsem import StreamsemException
 class Deserializer(object):
     """Object that deserializes events.
 
+    The deserializer processes the data from an internal data buffer
+    in a stream model: data chunks can be continously added to the
+    buffer and parsed. Data chunks do not need to finish at complete
+    events. When a partial event is at the end of a chunk, its data is
+    maintained for the next parse attempt.
+
     It maintains a context, so a separate deserialized must be used
     for each event client, in order to not mix the contexts of
     different events.
 
-    """
+    A normal workflow is:
 
+    deserializer = Deserializer()
+    while new_data arrives:
+        events = deserializer.deserialize(new_data)
+
+    """
     def __init__(self):
-        """Creates a new `Deserializer` object."""
+        """Creates a new 'Deserializer' object."""
         self.reset()
 
     def append_data(self, data):
+        """Appends new data to the data buffer of the deserializer."""
         self._data = self._data + data
         self._previous_len = len(self._data)
 
     def data_consumed(self):
+        """Amount of bytes consumed since the last 'append_data()'."""
         return self._previous_len - len(self._data)
 
     def reset(self):
-        """This method resets the state of the parser and dumps pending data"""
+        """Resets the state of the parser and discards pending data."""
         self._data = ''
         self.previous_len = 0
         self._event_reset()
@@ -59,10 +72,24 @@ class Deserializer(object):
     def deserialize(self, data, parse_body=True, complete=False):
         """Deserializes and returns a list of events.
 
-        Deserializes all the events until no more events can be parsed.
+        Deserializes all the events until no more events can be parsed
+        from the data stored in this deserializer object. The remaining
+        data is kept for being parsed in future calls to this method.
+
+        If 'data' is provided, it is appended to the data buffer. It
+        may be None.
+
+        If 'parse_body' is True (the default value), the parser will
+        deserialize also the body of the events according to their
+        types. If not, their body will be stored only in their
+        serialized form (as a string).
+
+        The list of deserialized event objects is returned. The list
+        is empty when no events are deserialized.
 
         """
-        self.append_data(data)
+        if data is not None:
+            self.append_data(data)
         events = []
         event = self.deserialize_next(parse_body=parse_body)
         while event is not None:
@@ -80,9 +107,10 @@ class Deserializer(object):
         Returns None and keeps the pending data stored when a complete
         event is not in the stored data fragment.
 
-        `parse_body` -- if True, the body of the event is parsed according
-        to its type. If not, it is stored just as a string in the event
-        object.
+        If 'parse_body' is True (the default value), the parser will
+        deserialize also the body of the events according to their
+        types. If not, their body will be stored only in their
+        serialized form (as a string).
 
         """
         # Read headers
@@ -160,7 +188,7 @@ class Deserializer(object):
 
 
 class Event(object):
-    """Represents a generic event in the system.
+    """Generic event in the system.
 
     It is intended to be subclassed for application-specific types
     of events.
@@ -199,8 +227,8 @@ class Event(object):
         """Creates an instance of the appropriate subclass of `Event`.
 
         The subclass to use is the one registered for the syntax
-        of the event (see `register_syntax`). If no subclass has
-        been registered for than syntax, an instance of `Event`
+        of the event (see 'register_syntax'). If no subclass has
+        been registered for than syntax, an instance of 'Event'
         is returned instead.
 
         """
@@ -215,8 +243,12 @@ class Event(object):
                  timestamp=None, extra_headers=None):
         """Creates a new event.
 
-        `body` must be the textual representation of the event or
-        provide that textual representation through `str()`.
+        'body' must be the textual representation of the event, or an
+        object providing that textual representation through 'str()'.
+
+        When the created event has to be an instance of a specific
+        subclass (e.g. an 'RDFEvent'), the static 'create()' method
+        should be used instead.
 
         """
         self.event_id = event_id or streamsem.random_id()
@@ -239,6 +271,7 @@ class Event(object):
             self.extra_headers = {}
 
     def set_extra_header(self, header, value):
+        """Adds an extra header to the event."""
         self.extra_headers[header] = value
 
     def append_aggregator_id(self, aggregator_id):

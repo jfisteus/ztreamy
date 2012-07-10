@@ -17,6 +17,18 @@
 #
 """ Implementation of stream servers.
 
+Two servers are provided: 'StreamServer' and 'RelayServer'.
+
+'StreamServer' is a basic server for a stream of events. Right now,
+each server can serve only one stream, although this limitation will
+be removed in the future. It can transmit events from remote sources
+or generated at the process of the server.
+
+'RelayServer' extends the basic server with functionality to listen to
+other streams and retransmitting their events. Events from remote
+sources or generated at the process of the server can also be
+published with this server in the stream.
+
 """
 
 import logging

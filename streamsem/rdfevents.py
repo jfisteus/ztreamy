@@ -25,7 +25,11 @@ import streamsem.events as events
 from streamsem import StreamsemException
 
 class RDFEvent(events.Event):
+    """Event consisting of an RDF body.
 
+    Right now, only the Notation3 serialization is allowed.
+
+    """
     supported_syntaxes = ['text/n3']
 
     def __init__(self, source_id, syntax, body, **kwargs):
@@ -38,7 +42,6 @@ class RDFEvent(events.Event):
         if not syntax in RDFEvent.supported_syntaxes:
             raise StreamsemException('Usupported syntax in RDFEvent',
                                      'programming')
-
         super(RDFEvent, self).__init__(source_id, syntax, None, **kwargs)
         if isinstance(body, Graph):
             self.body = body
