@@ -96,7 +96,7 @@ def main():
                   help="Source identifier (to be used in generated events")
     (options, args) = parser.parse_args()
 
-    publisher = client.EventPublisher("http://localhost:9001/events/publish") 
+    publisher = client.EventPublisher("http://localhost:9001/events/publish")
     bot = TwitterFollowerBot(publisher, options.user, options.period,
                              options.appid, options.source)
     try:
