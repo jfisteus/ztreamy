@@ -15,21 +15,24 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/
 #
-""" A framework for transporting for semantic events."""
+""" A framework for publishing semantic events on the Web."""
 
 import uuid
 import time
 
-from streamsem.utils.rfc3339 import rfc3339
+import streamsem.utils.rfc3339
 
 mimetype_event = 'application/x-streamsem-event'
 
+
 class StreamsemException(Exception):
+    """The type of the exceptions normally used in the framework."""
     def __init__(self, message, error_type=None):
         Exception.__init__(self, message)
-        self.code = self.error_type_code(error_type)
+        self.code = StreamsemException._error_type_code(error_type)
 
-    def error_type_code(self, error_type):
+    @staticmethod
+    def _error_type_code(error_type):
         if error_type == 'event_syntax':
             return 1
         else:
@@ -54,9 +57,9 @@ def get_timestamp(date=None):
 
     """
     if date is not None:
-        return rfc3339(date)
+        return streamsem.utils.rfc3339.rfc3339(date)
     else:
-        return rfc3339(time.time())
+        return streamsem.utils.rfc3339.rfc3339(time.time())
 
 _date_format = "%Y-%m-%dT%H:%M:%S"
 
@@ -67,3 +70,12 @@ def rfc3339_as_time(timestamp):
 
     """
     return time.mktime(time.strptime(timestamp[:-6], _date_format))
+
+# Imports of the main classes of the API provided by the framework,
+# in order to make them available in the "streamsem" namespace.
+#
+from server import StreamServer, RelayServer
+from client import Client, AsyncStreamingClient
+from events import Deserializer, Event
+from rdfevents import RDFEvent
+from filters import Filter, SourceFilter, ApplicationFilter, SimpleTripleFilter
