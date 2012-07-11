@@ -15,6 +15,12 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/
 #
+"""Loggers used by the framework, mainly for performance evaluation.
+
+In principle, they are intended for internal use only.
+
+"""
+
 import time
 
 class StreamsemDefaultLogger(object):
