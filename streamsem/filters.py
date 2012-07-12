@@ -37,8 +37,20 @@ and override its 'filter_event()' method.
 
 """
 import rdflib
+import rdfextras.sparql.parser
+from pyparsing import Word, Literal, NotAny, QuotedString, Group, Forward, \
+                      Keyword, ZeroOrMore, printables, alphanums
 
-from streamsem import rdfevents
+from streamsem import StreamsemException, RDFEvent
+
+# Initializations for having SPARQL support in rdflib
+rdflib.plugin.register(
+    'sparql', rdflib.query.Processor,
+    'rdfextras.sparql.processor', 'Processor')
+rdflib.plugin.register(
+    'sparql', rdflib.query.Result,
+    'rdfextras.sparql.query', 'SPARQLQueryResult')
+
 
 class Filter(object):
     """ A default filter that filters out every event.
@@ -114,34 +126,187 @@ class ApplicationFilter(Filter):
 
 
 class SimpleTripleFilter(Filter):
+    """Filters events matching a given pattern of subject, predicate and object
+
+    Only events that contain at least one triple with the specified
+    subject, predicate and object pass the filter. Not all the three
+    terms of the triple need to be specified, in which case they act
+    as wildcards.
+
+    """
     def __init__(self, callback, subject=None, predicate=None, object_=None,
                  object_literal=None):
         """Creates a filter for RDF triples.
 
         `subject`, `predicate`, `object_` can be None. All the three
         must be strings representing a URI. Use None as a wildcard to
-        match any triple. `object_literal` is a string representing a
-        literal value, and is incompatible with `object_`.
+        match any triple, or just omit the corresponding keyword
+        argument. `object_literal` is a string representing a literal
+        value, and is incompatible with `object_`.
 
         """
+        super(SimpleTripleFilter, self).__init__(callback)
         assert object_ is None or object_literal is None
-        self.callback = callback
-        self.subject = rdflib.term.URIRef(subject) if subject else None
-        self.predicate = rdflib.term.URIRef(predicate) if predicate else None
-        self.object = rdflib.term.URIRef(object_) \
-            if object_ else object_literal
+        subject_p = rdflib.term.URIRef(subject) if subject else None
+        predicate_p = rdflib.term.URIRef(predicate) if predicate else None
+        if object_ is not None:
+            object_p = rdflib.term.URIRef(object_)
+        elif object_literal is not None:
+            object_p = rdflib.term.Literal(object_literal)
+        else:
+            object_p = None
+        self.pattern = (subject_p, predicate_p, object_p)
 
     def filter_event(self, event):
-        if self.callback is not None and isinstance(event, rdfevents.RDFEvent):
-            if self._matches(event.body):
+        if self.callback is not None and isinstance(event, RDFEvent):
+            try:
+                generator = event.body.triples(self.pattern)
+                generator.next()
+            except StopIteration:
+                pass
+            else:
                 self.callback(event)
 
-    def _matches(self, graph):
-        gen = graph.triples((self.subject, self.predicate, self.object))
-        try:
-            gen.next()
-            matches = True
-        except StopIteration:
-            matches = False
-        gen.close()
-        return matches
+
+class SPARQLFilter(Filter):
+    """Filters events matching a given SPARQL ASK query.
+
+    Only the events that match the query can pass the filter.
+
+    """
+    def __init__(self, callback, sparql_query):
+        """Creates a SPARQL filter for RDF triples."""
+        if sparql_query.strip()[:3].lower() != 'ask':
+            raise StreamsemException('Only ASK queries are allowed '
+                                     'in SPARQLFilter')
+        super(SPARQLFilter, self).__init__(callback)
+        self.query = rdfextras.sparql.parser.parse(sparql_query)
+
+    def filter_event(self, event):
+        if self.callback is not None and isinstance(event, RDFEvent):
+            if event.body.query(self.query).askAnswer:
+                self.callback(event)
+
+
+class TripleFilter(SPARQLFilter):
+    """Filters events containing certain triple patterns.
+
+    Only the events that match the filter pattern can pass the filter.
+    These are some sample patterns:
+
+    Example 1:
+    <http://example.com/me http://example.com/liveAt http://example.com/here>
+
+    Example 2 (with a wildcard):
+    < * http://example.com/liveAt http://example.com/here>
+
+    Example 3 (AND pattern):
+    <http://example.com/me http://example.com/liveAt http://example.com/here>
+    AND
+    <http://example.com/me http://example.com/hasName "Paul">
+
+    Example 4 (OR pattern and parenthesis):
+    <http://example.com/me http://example.com/liveAt http://example.com/here>
+    AND
+    ( <http://example.com/me http://example.com/hasName "Paul">
+      OR
+      <http://example.com/me http://example.com/hasName "Maria">
+    )
+
+    Example 5 (variables):
+    <http://example.com/me http://example.com/liveAt ?place>
+    AND
+    ?place http://example.com/locatedIn http://example.com/instances/France>
+
+    """
+    def __init__(self, callback, filter_expression):
+        """Creates a filter for RDF triples."""
+        sparql_query = _triple_filter_to_sparql(filter_expression)
+        print(sparql_query)
+        super(TripleFilter, self).__init__(callback, sparql_query)
+
+
+#
+# Parser for filtering expressions.
+#
+_filter_parser = None
+def _create_filter_parser():
+    and_kw = Keyword('AND')
+    or_kw = Keyword('OR')
+    variable = Literal('?') + Word(alphanums + '_').leaveWhitespace()
+    uri_term = NotAny(Literal('"')) + Word(printables, excludeChars='>*')
+    uri_part = Keyword('*') ^ uri_term ^ variable
+    literal_term = QuotedString(quoteChar='"', escChar='\\')
+    triple = Group(Literal('<').suppress() + uri_part.setResultsName('subj')
+                   + uri_part.setResultsName('pred')
+                   + (Group(uri_part).setResultsName('obj')
+                      ^ Group(literal_term).setResultsName('objlit'))
+                   + Literal('>').suppress())
+    expr = Forward()
+    atom = (triple.setResultsName('triple')
+            | Literal('(').suppress() + expr + Literal(')').suppress())
+    and_group = Group(atom + ZeroOrMore(and_kw.suppress() + atom))
+    or_group = Group(atom + ZeroOrMore(or_kw.suppress() + atom))
+    expr << (and_group.setResultsName('and') ^ or_group.setResultsName('or'))
+    return expr
+
+def _triple_filter_to_sparql(text):
+    global _filter_parser
+    if _filter_parser is None:
+        _filter_parser = _create_filter_parser()
+    return _build_sparql(_filter_parser.parseString(text, parseAll=True))
+
+def _build_sparql(parse_results):
+    parts = ['ASK']
+    pattern = _build_sparql_internal(parse_results, [0])
+    if len(pattern) > 0 and not pattern[0].startswith('{'):
+        parts.append('{')
+        parts.extend(pattern)
+        parts.append('}')
+    else:
+        parts.extend(pattern)
+    return ' '.join(parts)
+
+def _build_sparql_internal(parse_results, num_used_variables):
+    parts = []
+    if parse_results.getName() == 'triple':
+        parts.append(_represent_uri_term(parse_results[0],
+                                         num_used_variables))
+        parts.append(_represent_uri_term(parse_results[1],
+                                         num_used_variables))
+        if parse_results[2].getName() == 'objlit':
+            parts.append('"' + parse_results[2][0] + '"')
+        else:
+            parts.append(_represent_uri_term(parse_results[2][0],
+                                             num_used_variables))
+        parts.append('.')
+    elif parse_results.getName() == 'and':
+        if len(parse_results) < 2:
+            parts = _build_sparql_internal(parse_results[0],
+                                           num_used_variables)
+        else:
+            for expr in parse_results:
+                parts.extend(_build_sparql_internal(expr, num_used_variables))
+    elif parse_results.getName() == 'or':
+        if len(parse_results) < 2:
+            parts = _build_sparql_internal(parse_results[0],
+                                           num_used_variables)
+        else:
+            ## parts.append('{')
+            operands = []
+            for expr in parse_results:
+                operands.append(' '.join(_build_sparql_internal(expr,
+                                                          num_used_variables)))
+            parts.append('{ ' + ' } UNION { '.join(operands) + ' }')
+            ## parts.append('}')
+    return parts
+
+def _represent_uri_term(parse_results, num_used_variables):
+    if parse_results == '*':
+        result = '?var_int__' + str(num_used_variables[0])
+        num_used_variables[0] += 1
+    elif parse_results.startswith('?'):
+        result = parse_results
+    else:
+        result = '<' + parse_results + '>'
+    return result
