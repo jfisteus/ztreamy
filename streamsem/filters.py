@@ -43,14 +43,6 @@ from pyparsing import Word, Literal, NotAny, QuotedString, Group, Forward, \
 
 from streamsem import StreamsemException, RDFEvent
 
-# Initializations for having SPARQL support in rdflib
-rdflib.plugin.register(
-    'sparql', rdflib.query.Processor,
-    'rdfextras.sparql.processor', 'Processor')
-rdflib.plugin.register(
-    'sparql', rdflib.query.Result,
-    'rdfextras.sparql.query', 'SPARQLQueryResult')
-
 
 class Filter(object):
     """ A default filter that filters out every event.
@@ -123,6 +115,38 @@ class ApplicationFilter(Filter):
     def filter_event(self, event):
         if event.application_id in self.application_ids:
             self.callback(event)
+
+
+class VocabularyFilter(Filter):
+    def __init__(self, callback, uri_prefixes):
+        """Creates a filter based on prefixes of the URIs of the event.
+
+        'uri_prefixes' has to be a string or a list of strings. The
+        events that contain a URI matching at least one of the
+        prefixes are selected. The rest are filtered out.
+
+        """
+        super(VocabularyFilter, self).__init__(callback)
+        if isinstance(uri_prefixes, basestring):
+            self.uri_prefixes = [uri_prefixes]
+        else:
+            self.uri_prefixes = uri_prefixes
+
+    def filter_event(self, event):
+        if self.callback is not None and isinstance(event, RDFEvent):
+            for triple in event.body:
+                if (self._test_uri(triple[0])
+                    or self._test_uri(triple[1])
+                    or self._test_uri(triple[2])):
+                    self.callback(event)
+                    break
+
+    def _test_uri(self, uriref):
+        if isinstance(uriref, rdflib.term.URIRef):
+            for prefix in self.uri_prefixes:
+                if uriref.startswith(prefix):
+                    return True
+        return False
 
 
 class SimpleTripleFilter(Filter):
@@ -222,7 +246,7 @@ class TripleFilter(SPARQLFilter):
     def __init__(self, callback, filter_expression):
         """Creates a filter for RDF triples."""
         sparql_query = _triple_filter_to_sparql(filter_expression)
-        print(sparql_query)
+        ## print(sparql_query)
         super(TripleFilter, self).__init__(callback, sparql_query)
 
 
