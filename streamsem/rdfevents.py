@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see
-# <http://www.gnu.org/
+# <http://www.gnu.org/licenses/>.
 #
 """ Code related to the modelling and manipulation of RDF events.
 
@@ -58,8 +58,7 @@ class RDFEvent(events.Event):
         if self.syntax == 'text/n3':
             return self._parse_body_rdflib(body, syntax='n3')
         else:
-            raise StreamsemException('Unsupported syntax',
-                                               'event_syntax')
+            raise StreamsemException('Unsupported syntax', 'event_syntax')
 
     def _parse_body_rdflib(self, body, syntax):
         g = Graph()
