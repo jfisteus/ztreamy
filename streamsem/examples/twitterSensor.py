@@ -2,7 +2,6 @@ import pycurl
 import cjson as json
 import tornado
 
-# from geopy import geocoders
 from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
@@ -10,6 +9,7 @@ from rdflib import URIRef
 from tornado.httpclient import HTTPRequest, HTTPResponse
 from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
+from geonamesClient import GeonamesClient
 from streamsem import rdfevents
 from streamsem import client
 
@@ -26,7 +26,7 @@ class TwitterStreamSensor():
         self.app_id = app_id
         self.source_id = source_id
         self.only_geo = only_geo
-        # self.geo = geocoders.GeoNames()
+        self.geo = GeonamesClient(username = "dummy")
 
     def toN3(self, tweet_dict):
         graph = Graph()
@@ -76,6 +76,9 @@ class TwitterStreamSensor():
                 longitude, latitude = tweet_dict["coordinates"]["coordinates"]
                 graph.add((tweet_id, self.NS["longitude"], Literal(longitude)))
                 graph.add((tweet_id, self.NS["latitude"], Literal(latitude)))
+		# Resolve to Wikipedia URL using Geonames
+		wikiUrl = self.geo.findNearbyWikipedia(longitude, latitude)
+		graph.add((tweet_id, self.NS["wiki"], Literal(wikiUrl)))
         return graph
 
     def decode(self, tweet):
