@@ -33,7 +33,7 @@ from streamsem import client
 
 class WikipediaStreamSensor():
    
-    def __init__(self, publisher, app_id = "TwitterSensor", source_id = "TwitterSensor0"):
+    def __init__(self, publisher, app_id = "WikipediaSensor", source_id = "WikipediaSensor0"):
     	self.API_URL = "http://en.wikipedia.org/w/api.php?action=query&list=recentchanges&redirects&format=json&rcnamespace=0&rclimit=500"
 	self.NS = Namespace("http://webtlab.it.uc3m.es/")
 	self.DC = Namespace("http://purl.org/dc/elements/1.1/")
