@@ -34,6 +34,7 @@ import tornado.options
 import logging
 import zlib
 import sys
+import urllib2
 
 import streamsem
 from streamsem import events
@@ -264,6 +265,33 @@ class AsyncStreamingClient(object):
             else:
                 evs.append(event)
             event = self._deserializer.deserialize_next(parse_body=parse_body)
+        return evs
+
+
+class SynchronousClient(object):
+    """Synchronous client.
+
+    This client should be used in short-lived mode.
+
+    """
+    def __init__(self, server_url, parse_event_body=True,
+                 last_event_seen=None):
+        self.server_url = server_url
+        self.last_event_seen = last_event_seen
+        self.deserializer = events.Deserializer()
+        self.parse_event_body = parse_event_body
+
+    def receive_events(self):
+        url = self.server_url
+        if self.last_event_seen is not None:
+            url += '?last-seen=' + self.last_event_seen
+        connection = urllib2.urlopen(url)
+        data = connection.read()
+        evs = self.deserializer.deserialize(data, complete=True,
+                                            parse_body=self.parse_event_body)
+        connection.close()
+        if len(evs) > 0:
+            self.last_event_seen = evs[-1].event_id
         return evs
 
 

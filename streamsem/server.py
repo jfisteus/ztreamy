@@ -83,7 +83,8 @@ class StreamServer(object):
 
     """
     def __init__(self, port, ioloop=None, allow_publish=False,
-                 buffering_time=None, source_id=None):
+                 buffering_time=None, source_id=None,
+                 num_recent_events=2048):
         """Creates a stream server object.
 
         The server object will to start to process requests until
@@ -312,7 +313,7 @@ class _WebApplication(tornado.web.Application):
                                 kwargs=compressed_kwargs),
             tornado.web.URLSpec(r"/events/priority", _EventStreamHandler,
                                 kwargs=priority_kwargs),
-            tornado.web.URLSpec(r"/events/next", _NextEventHandler,
+            tornado.web.URLSpec(r"/events/short-lived", _ShortLivedHandler,
                                 kwargs=handler_kwargs),
         ]
         if allow_publish:
@@ -371,7 +372,7 @@ class _Client(object):
 
 
 class _EventDispatcher(object):
-    def __init__(self):
+    def __init__(self, num_recent_events=2048):
         self.priority_clients = []
         self.streaming_clients = []
         self.compressed_streaming_clients = []
@@ -384,8 +385,9 @@ class _EventDispatcher(object):
         self._next_client_cleanup = -1
         self._periods_since_last_event = 0
         self.sent_bytes = 0
+        self.recent_events = _RecentEventsBuffer(num_recent_events)
 
-    def register_client(self, client):
+    def register_client(self, client, last_event_seen=None):
         if client.streaming:
             if client.priority:
                 self.priority_clients.append(client)
@@ -395,7 +397,14 @@ class _EventDispatcher(object):
                 self.streaming_clients.append(client)
             logging.info('Streaming client registered; stream: %i; comp: %i'\
                              %(client.streaming, client.compress))
-        else:
+        if last_event_seen != None:
+            # Send the available events after the last seen event
+            evs, none_lost = self.recent_events.newer_than(last_event_seen)
+            if len(evs) > 0:
+                client.send(self._serialize_events(evs))
+                if not client.streaming:
+                    client.close()
+        if not client.streaming and not client.closed:
             self.one_time_clients.append(client)
 
     def deregister_client(self, client):
@@ -430,6 +439,7 @@ class _EventDispatcher(object):
                        + len(self.compressed_streaming_clients))
         logging.info('Sending %r events to %r clients', len(evs),
                      num_clients)
+        self.recent_events.append_events(evs)
         self._next_client_cleanup -= 1
         if self._next_client_cleanup == 0:
             self.clean_closed_clients()
@@ -463,6 +473,7 @@ class _EventDispatcher(object):
                 self._send(serialized, client)
             for client in self.one_time_clients:
                 self._send(serialized, client)
+                client.close()
             if len(self.compressed_streaming_clients) > 0:
                 compressed_data = (self._compressor.compress(serialized)
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
@@ -598,20 +609,91 @@ class _EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.deregister_client(self.client)
 
 
-class _NextEventHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, dispatcher=None):
+class _ShortLivedHandler(tornado.web.RequestHandler):
+    def __init__(self, application, request, dispatcher=None, server=None):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
+        # 'server' argument is ignored (not necessary)
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = _Client(self.on_new_event, streaming=False)
-        self.dispatcher.register_client(self.client)
+        last_event_seen = self.get_argument('last-seen', default=None)
+        self.client = _Client(self, self._on_new_data, streaming=False)
+        self.dispatcher.register_client(self.client,
+                                        last_event_seen=last_event_seen)
 
-    def on_new_event(self, event):
+    def _on_new_data(self, data):
         if not self.request.connection.stream.closed():
-            self.write(str(event))
-            self.finish()
+            self.write(data)
+
+
+class _RecentEventsBuffer(object):
+    """A circular buffer that stores the latest events of a stream."""
+    def __init__(self, size):
+        """Creates a new buffer with capacity for 'size' events."""
+        self.buffer = [None] * size
+        self.position = 0
+        self.events = {}
+
+    def append_event(self, event):
+        """Appends an event to the buffer."""
+        if self.buffer[self.position] is not None:
+            del self.events[self.buffer[self.position].event_id]
+        self.buffer[self.position] = event
+        self.events[event.event_id] = self.position
+        self.position += 1
+        if self.position == len(self.buffer):
+            self.position = 0
+
+    def append_events(self, events):
+        """Appends a list of events to the buffer."""
+        if self.position + len(events) >= len(self.buffer):
+            first_block = len(self.buffer) - self.position
+            self._append_internal(events[:first_block])
+            self._append_internal(events[first_block:])
+        else:
+            self._append_internal(events)
+
+    def newer_than(self, event_id):
+        """Returns the events newer than the given 'event_id'.
+
+        If no event in the buffer has the 'event_id', all the events are
+        returned. If the newest event in the buffer has that id, an empty
+        list is returned.
+
+        Returns a tuple ('events', 'complete') where 'events' is the list
+        of events and 'complete' is True when 'event_id' is in the buffer.
+
+        """
+        if event_id in self.events:
+            pos = self.events[event_id] + 1
+            if pos == len(self.buffer):
+                pos = 0
+            if pos == self.position:
+                return [], True
+            elif pos < self.position:
+                return self.buffer[pos:self.position], True
+            else:
+                return self.buffer[pos:] + self.buffer[:self.position], True
+        else:
+            if (self.position != len(self.buffer) - 1
+                and self.buffer[self.position + 1] is None):
+                return self.buffer[:self.position], False
+            else:
+                return (self.buffer[self.position:]
+                        + self.buffer[:self.position]), False
+
+    def _append_internal(self, events):
+        self._remove_from_dict(self.position, len(events))
+        self.buffer[self.position:self.position + len(events)] = events
+        for i in range(0, len(events)):
+            self.events[events[i].event_id] = self.position + i
+        self.position = (self.position + len(events)) % len(self.buffer)
+
+    def _remove_from_dict(self, position, num_events):
+        for i in range(position, position + num_events):
+            if self.buffer[i] is not None:
+                del self.events[self.buffer[i].event_id]
 
 def main():
     import time
