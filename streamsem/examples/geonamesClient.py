@@ -159,13 +159,54 @@ class GeonamesClient():
 			if not self.checkAPIerror(geo_dict):
 				if "geonames" in geo_dict:
 					entries = len(geo_dict["geonames"])
+					for idx in range(0, entries):
+						entry = geo_dict["geonames"][idx]
+						geoId = entry["geonameId"]					
+						result.append(geoId)					
+					# TODO: Add cache
+					# self.cache[url] = result
+			
+		return result
+
+
+	# Cost = one credit per call see: http://www.geonames.org/export/credits.html
+	def children(self, id, godown = 1, maxResults = 200, credits = 1):		
+
+		# Default URL to answer: Google Maps one
+		result = []
+
+		# Call the service
+		serviceUrl = self.BASEURL + "childrenJSON"
+		params = "?geonameId=" + str(id) + "&maxRows=" + str(maxResults) + "&username=" + self.username
+		url = serviceUrl + params
+
+		# TODO: Add cache
+		# if url in self.cache:
+		#	return self.cache[url]
+
+		content = ""
+		if self.hourlyGateKeeper.canIaccess(credits) and self.dailyGateKeeper.canIaccess(credits):
+			storage = cStringIO.StringIO()
+			self.callService(url, storage)
+			content = storage.getvalue()
+			storage.close()
+
+		# Read the answer
+		if content != "":
+			geo_dict = json.decode(content)
+			# Check for geonames errors: http://www.geonames.org/export/webservice-exception.html
+			if not self.checkAPIerror(geo_dict):
+				if "geonames" in geo_dict:
+					entries = len(geo_dict["geonames"])
 					print entries
 					for idx in range(0, entries):
 						entry = geo_dict["geonames"][idx]
 						geoId = entry["geonameId"]					
-						toponym = entry["toponymName"]					
-						country = entry["countryCode"]
-						result.append((geoId, toponym, country))					
+						result.append(geoId)					
+						if (godown > 0) and "numberOfChildren" in entry:
+							hasChildren = int(entry["numberOfChildren"])
+							if hasChildren > 0:
+								result.extend(self.children(geoId,godown-1))
 					# TODO: Add cache
 					# self.cache[url] = result
 			
@@ -208,10 +249,13 @@ class GeonamesClient():
 		return storage
 
 def main():
+
 	client = GeonamesClient(username = "dummy")
 	print client.findNearbyWikipedia("-3.764647", "40.332020")
 	print client.findNearbyPlaceName("-3.764647", "40.332020")
-	print client.findNearbyPlaceNames("-3.7", "40.3")
+	print client.findNearbyPlaceNames("-3.7", "40.3", radius=10)
+	print client.children(2510769, godown=0)
+
 
 if __name__ == "__main__":
     main()
