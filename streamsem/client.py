@@ -35,6 +35,8 @@ import logging
 import zlib
 import sys
 import urllib2
+import httplib
+from urlparse import urlparse
 
 import streamsem
 from streamsem import events
@@ -296,7 +298,7 @@ class SynchronousClient(object):
 
 
 class EventPublisher(object):
-    """Publishes events by sending them to a server.
+    """Publishes events by sending them to a server. Asynchronous.
 
     Uses an asynchronous HTTP client, but does not manage an ioloop
     itself. The ioloop must be run by the calling code.
@@ -344,6 +346,58 @@ class EventPublisher(object):
             logging.error(response.error)
         else:
             logging.info('Event successfully sent to server')
+
+
+class SynchronousEventPublisher(object):
+    """Publishes events by sending them to a server. Synchronous.
+
+    Uses a synchronous HTTP client.
+
+    """
+    _headers = {'Content-Type': streamsem.mimetype_event}
+
+    def __init__(self, server_url, io_loop=None):
+        """Creates a new 'SynchronousEventPublisher' object.
+
+        Events are sent in separate HTTP requests to the server given
+        by 'server_url'.
+
+        """
+        url_parts = urlparse(server_url)
+        assert url_parts.scheme == 'http'
+        self.hostname = url_parts.hostname
+        self.port = url_parts.port or 80
+        self.path = url_parts.path
+        if url_parts.query is not None:
+            self.path += '?' + url_parts.query
+
+    def publish(self, event):
+        """Publishes a new event.
+
+        The event is sent to the server in a new HTTP request. Returns
+        True if the data is received correctly by the server.
+
+        """
+        body = str(event)
+        conn = httplib.HTTPConnection(self.hostname, self.port)
+        conn.request('POST', self.path, body,
+                     SynchronousEventPublisher._headers)
+        response = conn.getresponse()
+        if response.status == 200:
+            logger.logger.event_published(event)
+            return True
+        else:
+            logging.error(str(response.status) + ' ' + response.reason)
+            return False
+
+    def close(self):
+        """Closes the event publisher.
+
+        It does nothing in this class, but is maintained for
+        compatibility with the asynchronous publisher.
+
+        """
+        pass
 
 
 def read_cmd_options():
