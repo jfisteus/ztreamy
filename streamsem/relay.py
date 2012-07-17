@@ -17,7 +17,7 @@
 #
 import tornado.options
 
-from streamsem.server import RelayServer
+from streamsem.server import RelayStream, StreamServer
 
 def read_cmd_options():
     from optparse import Values, OptionParser
@@ -48,10 +48,12 @@ def main():
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = RelayServer(tornado.options.options.port, options.stream_urls,
+    server = StreamServer(tornado.options.options.port)
+    stream = RelayStream('/relay', options.stream_urls,
                          buffering_time=buffering_time)
+    server.add_stream(stream)
 
-    # Uncomment to test RelayServer.stop():
+    # Uncomment to test RelayStream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
 
     server.start()

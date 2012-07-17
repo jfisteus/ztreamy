@@ -15,19 +15,21 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-""" Implementation of stream servers.
+""" Implementation of streams and an asynchronous HTTP server for them.
 
-Two servers are provided: 'StreamServer' and 'RelayServer'.
+Two kinds of streams are provided: 'Stream' and 'RelayStream'.
 
-'StreamServer' is a basic server for a stream of events. Right now,
-each server can serve only one stream, although this limitation will
-be removed in the future. It can transmit events from remote sources
-or generated at the process of the server.
+'Stream' is a basic stream of events. It can transmit events received
+from remote sources or generated at the process of the server.
 
-'RelayServer' extends the basic server with functionality to listen to
+'RelayStream' extends the basic stream with functionality to listen to
 other streams and retransmitting their events. Events from remote
 sources or generated at the process of the server can also be
-published with this server in the stream.
+published in this type of stream.
+
+The server is asynchronous. Be careful when doing blocking calls from
+callbacks (for example, sources of events and filters), because the
+server will be blocked.
 
 """
 
@@ -51,112 +53,58 @@ param_max_events_sync = 20
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
 
-class StreamServer(object):
-    """Serves a stream of events through HTTP.
 
-    Clients connect to this server in order to listen to the events
-    it sends. The server provides several HTTP paths which clients
-    may use:
+class StreamServer(tornado.web.Application):
+    """An HTTP server for event streams.
 
-    '/': not implemented yet. Intended for human readable
-        information about the stream.
+    The server is able to serve one or more streams. Each stream is
+    identified by its path in the server. A typical use of the server
+    consists of creating it, registering one or more streams, and
+    starting it::
 
-    '/events/stream': uncompressed stream with long-lived response.
-        The response is not closed by the server, and events are sent
-        to the client as they are available. A client library able
-        to notify the user as new chunks of data are received is needed
-        in order to follow this stream.
-
-    '/events/compressed': zlib-compressed stream with long-lived
-        response.  Similar to how the previous path works with the
-        only difference of compression.
-
-    '/events/priority': uncompressed stream with lower delays intended
-        for clients with priority, typically relay servers.
-
-    '/events/next': available events are sent to the client uncompressed.
-        The request is closed immediately. The client can specify the latest
-        event it has received in order to get the events that follow it.
-
-    '/events/publish': receives events from event sources in order to be
-        published in the stream.
+    stream1 = Stream('/mystream1')
+    stream2 = Stream('/mystream1')
+    server = StreamServer(8080)
+    server.add_stream(stream1)
+    server.add_stream(stream2)
+    server.start()
 
     """
-    def __init__(self, port, ioloop=None, allow_publish=False,
-                 buffering_time=None, source_id=None,
-                 num_recent_events=2048):
-        """Creates a stream server object.
+    def __init__(self, port, ioloop=None):
+        """Creates a new server.
 
-        The server object will to start to process requests until
-        the 'start()' method is invoked.
+        'port' specifies the port number in which the HTTP server will
+        listen.
 
-        The server listens on the given 'port' for HTTP requests. It
-        does not accept events from clients, unless 'allow_publish' is
-        set to 'True'.
-
-        'buffering_time' controls the period for which events are
-        accumulated in a buffer before sending them to the
-        clients. Higher times improve CPU performance in the server
-        and compression ratios, but increase the latency in the
-        delivery of events.
-
-        If a 'ioloop' object is given, the client will block on it
-        apon calling the 'start()' method. If not, it will block on
-        the default 'ioloop' of Tornado.
+        The server won't start to serve streams until start() is
+        called.  Streams cannot be registered in the server after it
+        has been started.
 
         """
+        # No settings by now...
+        settings = dict()
+        super(StreamServer, self).__init__(**settings)
         logging.info('Initializing server...')
-        if source_id is not None:
-            self.source_id = source_id
-        else:
-            self.source_id = streamsem.random_id()
+        self.http_server = tornado.httpserver.HTTPServer(self)
+        self.streams = []
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
-        self.app = _WebApplication(self, allow_publish=allow_publish)
-        self.http_server = tornado.httpserver.HTTPServer(self.app)
-        self.buffering_time = buffering_time
-        self._event_buffer = []
-        if buffering_time:
-            self.buffer_dump_sched = \
-                tornado.ioloop.PeriodicCallback(self._dump_buffer,
-                                                buffering_time,
-                                                self.ioloop)
-        self.stats_sched = tornado.ioloop.PeriodicCallback( \
-            self.app.dispatcher.stats, 10000, self.ioloop)
         self._looping = False
         self._started = False
         self._stopped = False
 
-    def dispatch_event(self, event):
-        """Publishes an event in this stream.
+    def add_stream(self, stream):
+        """Adds a new stream to be served in this server.
 
-        The event may not be sent immediately to normal clients if the
-        server is configured to do buffering. However, it will be sent
-        immediately to priority clients.
+        'stream' is an object of the class 'Stream', its sublcasses or
+        any other class providing a similar interface.
 
-        """
-#        logger.logger.event_published(event)
-        self.app.dispatcher.dispatch_priority([event])
-        if self.buffering_time is None:
-            self.app.dispatcher.dispatch([event])
-        else:
-            self._event_buffer.append(event)
-
-    def dispatch_events(self, events):
-        """Publishes a list of events in this stream.
-
-        The events may not be sent immediately to normal clients if
-        the server is configured to do buffering. However, they will
-        be sent immediately to priority clients.
+        This method cannot be called after the server is started through
+        its 'start()' method.
 
         """
-#        for e in events:
-#            logger.logger.event_published(e)
-        self.app.dispatcher.dispatch_priority(events)
-        if self.buffering_time is None:
-            self.app.dispatcher.dispatch(events)
-        else:
-            self._event_buffer.extend(events)
+        assert not self._started
+        self.streams.append(stream)
 
     def start(self, loop=True):
         """Starts the server.
@@ -169,10 +117,10 @@ class StreamServer(object):
         """
         assert(not self._started)
         logging.info('Starting server...')
+        self._register_handlers()
         self.http_server.listen(self.port)
-        if self.buffering_time:
-            self.buffer_dump_sched.start()
-        self.stats_sched.start()
+        for stream in self.streams:
+            stream.start()
         self._started = True
         if loop:
             self._looping = True
@@ -191,14 +139,194 @@ class StreamServer(object):
         if self._started and not self._stopped:
             logging.info('Stopping server...')
             self.http_server.stop()
-            self.app.dispatcher.close()
-            if self.buffering_time:
-                self.buffer_dump_sched.stop()
-            self.stats_sched.stop()
+            for stream in self.streams:
+                stream.close()
             self._stopped = True
             if self._looping == True:
                 self.ioloop.stop()
                 self._looping = False
+
+    def _register_handlers(self):
+        handlers = []
+        for stream in self.streams:
+            handler_kwargs = {
+                'server': stream,
+                'dispatcher': stream.dispatcher,
+            }
+            compressed_kwargs = {'compress': True}
+            compressed_kwargs.update(handler_kwargs)
+            priority_kwargs = {'compress': False, 'priority': True}
+            priority_kwargs.update(handler_kwargs)
+            handlers.extend([
+                ## tornado.web.URLSpec(r"/", _MainHandler),
+                tornado.web.URLSpec(stream.path + r"/stream",
+                                    _EventStreamHandler,
+                                    kwargs=handler_kwargs),
+                tornado.web.URLSpec(stream.path + r"/compressed",
+                                    _EventStreamHandler,
+                                    kwargs=compressed_kwargs),
+                tornado.web.URLSpec(stream.path + r"/priority",
+                                    _EventStreamHandler,
+                                    kwargs=priority_kwargs),
+                tornado.web.URLSpec(stream.path + r"/short-lived",
+                                    _ShortLivedHandler,
+                                    kwargs=handler_kwargs),
+            ])
+            if stream.allow_publish:
+                publish_kwargs = {'server': stream}
+                handlers.append(tornado.web.URLSpec(stream.path + r"/publish",
+                                                    _EventPublishHandler,
+                                                    kwargs=publish_kwargs))
+        self.add_handlers(".*$", handlers)
+
+
+class Stream(object):
+    """Stream of events.
+
+    The stream must be published through a web server::
+
+    server = StreamServer(8080)
+    stream = Stream('/mystream')
+    server.add_stream(stream)
+
+    The stream has an associated path prefix, which is used to
+    identify the stream within the server (a server can serve more
+    than one stream). Clients connect to the server and provide the
+    appropriate HTTP path. This path is the concatenation of the
+    prefix of the stream and the following subcomponents:
+
+    '/': not implemented yet. Intended for human readable
+        information about the stream.
+
+    '/stream': uncompressed stream with long-lived response.  The
+        response is not closed by the server, and events are sent to
+        the client as they are available. A client library able to
+        notify the user as new chunks of data are received is needed
+        in order to follow this stream.
+
+    '/compressed': zlib-compressed stream with long-lived response.
+        Similar to how the previous path works with the only
+        difference of compression.
+
+    '/priority': uncompressed stream with lower delays intended for
+        clients with priority, typically relay servers.
+
+    '/next': available events are sent to the client uncompressed.
+        The request is closed immediately. The client can specify the
+        latest event it has received in order to get the events that
+        follow it.
+
+    '/publish': receives events from event sources in order to be
+        published in the stream.
+
+    There are two ways of publishing events in a stream: sending them
+    through HTTP using the .../publish path, if allowed by the
+    configuration of the stream, or using locally its
+    'dispatch_event()' or 'dispatch_events()' methods.
+
+    """
+    def __init__(self, path, allow_publish=False, buffering_time=None,
+                 source_id=None, num_recent_events=2048, ioloop=None):
+        """Creates a stream object.
+
+        The stream will be served with the specified 'path' prefix,
+        which should start with a slash ('/') and should not end with
+        one. If 'path' does not start with a slash, this constructor
+        inserts it automatically. For example, if the value of 'path'
+        is '/mystream' the stream will be served as:
+
+        http://host:port/mystream/stream
+        http://host:port/mystream/compressed
+        (etc.)
+
+        The stream does not accept events from clients, unless
+        'allow_publish' is set to 'True'.
+
+        'buffering_time' controls the period for which events are
+        accumulated in a buffer before sending them to the
+        clients. Higher times improve CPU performance in the server
+        and compression ratios, but increase the latency in the
+        delivery of events.
+
+        If a 'ioloop' object is given, it will be used by the internal
+        timers of the stream.  If not, the default 'ioloop' of the
+        Tornado instance will be used.
+
+        """
+        if source_id is not None:
+            self.source_id = source_id
+        else:
+            self.source_id = streamsem.random_id()
+        if path.startswith('/'):
+            self.path = path
+        else:
+            self.path = '/' + path
+        self.allow_publish = allow_publish
+        self.dispatcher = _EventDispatcher()
+        self.buffering_time = buffering_time
+        if ioloop is None:
+            ioloop = tornado.ioloop.IOLoop.instance()
+        self._event_buffer = []
+        if buffering_time:
+            self.buffer_dump_sched = \
+                tornado.ioloop.PeriodicCallback(self._dump_buffer,
+                                                buffering_time, ioloop)
+        self.stats_sched = tornado.ioloop.PeriodicCallback( \
+                                          self.dispatcher.stats, 10000, ioloop)
+
+    def start(self):
+        """Starts the relay server.
+
+        The StreamServer will automatically call this method when it
+        is started. User code won't probably need to call it.
+
+        """
+        if self.buffering_time:
+            self.buffer_dump_sched.start()
+        self.stats_sched.start()
+
+    def stop(self):
+        """Stops the relay server.
+
+        The StreamServer will automatically call this method when it
+        is stopped. User code won't probably need to call it.
+
+        """
+        self.dispatcher.close()
+        if self.buffering_time:
+            self.buffer_dump_sched.stop()
+        self.stats_sched.stop()
+
+    def dispatch_event(self, event):
+        """Publishes an event in this stream.
+
+        The event may not be sent immediately to normal clients if the
+        server is configured to do buffering. However, it will be sent
+        immediately to priority clients.
+
+        """
+#        logger.logger.event_published(event)
+        self.dispatcher.dispatch_priority([event])
+        if self.buffering_time is None:
+            self.dispatcher.dispatch([event])
+        else:
+            self._event_buffer.append(event)
+
+    def dispatch_events(self, events):
+        """Publishes a list of events in this stream.
+
+        The events may not be sent immediately to normal clients if
+        the server is configured to do buffering. However, they will
+        be sent immediately to priority clients.
+
+        """
+#        for e in events:
+#            logger.logger.event_published(e)
+        self.dispatcher.dispatch_priority(events)
+        if self.buffering_time is None:
+            self.dispatcher.dispatch(events)
+        else:
+            self._event_buffer.extend(events)
 
     def _start_timing(self):
         self._cpu_timer_start = time.clock()
@@ -213,36 +341,37 @@ class StreamServer(object):
                                     self._real_timer_start)
 
     def _dump_buffer(self):
-        self.app.dispatcher.dispatch(self._event_buffer)
+        self.dispatcher.dispatch(self._event_buffer)
         self._event_buffer = []
 
 
-class RelayServer(StreamServer):
-    """A server that relays events from other servers.
+class RelayStream(Stream):
+    """A stream that relays events from other streams.
 
     This server listens to other event streams and publishes their
-    events as a new stream. A filter can optionally be apply in order
-    to select which events are published.
+    events as a new stream. A filter can optionally be applied in
+    order to select which events are published.
 
     """
-    def __init__(self, port, source_urls, ioloop=None,
+    def __init__(self, path, source_urls,
                  allow_publish=False, filter_=None,
-                 buffering_time=None):
-        """Creates a new server, but does not start it.
+                 buffering_time=None, ioloop=None):
+        """Creates a new relay stream.
 
-        The server will transmit the events of the streams specified
+        The server will retransmit the events of the streams specified
         in 'source_urls' (either a list or a string with just one
         URL).  A filter may be specified in 'filter_' in order to
         select which events are relayed (see the 'filters' module for
         more information).
 
         The rest of the parameters are as described in the constructor
-        of the StreamServer class.
+        of the Stream class.
 
         """
-        super(RelayServer, self).__init__(port, ioloop=ioloop,
+        super(RelayStream, self).__init__(path,
                                           allow_publish=allow_publish,
-                                          buffering_time=buffering_time)
+                                          buffering_time=buffering_time,
+                                          ioloop=ioloop)
         if filter_ is not None:
             filter_.callback = self._relay_events
             event_callback = filter_.filter_events
@@ -259,26 +388,27 @@ class RelayServer(StreamServer):
                                   separate_events=False) \
                  for url in source_urls]
 
-    def start(self, loop=True):
+    def start(self):
         """Starts the relay server.
 
-        See 'start()' in StreamServer for more information.
+        The StreamServer will automatically call this method when it
+        is started. User code won't probably need to call it.
 
         """
         for client in self.clients:
             client.start(loop=False)
-        super(RelayServer, self).start(loop)
+        super(RelayStream, self).start()
 
     def stop(self):
         """Stops the relay server.
 
-        See 'start()' in StreamServer for more information.
+        The StreamServer will automatically call this method when it
+        is stopped. User code won't probably need to call it.
 
         """
-        if self._started and not self._stopped:
-            for client in self.clients:
-                client.stop()
-            super(RelayServer, self).stop()
+        for client in self.clients:
+            client.stop()
+        super(RelayStream, self).stop()
 
     def _relay_events(self, evs):
         if isinstance(evs, events.Event):
@@ -292,38 +422,6 @@ class RelayServer(StreamServer):
             logging.error(message + ': ' + str(http_error))
         else:
             logging.error(message)
-
-
-class _WebApplication(tornado.web.Application):
-    def __init__(self, server, allow_publish=False):
-        self.dispatcher = _EventDispatcher()
-        handler_kwargs = {
-            'server': server,
-            'dispatcher': self.dispatcher,
-        }
-        compressed_kwargs = {'compress': True}
-        compressed_kwargs.update(handler_kwargs)
-        priority_kwargs = {'compress': False, 'priority': True}
-        priority_kwargs.update(handler_kwargs)
-        handlers = [
-            tornado.web.URLSpec(r"/", _MainHandler),
-            tornado.web.URLSpec(r"/events/stream", _EventStreamHandler,
-                                kwargs=handler_kwargs),
-            tornado.web.URLSpec(r"/events/compressed", _EventStreamHandler,
-                                kwargs=compressed_kwargs),
-            tornado.web.URLSpec(r"/events/priority", _EventStreamHandler,
-                                kwargs=priority_kwargs),
-            tornado.web.URLSpec(r"/events/short-lived", _ShortLivedHandler,
-                                kwargs=handler_kwargs),
-        ]
-        if allow_publish:
-            publish_kwargs = {'server': server}
-            handlers.append(tornado.web.URLSpec(r"/events/publish",
-                                                _EventPublishHandler,
-                                                kwargs=publish_kwargs))
-        # No settings by now...
-        settings = dict()
-        super(_WebApplication, self).__init__(handlers, **settings)
 
 
 class _Client(object):
@@ -359,7 +457,7 @@ class _Client(object):
         """
         self.closed = True
         if not self.handler.request.connection.stream.closed():
-            logging.info('Finishing a client...')
+            ## logging.info('Finishing a client...')
             self.handler.finish()
             self.compressor = None
 
@@ -719,8 +817,15 @@ def main():
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = StreamServer(port, allow_publish=True,
-                          buffering_time=buffering_time)
+    server = StreamServer(port)
+    stream = Stream('/events', allow_publish=True,
+                    buffering_time=buffering_time)
+    ## relay = RelayStream('/relay', [('http://localhost:' + str(port)
+    ##                                + '/stream/priority')],
+    ##                     allow_publish=True,
+    ##                     buffering_time=buffering_time)
+    server.add_stream(stream)
+    ## server.add_stream(relay)
     if tornado.options.options.eventlog:
         print server.source_id
         comments = {'Buffer time (ms)': buffering_time}
@@ -728,7 +833,7 @@ def main():
         logger.logger = logger.CompactServerLogger(server.source_id,
                                                    'server-' + server.source_id
                                                    + '.log', comments)
-     # Uncomment to test StreamServer.stop():
+     # Uncomment to test Stream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
     try:
         server.start()

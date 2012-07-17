@@ -74,7 +74,7 @@ def rfc3339_as_time(timestamp):
 # Imports of the main classes of the API provided by the framework,
 # in order to make them available in the "streamsem" namespace.
 #
-from server import StreamServer, RelayServer
+from server import StreamServer, Stream, RelayStream
 from client import Client, AsyncStreamingClient
 from events import Deserializer, Event
 from rdfevents import RDFEvent
