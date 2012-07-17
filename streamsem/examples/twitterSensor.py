@@ -26,7 +26,6 @@ from rdflib import URIRef
 from tornado.httpclient import HTTPRequest, HTTPResponse
 from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
-from geonamesClient import GeonamesClient
 from streamsem import rdfevents
 from streamsem import client
 
@@ -39,34 +38,41 @@ class TwitterStreamSensor():
         self.PASS = "qabasabslc10"
         self.NS = Namespace("http://webtlab.it.uc3m.es/")
         self.DC = Namespace("http://purl.org/dc/elements/1.1/")
+	self.GEO = Namespace("http://www.w3.org/2003/01/geo/wgs84_pos#")
         self.publisher = publisher
         self.app_id = app_id
         self.source_id = source_id
         self.only_geo = only_geo
-        self.geo = GeonamesClient(username = "dummy")
-
+        
     def toN3(self, tweet_dict):
+
         graph = Graph()
         graph.bind("webtlab", "http://webtlab.it.uc3m.es/")
         graph.bind("dc", "http://purl.org/dc/elements/1.1/")
+        graph.bind("wgs84", "http://www.w3.org/2003/01/geo/wgs84_pos#")
+
         # Set the triple ID as the tweet ID
-        tweet_id = URIRef("_" + str(tweet_dict["id"]))
-        # Add the creation timestamp
-        graph.add((tweet_id, self.DC["created"],
+        tweet_id = URIRef("http://webtlab.it.uc3m.es/_" + str(tweet_dict["id"]))
+
+        # Add the creation timestamp as a date
+        graph.add((tweet_id, self.DC["date"],
                    Literal(tweet_dict["created_at"]) ))
+
         # Get the id and screen name of the tweet author
         if "user" in tweet_dict:
             user = tweet_dict["user"]
-            if "id" in user:
-                graph.add((tweet_id, self.DC["author"],
-                           Literal(str(user["id"]))))
-                if "screen_name" in user:
-                    graph.add((tweet_id, self.NS["userName"],
-                               Literal("@" + user["screen_name"]) ))
+            # if "id" in user:
+            #    graph.add((tweet_id, self.DC["creator"],
+            #               Literal(str(user["id"]))))
+            if "screen_name" in user:
+                graph.add((tweet_id, self.DC["creator"],
+                           Literal("@" + user["screen_name"]) ))
+
         # Get the text of the tweet
         if "text" in tweet_dict:
             graph.add((tweet_id, self.NS["content"],
                        Literal(tweet_dict["text"])))
+
         # Look for entities (urls, mentions, hashtags)
         if "entities" in tweet_dict:
             entities = tweet_dict["entities"]
@@ -82,20 +88,20 @@ class TwitterStreamSensor():
                 for mention in entities["user_mentions"]:
                     graph.add((tweet_id, self.NS["mention"],
                                Literal("@" + mention["screen_name"])))
+
         # Look for the number of retweets
         if "retweet_count" in tweet_dict:
             if tweet_dict["retweet_count"] > 0:
                 graph.add((tweet_id, self.NS["retweets"],
                            Literal(str(tweet_dict["retweet_count"]))))
-        # Look for geographic information
+        
+	# Look for geographic information
         if "coordinates" in tweet_dict:
             if str(tweet_dict["coordinates"]) != "None":
                 longitude, latitude = tweet_dict["coordinates"]["coordinates"]
-                graph.add((tweet_id, self.NS["longitude"], Literal(longitude)))
-                graph.add((tweet_id, self.NS["latitude"], Literal(latitude)))
-		# Resolve to Wikipedia URL using Geonames
-		wikiUrl = self.geo.findNearbyWikipedia(longitude, latitude)
-		graph.add((tweet_id, self.NS["wiki"], Literal(wikiUrl)))
+                graph.add((tweet_id, self.GEO["long"], Literal(str(longitude))))
+                graph.add((tweet_id, self.GEO["lat"], Literal(str(latitude))))
+
         return graph
 
     def decode(self, tweet):
@@ -127,14 +133,15 @@ class TwitterStreamSensor():
         try:
             graph = self.decode(data)
             if self.only_geo:
-                if (self.NS["longitude"] in graph.predicates()
-                    and self.NS["latitude"] in graph.predicates()):
-                    self.publish(graph)
-                else:
-                    self.publish(graph)
+                # Publish only events with geographic information
+                if (self.GEO["long"] in graph.predicates()
+                    and self.GEO["lat"] in graph.predicates()):
+                    	self.publish(graph)
+            else:
+                self.publish(graph)
         except:
             # Forget the tweets that produce processing errors
-            #traceback.print_exc()
+            # traceback.print_exc()
             return
 
     def publish(self, graph):
