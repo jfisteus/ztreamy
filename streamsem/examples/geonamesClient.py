@@ -63,7 +63,7 @@ class GeonamesClient():
 
 		# Call the service
 		serviceUrl = self.BASEURL + "findNearbyWikipediaJSON"
-		params = "?lat=" + latitude + "&lng=" + longitude + "&maxRows=1&username=" + self.username
+		params = "?lat=" + str(latitude) + "&lng=" + str(longitude) + "&maxRows=1&username=" + self.username
 		url = serviceUrl + params
 
 		# TODO: Add cache
@@ -99,7 +99,7 @@ class GeonamesClient():
 
 		# Call the service
 		serviceUrl = self.BASEURL + "findNearbyPlaceNameJSON"
-		params = "?lat=" + latitude + "&lng=" + longitude + "&maxRows=1&username=" + self.username
+		params = "?lat=" + str(latitude) + "&lng=" + str(longitude) + "&maxRows=1&username=" + self.username
 		url = serviceUrl + params
 
 		# TODO: Add cache
@@ -138,7 +138,7 @@ class GeonamesClient():
 
 		# Call the service
 		serviceUrl = self.BASEURL + "findNearbyPlaceNameJSON"
-		params = "?lat=" + latitude + "&lng=" + longitude + "&radius=" + str(radius) + "&maxRows=" + str(maxResults) + "&username=" + self.username
+		params = "?lat=" + str(latitude) + "&lng=" + str(longitude) + "&radius=" + str(radius) + "&maxRows=" + str(maxResults) + "&username=" + self.username
 		url = serviceUrl + params
 
 		# TODO: Add cache
@@ -198,7 +198,6 @@ class GeonamesClient():
 			if not self.checkAPIerror(geo_dict):
 				if "geonames" in geo_dict:
 					entries = len(geo_dict["geonames"])
-					print entries
 					for idx in range(0, entries):
 						entry = geo_dict["geonames"][idx]
 						geoId = entry["geonameId"]					
@@ -253,8 +252,8 @@ def main():
 	client = GeonamesClient(username = "dummy")
 	print client.findNearbyWikipedia("-3.764647", "40.332020")
 	print client.findNearbyPlaceName("-3.764647", "40.332020")
-	print client.findNearbyPlaceNames("-3.7", "40.3", radius=10)
-	print client.children(2510769, godown=0)
+	print client.findNearbyPlaceNames("-3.704211", "40.416992", radius=1)
+	print client.children(3117735, godown=1)
 
 
 if __name__ == "__main__":
