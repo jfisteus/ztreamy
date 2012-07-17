@@ -39,6 +39,7 @@ class TwitterStreamSensor():
         self.PASS = "qabasabslc10"
         self.NS = Namespace("http://webtlab.it.uc3m.es/")
         self.DC = Namespace("http://purl.org/dc/elements/1.1/")
+	self.GEO = Namespace("http://www.w3.org/2003/01/geo/wgs84_pos#")
         self.publisher = publisher
         self.app_id = app_id
         self.source_id = source_id
@@ -49,20 +50,21 @@ class TwitterStreamSensor():
         graph = Graph()
         graph.bind("webtlab", "http://webtlab.it.uc3m.es/")
         graph.bind("dc", "http://purl.org/dc/elements/1.1/")
+        graph.bind("wgs84", "http://www.w3.org/2003/01/geo/wgs84_pos#")
         # Set the triple ID as the tweet ID
         tweet_id = URIRef("_" + str(tweet_dict["id"]))
-        # Add the creation timestamp
-        graph.add((tweet_id, self.DC["created"],
+        # Add the creation timestamp as a date
+        graph.add((tweet_id, self.DC["date"],
                    Literal(tweet_dict["created_at"]) ))
         # Get the id and screen name of the tweet author
         if "user" in tweet_dict:
             user = tweet_dict["user"]
-            if "id" in user:
-                graph.add((tweet_id, self.DC["author"],
-                           Literal(str(user["id"]))))
-                if "screen_name" in user:
-                    graph.add((tweet_id, self.NS["userName"],
-                               Literal("@" + user["screen_name"]) ))
+            # if "id" in user:
+            #    graph.add((tweet_id, self.DC["creator"],
+            #               Literal(str(user["id"]))))
+            if "screen_name" in user:
+                graph.add((tweet_id, self.DC["creator"],
+                           Literal("@" + user["screen_name"]) ))
         # Get the text of the tweet
         if "text" in tweet_dict:
             graph.add((tweet_id, self.NS["content"],
@@ -91,8 +93,8 @@ class TwitterStreamSensor():
         if "coordinates" in tweet_dict:
             if str(tweet_dict["coordinates"]) != "None":
                 longitude, latitude = tweet_dict["coordinates"]["coordinates"]
-                graph.add((tweet_id, self.NS["longitude"], Literal(longitude)))
-                graph.add((tweet_id, self.NS["latitude"], Literal(latitude)))
+                graph.add((tweet_id, self.GEO["long"], Literal(longitude)))
+                graph.add((tweet_id, self.GEO["lat"], Literal(latitude)))
 		# Resolve to Wikipedia URL using Geonames
 		wikiUrl = self.geo.findNearbyWikipedia(longitude, latitude)
 		graph.add((tweet_id, self.NS["wiki"], Literal(wikiUrl)))
