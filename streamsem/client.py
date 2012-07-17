@@ -181,7 +181,7 @@ class AsyncStreamingClient(object):
         This function has to be called in order to connect to the
         streams and begin to receive events.
 
-        If 'loop' is true (which is the default), the server will
+        If 'loop' is True (the default is False), the server will
         block on the ioloop until 'close()' is called.
 
         """
