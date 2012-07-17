@@ -52,7 +52,7 @@ class TwitterStreamSensor():
         graph.bind("wgs84", "http://www.w3.org/2003/01/geo/wgs84_pos#")
 
         # Set the triple ID as the tweet ID
-        tweet_id = URIRef("_" + str(tweet_dict["id"]))
+        tweet_id = URIRef("http://webtlab.it.uc3m.es/_" + str(tweet_dict["id"]))
 
         # Add the creation timestamp as a date
         graph.add((tweet_id, self.DC["date"],
