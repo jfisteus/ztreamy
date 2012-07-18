@@ -21,7 +21,6 @@
 """
 
 import sys
-import pycurl
 import cjson as json
 import tornado
 import argparse
@@ -30,8 +29,7 @@ from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
-from tornado.httpclient import HTTPRequest, HTTPResponse
-from tornado.simple_httpclient import SimpleAsyncHTTPClient
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
 
 from streamsem import rdfevents
 from streamsem import client
@@ -119,15 +117,8 @@ class TwitterStreamSensor():
         if "id" in tweet_dict and "created_at" in tweet_dict:
            return self.toN3(tweet_dict)
 
-    def start (self):
-        conn = pycurl.Curl()
-        conn.setopt(pycurl.USERPWD, "%s:%s" % (self.USER, self.PASS))
-        conn.setopt(pycurl.URL, self.STREAM_URL)
-        conn.setopt(pycurl.WRITEFUNCTION, self.on_receive)
-        conn.perform()
-
     def start_async(self):
-        http_client = SimpleAsyncHTTPClient()
+        http_client = AsyncHTTPClient()
         req = HTTPRequest(self.STREAM_URL,
                           streaming_callback=self.on_receive,
                           auth_username=self.USER,
@@ -175,7 +166,6 @@ def main():
                   help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
 
     options = parser.parse_args()
-
     publisher = client.EventPublisher(options.output)
     enc = TwitterStreamSensor(publisher, options.user, options.passwd, options.sourceid, options.appid, options.geo)
     enc.start_async()
