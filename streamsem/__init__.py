@@ -71,11 +71,28 @@ def rfc3339_as_time(timestamp):
     """
     return time.mktime(time.strptime(timestamp[:-6], _date_format))
 
+def serialize_events(evs):
+    """Returns a string with the serialization of the events.
+
+    'evs' is a list of events.
+
+    """
+    data = []
+    for e in evs:
+        if not isinstance(e, Event):
+            raise StreamsemException('Bad event type', 'send_event')
+        data.append(str(e))
+    return ''.join(data)
+
+
 # Imports of the main classes of the API provided by the framework,
 # in order to make them available in the "streamsem" namespace.
 #
+from events import Deserializer, Event, Command
 from server import StreamServer, Stream, RelayStream
-from client import Client, AsyncStreamingClient
-from events import Deserializer, Event
+from client import (Client, AsyncStreamingClient, SynchronousClient,
+                    EventPublisher, SynchronousEventPublisher)
 from rdfevents import RDFEvent
-from filters import Filter, SourceFilter, ApplicationFilter, SimpleTripleFilter
+from filters import (Filter, SourceFilter, ApplicationFilter,
+                     SimpleTripleFilter, VocabularyFilter,
+                     SimpleTripleFilter, SPARQLFilter, TripleFilter)

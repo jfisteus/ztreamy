@@ -499,7 +499,7 @@ class _EventDispatcher(object):
             # Send the available events after the last seen event
             evs, none_lost = self.recent_events.newer_than(last_event_seen)
             if len(evs) > 0:
-                client.send(self._serialize_events(evs))
+                client.send(streamsem.serialize_events(evs))
                 if not client.streaming:
                     client.close()
         if not client.streaming and not client.closed:
@@ -527,7 +527,7 @@ class _EventDispatcher(object):
 
     def dispatch_priority(self, evs):
         if len(self.priority_clients) > 0 and len(evs) > 0:
-            serialized = self._serialize_events(evs)
+            serialized = streamsem.serialize_events(evs)
             for client in self.priority_clients:
                 self._send(serialized, client)
 
@@ -564,7 +564,7 @@ class _EventDispatcher(object):
             logging.info('Compressed clients: %d synced; %d unsynced'%\
                              (len(self.compressed_streaming_clients),
                               len(self.unsynced_compressed_streaming_clients)))
-            serialized = self._serialize_events(evs)
+            serialized = streamsem.serialize_events(evs)
             for client in self.streaming_clients:
                 self._send(serialized, client)
             for client in self.unsynced_compressed_streaming_clients:
@@ -595,14 +595,6 @@ class _EventDispatcher(object):
     def stats(self):
         logger.logger.server_traffic_sent(time.time(), self.sent_bytes)
         self.sent_bytes = 0
-
-    def _serialize_events(self, evs):
-        data = []
-        for e in evs:
-            if not isinstance(e, events.Event):
-                raise StreamsemException('Bad event type', 'send_event')
-            data.append(str(e))
-        return ''.join(data)
 
     def _sync_compressor(self):
         for client in self.unsynced_compressed_streaming_clients:
