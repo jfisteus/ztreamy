@@ -16,7 +16,6 @@
 # <http://www.gnu.org/licenses/>.
 #
 
-
 """ This application listens to a stream of tweets (produced for instance 
     with twitterSensor.py) counts the number of times each user mention or
     hashtag is included in tweets and, periodically, publishes to a different 
