@@ -8,7 +8,7 @@ def main():
         return
     url = sys.argv[1]
     client = SynchronousClient(url, parse_event_body=False)
-    while True:
+    while not client.stream_finished:
         events = client.receive_events()
         for event in events:
             print str(event)

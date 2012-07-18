@@ -40,6 +40,7 @@ import sys
 import urllib2
 import httplib
 from urlparse import urlparse
+import datetime
 
 import streamsem
 from streamsem import Deserializer, Command, mimetype_event
@@ -48,10 +49,9 @@ from streamsem import logger
 transferred_bytes = 0
 data_count = 0
 
-param_max_clients = 32768
-
 #AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
-AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
+AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
+                          max_clients=32768)
 
 class Client(object):
     """Asynchronous client for multiple stream sources.
@@ -175,6 +175,8 @@ class AsyncStreamingClient(object):
         self._looping = False
         self._compressed = False
         self._deserializer = Deserializer()
+        self.last_event = None
+        self.connection_attempts = 0
 #        self.data_history = []
 
     def start(self, loop=False):
@@ -187,10 +189,7 @@ class AsyncStreamingClient(object):
         block on the ioloop until 'close()' is called.
 
         """
-        self.http_client = AsyncHTTPClient(max_clients=param_max_clients)
-        req = HTTPRequest(self.url, streaming_callback=self._stream_callback,
-                          request_timeout=0, connect_timeout=0)
-        self.http_client.fetch(req, self._request_callback)
+        self._connect()
         if loop:
             self._looping = True
             self.ioloop.start()
@@ -211,14 +210,35 @@ class AsyncStreamingClient(object):
 
         """
         if not self._closed:
-            self.http_client.close()
-            self._closed = True
-            if self._looping:
-                self.ioloop.stop()
-                self._looping = False
+            ## self.http_client.close()
+            self._finish_internal(False)
+
+    def _connect(self):
+        http_client = AsyncHTTPClient()
+        if self.last_event is None:
+            url = self.url
+        else:
+            url = self.url + '?last-seen=' + self.last_event
+        req = HTTPRequest(url, streaming_callback=self._stream_callback,
+                          request_timeout=0, connect_timeout=0)
+        http_client.fetch(req, self._request_callback)
+        self.connection_attempts += 1
+
+    def _reconnect(self):
+        logging.info('Reconnecting to the stream...')
+        self.ioloop.add_timeout(datetime.timedelta(seconds=5), self._connect)
+
+    def _finish_internal(self, notify_connection_close):
+        if (notify_connection_close
+            and self.connection_close_callback is not None):
+            self.connection_close_callback(self)
+        if self._looping:
+            self.ioloop.stop()
+            self._looping = False
 
     def _stream_callback(self, data):
         global transferred_bytes
+        self.connection_attempts = 0
         transferred_bytes += len(data)
         evs = self._deserialize(data, parse_body=self.parse_event_body)
         for e in evs:
@@ -229,21 +249,26 @@ class AsyncStreamingClient(object):
             else:
                 for ev in evs:
                     self.event_callback(ev)
+        if len(evs) > 0:
+            self.last_event = evs[-1].event_id
 
     def _request_callback(self, response):
         if response.error:
-            if self.error_callback is not None:
-                self.error_callback('Error in HTTP request',
-                                    http_error=response.error)
+            if self.connection_attempts < 5:
+                self._reconnect()
+                finish = False
+            else:
+                if self.error_callback is not None:
+                    self.error_callback('Error in HTTP request',
+                                        http_error=response.error)
+                finish = True
         elif len(response.body) > 0:
 #            self.data_history.append(response.body)
             self._notify_event(response.body)
-        logging.info('Connection closed by server')
-        if self._looping:
-            self.ioloop.stop()
-            self._looping = False
-        if self.connection_close_callback:
-            self.connection_close_callback(self)
+            finish = True
+        if finish:
+            logging.info('Finishing client')
+            self._finish_internal(True)
 
     def _reset_compression(self):
         self._compressed = True
@@ -266,6 +291,9 @@ class AsyncStreamingClient(object):
                     self._deserializer.reset()
                     evs.extend(self._deserialize(data[pos:], parse_body))
                     return evs
+                elif event.command == 'Stream-Finished':
+                    self._finish_internal(True)
+                    ## logging.info('Stream finished')
             else:
                 evs.append(event)
             event = self._deserializer.deserialize_next(parse_body=parse_body)
@@ -284,6 +312,7 @@ class SynchronousClient(object):
         self.last_event_seen = last_event_seen
         self.deserializer = Deserializer()
         self.parse_event_body = parse_event_body
+        self.stream_finished = False
 
     def receive_events(self):
         url = self.server_url
@@ -296,6 +325,12 @@ class SynchronousClient(object):
         connection.close()
         if len(evs) > 0:
             self.last_event_seen = evs[-1].event_id
+        for event in evs:
+            if (isinstance(event, Command)
+                and event.command == 'Stream-Finished'):
+                self.stream_finished = True
+                evs.remove(event)
+                break
         return evs
 
 
@@ -351,7 +386,7 @@ class EventPublisher(object):
         This object should not be used anymore.
 
         """
-        self.http_client.close()
+        ## self.http_client.close()
         self.http_client=None
 
     def _request_callback(self, response):

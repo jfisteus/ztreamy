@@ -341,6 +341,7 @@ class Command(Event):
         'Test-Connection',
         'Event-Source-Started',
         'Event-Source-Finished',
+        'Stream-Finished',
         ]
 
     def __init__(self, source_id, syntax, command, **kwargs):
