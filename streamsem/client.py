@@ -17,14 +17,17 @@
 #
 """ Clients that communicate with stream servers to send or receive events.
 
-There are two clients that receive events ('Client' and
-'AsyncStreamingClient') and another one that sends events to an event
-server. All of them are asynchronous and are implemented on top HTTP
-clients from the module 'tornado.httpclient'.
-
-The fifferent between 'Client' and 'AsyncStreamingClient' is that
+There are several clients that receive events: 'Client',
+'AsyncStreamingClient' and 'SynchronousClient'. Both 'Client' and
+'AsyncStreamingClient' are asynchronous. Their difference is that
 'Client' can listen to several event streams at the same time. It is
-implemented as a wrapper on top of 'AsyncStreamingClient'.
+implemented as a wrapper on top of 'AsyncStreamingClient'. On the
+other hand, 'SynchronousClient' implements a synchronous client for
+just one stream.
+
+'EventPublisher' is an asynchronous class that sends events to be
+served in a stream. 'SynchronousEventPublisher' has a similar
+interface, but is synchronous.
 
 """
 import tornado.ioloop
@@ -39,8 +42,7 @@ import httplib
 from urlparse import urlparse
 
 import streamsem
-from streamsem import events
-import streamsem.rdfevents
+from streamsem import Deserializer, Command, mimetype_event
 from streamsem import logger
 
 transferred_bytes = 0
@@ -172,7 +174,7 @@ class AsyncStreamingClient(object):
         self._closed = False
         self._looping = False
         self._compressed = False
-        self._deserializer = events.Deserializer()
+        self._deserializer = Deserializer()
 #        self.data_history = []
 
     def start(self, loop=False):
@@ -257,7 +259,7 @@ class AsyncStreamingClient(object):
         self._deserializer.append_data(data)
         event = self._deserializer.deserialize_next(parse_body=parse_body)
         while event is not None:
-            if isinstance(event, events.Command):
+            if isinstance(event, Command):
                 if event.command == 'Set-Compression':
                     self._reset_compression()
                     pos = self._deserializer.data_consumed()
@@ -280,7 +282,7 @@ class SynchronousClient(object):
                  last_event_seen=None):
         self.server_url = server_url
         self.last_event_seen = last_event_seen
-        self.deserializer = events.Deserializer()
+        self.deserializer = Deserializer()
         self.parse_event_body = parse_event_body
 
     def receive_events(self):
@@ -313,7 +315,7 @@ class EventPublisher(object):
         """
         self.server_url = server_url
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
-        self.headers = {'Content-Type': streamsem.mimetype_event}
+        self.headers = {'Content-Type': mimetype_event}
 
     def publish(self, event, callback=None):
         """Publishes a new event.
@@ -325,7 +327,18 @@ class EventPublisher(object):
 
         """
         logger.logger.event_published(event)
-        body = str(event)
+        self.publish_events([event], callback=callback)
+
+    def publish_events(self, events, callback=None):
+        """Publishes a list of events.
+
+        The events in the list 'events' are sent to the server in a
+        new HTTP request. If a 'callback' is given, it will be called
+        when the response is received from the server. The callback
+        receives a tornado.httpclient.HTTPResponse parameter.
+
+        """
+        body = streamsem.serialize_events(events)
         req = HTTPRequest(self.server_url, body=body, method='POST',
                           headers=self.headers, request_timeout=0,
                           connect_timeout=0)
@@ -354,7 +367,7 @@ class SynchronousEventPublisher(object):
     Uses a synchronous HTTP client.
 
     """
-    _headers = {'Content-Type': streamsem.mimetype_event}
+    _headers = {'Content-Type': mimetype_event}
 
     def __init__(self, server_url, io_loop=None):
         """Creates a new 'SynchronousEventPublisher' object.
@@ -378,13 +391,23 @@ class SynchronousEventPublisher(object):
         True if the data is received correctly by the server.
 
         """
-        body = str(event)
+        self.publish_events([event])
+
+    def publish_events(self, events, callback=None):
+        """Publishes a list of events.
+
+        The events in the list 'events' are sent to the server in a
+        new HTTP request. If a 'callback' is given, it will be called
+        when the response is received from the server. The callback
+        receives a tornado.httpclient.HTTPResponse parameter.
+
+        """
+        body = streamsem.serialize_events(events)
         conn = httplib.HTTPConnection(self.hostname, self.port)
         conn.request('POST', self.path, body,
                      SynchronousEventPublisher._headers)
         response = conn.getresponse()
         if response.status == 200:
-            logger.logger.event_published(event)
             return True
         else:
             logging.error(str(response.status) + ' ' + response.reason)
