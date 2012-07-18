@@ -35,8 +35,9 @@ hashtagsDict = {}
 NS = Namespace("http://webtlab.it.uc3m.es/")
 
 def buildGraph(dict, name):
-''' Utilitu function to build an RDF graph from the statistics in mentionsDict and hashtagsDict
-'''    
+    ''' Utilitu function to build an RDF graph from the statistics in mentionsDict and hashtagsDict
+    '''    
+
     graph = Graph()
     graph.bind("webtlab", "http://webtlab.it.uc3m.es/")
     
@@ -53,8 +54,9 @@ def buildGraph(dict, name):
 
 
 def process(event, dict, name):
-''' Utility function to update the counters in mentionsDict and hashtagsDict
-'''
+    ''' Utility function to update the counters in mentionsDict and hashtagsDict
+    '''
+
     entries = list(event.body.subject_objects(NS[name]))
     for entry in entries:
         (subj, obj) = entry
@@ -65,9 +67,9 @@ def process(event, dict, name):
 
 
 def publish(source_id, publisher):
-''' Periodically called by a timer to publish events which contain the statistics
-    of mentions and hashtags
-'''    
+    ''' Periodically called by a timer to publish events which contain the statistics of mentions and hashtags
+    '''
+    
     graph = buildGraph(mentionsDict, "mention")
     if graph != None:
         event = rdfevents.RDFEvent(source_id, 'text/n3', graph)
@@ -87,8 +89,9 @@ def publish(source_id, publisher):
 
 
 def process_tweet(event):
-''' For each incoming tweet event, update statistics of mentions and hashtags
-'''
+    ''' For each incoming tweet event, update statistics of mentions and hashtags
+    '''
+
     process(event, mentionsDict, "mention")
     process(event, hashtagsDict, "hashtag")
 
@@ -97,6 +100,7 @@ def main():
 
     if len(sys.argv) != 5:
         print('Arguments: <Input stream URL> <Output stream URL> <Timer period [msec]> <SourceId>')
+        print('Example invocation: python counterApp.py http://localhost:9001/events/stream http://localhost:9002/events/publish 30000 TwitterStatsCollector')
         return
 
     inputUrl = sys.argv[1]
