@@ -83,10 +83,11 @@ class GeonamesClient():
 			# Check for geonames errors: http://www.geonames.org/export/webservice-exception.html
 			if not self.checkAPIerror(geo_dict):
 				if "geonames" in geo_dict:
-					entry = geo_dict["geonames"][0]
-					result = "http://" + entry["wikipediaUrl"]
-					# TODO: Add cache
-					# self.cache[url] = result
+					if len(geo_dict["geonames"]) > 0:
+						entry = geo_dict["geonames"][0]
+						result = "http://" + entry["wikipediaUrl"]
+						# TODO: Add cache
+						# self.cache[url] = result
 			
 		return result
 
@@ -119,13 +120,14 @@ class GeonamesClient():
 			# Check for geonames errors: http://www.geonames.org/export/webservice-exception.html
 			if not self.checkAPIerror(geo_dict):
 				if "geonames" in geo_dict:
-					entry = geo_dict["geonames"][0]
-					geoId = entry["geonameId"]					
-					toponym = entry["toponymName"]					
-					country = entry["countryCode"]
-					result = (geoId, toponym, country)					
-					# TODO: Add cache
-					# self.cache[url] = result
+					if len(geo_dict["geonames"]) > 0:
+						entry = geo_dict["geonames"][0]
+						geoId = entry["geonameId"]					
+						toponym = entry["toponymName"]					
+						country = entry["countryCode"]
+						result = (geoId, toponym, country)					
+						# TODO: Add cache
+						# self.cache[url] = result
 			
 		return result
 
