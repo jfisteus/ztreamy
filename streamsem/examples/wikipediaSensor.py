@@ -32,8 +32,6 @@ from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
-# from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
-# from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from streamsem import events
 from streamsem import rdfevents
