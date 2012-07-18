@@ -15,10 +15,16 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+
+""" A sensor that converts tweets obtained from the Twitter streaming API into semantic events
+    publishing those events into an output stream
+"""
+
 import sys
 import pycurl
 import cjson as json
 import tornado
+import argparse
 
 from rdflib import Graph
 from rdflib import Namespace
@@ -31,17 +37,19 @@ from streamsem import rdfevents
 from streamsem import client
 
 class TwitterStreamSensor():
+    """ A sensor that converts tweets obtained from the Twitter streaming API into semantic events
+    """
+    
+    def __init__(self, publisher, twitterUsr, twitterPasswd, source_id, application_id = "TwitterSensor", only_geo = False):
 
-    def __init__(self, publisher, app_id = "TwitterSensor",
-                 source_id = "TwitterSensor0", only_geo = False):
         self.STREAM_URL = "https://stream.twitter.com/1/statuses/sample.json"
-        self.USER = "gimi_uc3m"
-        self.PASS = "qabasabslc10"
         self.NS = Namespace("http://webtlab.it.uc3m.es/")
         self.DC = Namespace("http://purl.org/dc/elements/1.1/")
 	self.GEO = Namespace("http://www.w3.org/2003/01/geo/wgs84_pos#")
+        self.USER = twitterUsr
+        self.PASS = twitterPasswd
         self.publisher = publisher
-        self.app_id = app_id
+        self.app_id = application_id
         self.source_id = source_id
         self.only_geo = only_geo
         
@@ -107,7 +115,7 @@ class TwitterStreamSensor():
 
     def decode(self, tweet):
         tweet_dict = json.decode(tweet)
-        # Forget tweets that do not contain id or timestamp
+        # Ignore tweets that do not contain id or timestamp
         if "id" in tweet_dict and "created_at" in tweet_dict:
            return self.toN3(tweet_dict)
 
@@ -141,25 +149,35 @@ class TwitterStreamSensor():
             else:
                 self.publish(graph)
         except:
-            # Forget the tweets that produce processing errors
+            # Ignore the tweets that produce processing errors
             # traceback.print_exc()
             return
 
     def publish(self, graph):
-        event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph)
+        event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph, application_id = self.app_id)
         print event
         self.publisher.publish(event)
 
 def main():
 
-    if len(sys.argv) != 2:
-        print('Arguments: <PublishOnlyGeoLocated [True|False]>')
-        return
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-g", "--geo", dest="geo", action='store_const', const=True, default=False,
+                  help="a boolean flag indicating whether all tweets, or only those that contain location information should be published")
+    parser.add_argument("-u", "--user", dest="user", required=True, 
+                  help="a Twitter account login")    
+    parser.add_argument("-p", "--passwd", dest="passwd", required=True, 
+                  help="a Twitter account password")        
+    parser.add_argument("-a", "--appid", dest="appid", default="TwitterSensor",
+                  help="application identifier (added to generated events)")
+    parser.add_argument("-s", "--sourceid", dest="sourceid", required=True, 
+                  help="source identifier (added to generated events)")
+    parser.add_argument("-o", "--output", dest="output", required=True,
+                  help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
 
+    options = parser.parse_args()
 
-    publishOnlyGeoLocated = (sys.argv[1] == "True")
-    publisher = client.EventPublisher("http://localhost:9001/events/publish")
-    enc = TwitterStreamSensor(publisher,"AppID","SrcID", only_geo = publishOnlyGeoLocated)
+    publisher = client.EventPublisher(options.output)
+    enc = TwitterStreamSensor(publisher, options.user, options.passwd, options.sourceid, options.appid, options.geo)
     enc.start_async()
     tornado.ioloop.IOLoop.instance().start()
 

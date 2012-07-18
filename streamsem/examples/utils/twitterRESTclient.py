@@ -15,17 +15,26 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+
+""" A client for Twitter REST API based on tweepy that accesses and downloads a user timeline.
+    NOTE: This client requires access/consumer tokens as provided by Twitter when registering
+    an application to be available on a file named twitter_config.py with the same format as
+    a Java properties file: propName = propValue
+"""
+
 import tweepy
+import argparse
+import twitter_config
 
-
-class TwitterRESTclient():
+class TwitterRESTclient():    
+    """ A client for Twitter REST API based on tweepy that accesses and downloads a user timeline
+    """
+    
     def __init__(self, user):
-        self.access_token = \
-                          "414308911-bMj5UFGvu1FNVpiyi4g3AvPbN5zASIcxIX8p4wGY"
-        self.access_token_secret = "jpfuE1DqAUxDSyaqbDwaRufbQSUMwwNkP6ygHsFw2I"
-        self.consumer_key = "oTOPoCBWwh4b0YhCGqbbg"
-        self.consumer_key_secret = \
-                                 "yQcbt1eUm8YO4JQk8tvqzUfZY7aP0s0B1BXOxH0hbqA"
+        self.access_token = twitter_config.access_token
+        self.access_token_secret = twitter_config.access_token_secret
+        self.consumer_key = twitter_config.consumer_key
+        self.consumer_key_secret = twitter_config.consumer_key_secret
         self.api = self.get_access()
         self.user = user
 
@@ -41,8 +50,7 @@ class TwitterRESTclient():
 
         if remaining_hits > 0:
             try:
-                # No quiero descargarlos todos... solo los ultimos
-                # (Desde un ID dado, 200 como maximo)
+                # Do not download everything, just last 200 tweets since a concrete tweet id
                 if last_id == 0:
                     public_tweets = \
                        self.api.user_timeline(screen_name=self.user, count=200)
@@ -59,7 +67,13 @@ class TwitterRESTclient():
         return tweets_list
 
 def main():
-    client = TwitterRESTclient("cnn")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u", "--user", dest="user", required=True, 
+                  help="the identifier of a registered GeoNames user (e.g. demo)")    
+    options = parser.parse_args()
+    
+    client = TwitterRESTclient(options.user)
     tweets = client.get_tweets()
     for tweet in tweets:
         print tweet.id,"\t",tweet.created_at
