@@ -139,8 +139,7 @@ def main():
     parser.add_argument("-o", "--output", dest="output", required=True,
                   help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
     options = parser.parse_args()
-    
-    
+
     publisher = client.EventPublisher(options.output)
     enc = WikipediaSensor(publisher, options.sourceid, options.appid)
     sched = tornado.ioloop.PeriodicCallback(enc.lookForUpdates, options.time * 1000)
