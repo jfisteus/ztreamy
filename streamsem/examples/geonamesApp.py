@@ -55,9 +55,9 @@ def main():
     parser.add_argument("-w", "--watched", dest="watched", action='store_const', const=True, default=False,
                   help="a boolean flag indicating whether all tweets, or only those whose location is in the watched list should be published")
     parser.add_argument("-t", "--type", dest="type", required=True,
-                  help="query type to be used to select the relevant tweets (country|id)")
+                  help="query type to be used to select the relevant tweets (country|id|position)")
     parser.add_argument("-q", "--query", dest="query", required=True,
-                  help="query to be used to select the relevant tweets (e.g. US, 6545086)")
+                  help="query to be used to select the relevant tweets (e.g. US, 6545086, '-3.764647,40.332020,10')")
     parser.add_argument("-i", "--input", dest="input", required=True,
                   help="URL for input stream where events are read (e.g. http://localhost:9001/events/short-lived)")
     parser.add_argument("-o", "--output", dest="output", required=True,
@@ -72,8 +72,8 @@ def main():
     onlyWatched = options.watched
 
     # Check query format
-    if queryType != "id" and queryType != "country":
-        print('Argument query type should be: [id|country]') 
+    if queryType != "id" and queryType != "country" and queryType != "position":
+        print('Argument query type should be: [id|country|position]') 
         return
 
     if queryType == "id":
@@ -86,7 +86,16 @@ def main():
     if queryType == "country":
         if not re.match("^[A-Z]{2}$", queryValue):
             print('Use ISO-3166 2 digit country codes in country queries, change -q argument')
-            return     
+            return
+
+    if queryType == "position":
+        try:
+            (long,lat,radius) = queryValue.split(",")
+            float(long)
+            float(lat)
+            float(radius)
+        except:
+            print('The position query should provide three arguments, longitude, latitude and radius, e.g. "-3.764647,40.332020,10", change the -q argument')
 
     # Client to listen to geolocated tweet stream
     clnt = SynchronousClient(inputUrl)
@@ -105,10 +114,19 @@ def main():
                            124964, 6545089, 6545079, 6545097, 3123115, 3120635, 3119589, 6545077, 6545082, 3118903, \
                            6545078, 6545084, 6544099, 6545085, 3116156, 6545090, 6545088, 3113943, 6324376, 3119198, \
                            3112772, 3112737, 6544495, 6544491, 6545087, 6545083, 3108118, 6544490, 3106970]
+        
+        print "List of geonamesIds to be watched: ",watchedIds
 
+    # Case 2: query by position and radius
+    if queryType == "position":
+        # Find geonamesId near the position
+        (long,lat,radius) = queryValue.split(",")
+        watchedIds = geo.findNearbyPlaceNames(long, lat, radius)
+        # Mockup for Madrid city center obtained by calling findNearbyPlaceNames("-3.704211", "40.416992", radius=1)
+        # watchedIds = [6545083, 3117735, 6544494, 6545088, 6545077, 6545082, 6545081, 6545084]
         print "List of geonamesIds to be watched: ",watchedIds
     
-    # Case 2: query by country code
+    # Case 3: query by country code
     watchedCountry = []
     if queryType == "country":
         watchedCountry.append(queryValue)
