@@ -54,7 +54,7 @@ def main():
         print('Argument <Filter> should be: [id|country]:[#|countryCode]. Ex.: id:2521883, country:ES')
         return         
 
-    onlyWatched = bool(sys.argv[3])
+    onlyWatched = (sys.argv[3] == "True")
 
     # Client to listen to geolocated tweet stream
     clnt = SynchronousClient(url)
@@ -83,7 +83,7 @@ def main():
 
 
     # Publisher to push the generated events 
-    publisher = client.EventPublisher("http://localhost:9002/events/publish")
+    publisher = client.SynchronousEventPublisher("http://localhost:9002/events/publish")
 
     while True:
         events = clnt.receive_events()
