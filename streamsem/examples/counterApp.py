@@ -17,6 +17,8 @@
 #
 import sys
 import tornado
+import uuid
+import functools
 
 from streamsem.client import AsyncStreamingClient
 from streamsem import rdfevents
@@ -30,54 +32,77 @@ from rdflib import URIRef
 
 mentionsDict = {}
 hashtagsDict = {}
+NS = Namespace("http://webtlab.it.uc3m.es/")
+
+def buildGraph(dict, name):
+''' Utilitu function to build an RDF graph from the statistics in mentionsDict and hashtagsDict
+'''    
+    graph = Graph()
+    graph.bind("webtlab", "http://webtlab.it.uc3m.es/")
+    
+    for entry in dict.keys():
+        # Random UUID as identifier
+        id = URIRef("http://webtlab.it.uc3m.es/_" + str(uuid.uuid4()))
+        graph.add((id, NS[name], Literal(entry)))
+        graph.add((id, NS["counter"], Literal(str(dict[entry]))))
+
+    if len(graph) > 0:
+        return graph
+    else:
+        return None
 
 
-def publish():
-    print "********************************* Publicando..."
+def process(event, dict, name):
+''' Utility function to update the counters in mentionsDict and hashtagsDict
+'''
+    entries = list(event.body.subject_objects(NS[name]))
+    for entry in entries:
+        (subj, obj) = entry
+        if not obj in dict:
+            dict[obj] = 1.0
+        else:
+            dict[obj] += 1.0
+
+
+def publish(source_id, publisher):
+''' Periodically called by a timer to publish events which contain the statistics
+    of mentions and hashtags
+'''    
+    graph = buildGraph(mentionsDict, "mention")
+    if graph != None:
+        event = rdfevents.RDFEvent(source_id, 'text/n3', graph)
+        print event
+        publisher.publish(event)
+
+    mentionsDict.clear()
+
+    graph = buildGraph(hashtagsDict, "hashtag")
+    if graph != None:    
+        event = rdfevents.RDFEvent(source_id, 'text/n3', buildGraph(hashtagsDict, "hashtag"))
+        print event
+        publisher.publish(event)
+
+    hashtagsDict.clear()
+
+
 
 def process_tweet(event):
-
-    print "Procesando..."
-    NS = Namespace("http://webtlab.it.uc3m.es/")
-
-    # Find the hashtags and mentions
-    # Append the data to in-memory storage
-    mentions = list(event.body.subject_objects(NS["mention"]))
-    for mention in mentions:
-        (subj, obj) = mention
-        if not obj in mentionsDict:
-            mentionsDict[obj] = 0.0
-        else:
-            mentionsDict[obj] += 1.0
-
-    hashtags = list(event.body.subject_objects(NS["hashtag"]))
-    for hashtag in hashtags:
-        (subj, obj) = hashtag
-        if not obj in hashtagsDict:
-            hashtagsDict[obj] = 0.0
-        else:
-            hashtagsDict[obj] += 1.0
+''' For each incoming tweet event, update statistics of mentions and hashtags
+'''
+    process(event, mentionsDict, "mention")
+    process(event, hashtagsDict, "hashtag")
 
 
-
-#
-# This client listens to a stream of geolocated tweets
-# counts the number of mentions to users and hastags
-# and publishes periodically the results to an output
-# event stream
-#
 def main():
 
-    if len(sys.argv) != 4:
-        print('Arguments: <Input stream URL> <Output stream URL> <Flush timer>')
+    if len(sys.argv) != 5:
+        print('Arguments: <Input stream URL> <Output stream URL> <Timer period [msec]> <SourceId>')
         return
 
     inputUrl = sys.argv[1]
     outputUrl = sys.argv[2]
-    flushTimer = int(sys.argv[3])
-
-    timer = 10000
-
+    period = int(sys.argv[3])
+    sourceId = sys.argv[4]
     
     # Client to listen to input tweet stream
     clnt = AsyncStreamingClient(inputUrl, event_callback=process_tweet, ioloop=tornado.ioloop.IOLoop.instance())
@@ -85,8 +110,9 @@ def main():
     # Publisher to push the generated events 
     publisher = client.EventPublisher(outputUrl)
     
-    # 
-    scheduler = tornado.ioloop.PeriodicCallback(publish, timer)
+    # Scheduling stats event publishing
+    callback = functools.partial(publish, sourceId, publisher)
+    scheduler = tornado.ioloop.PeriodicCallback(callback, period)
     scheduler.start()
 
     clnt.start(loop=True)
