@@ -117,7 +117,7 @@ def main():
     parser.add_argument("-i", "--input", dest="input", required=True,
                   help="URL for input stream where events are read (e.g. http://localhost:9001/events/stream)")
     parser.add_argument("-o", "--output", dest="output", required=True,
-                  help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
+                  help="URL for output stream where events are published (e.g. http://localhost:9002/events/publish)")
 
     options = parser.parse_args()
 
