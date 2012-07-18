@@ -15,8 +15,14 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+
+""" This application follows a user on Twitter pooling periodically
+    his/her timeline and generating events with each tweet
+"""
+
 import tornado.ioloop
 import tornado.options
+import argparse
 
 from rdflib import Graph
 from rdflib import Namespace
@@ -28,14 +34,16 @@ from streamsem import client
 from streamsem import logger
 from streamsem.tools import utils
 
-from optparse import OptionParser
 from twitterRESTclient import TwitterRESTclient
 
 
 class TwitterFollowerBot():
-
-    def __init__(self, publisher, user, time=10,
-                 app_id="TwitterFollowerBot", source_id="TwitterFollower0"):
+    """ A bot that follows a user on Twitter pooling periodically
+        his/her timeline and generating events with each tweet
+    """
+    
+    def __init__(self, publisher, user, time=10, app_id="TwitterFollowerBot", source_id="TwitterFollower0"):
+        
         self.NS = Namespace("http://webtlab.it.uc3m.es/")
         self.DC = Namespace("http://purl.org/dc/elements/1.1/")
         self.publisher = publisher
@@ -48,11 +56,12 @@ class TwitterFollowerBot():
         self.last_id = 0
 
     def toN3(self, tweet):
+        
         graph = Graph()
         graph.bind("webtlab", "http://webtlab.it.uc3m.es/")
         graph.bind("dc", "http://purl.org/dc/elements/1.1/")
         # Set the triple ID as the tweet ID
-        tweet_id = URIRef("_" + str(tweet.id))
+        tweet_id = URIRef("http://webtlab.it.uc3m.es/_" + str(tweet.id))
         # Add the creation timestamp
         graph.add((tweet_id, self.DC["created"], Literal(tweet.created_at)))
         # Get the text of the tweet
@@ -66,14 +75,15 @@ class TwitterFollowerBot():
         self.schedule_next_event()
         tweets = self.client.get_tweets(self.last_id)
         if len(tweets) > 0:
-          print "Generando ",len(tweets)," eventos..."
+          print "Generating ",len(tweets)," events..."
           for tweet in tweets:
             n3rdf = self.toN3(tweet)
-            event = rdfevents.RDFEvent(self.source_id, 'text/n3', n3rdf)
+            event = rdfevents.RDFEvent(self.source_id, 'text/n3', n3rdf, application_id=self.app_id)
+            print event
             self.publisher.publish(event)
             self.last_id = tweet.id
         else:
-          print "No hay nuevos eventos que generar"
+          print "No new events to be generated..."
 
     def start(self):
         self.schedule_next_event()
@@ -85,20 +95,23 @@ class TwitterFollowerBot():
 
 
 def main():
-    parser = OptionParser()
-    parser.add_option("-t", "--time", dest="period",
-                  help="Period between two sucessive queries to Twitter API")
-    parser.add_option("-u", "--user", dest="user",
-                  help="Print name of the Twitter user to follow")
-    parser.add_option("-i", "--appid", dest="appid",
-                  help="App identifier (to be used in generated events")
-    parser.add_option("-s", "--source", dest="source",
-                  help="Source identifier (to be used in generated events")
-    (options, args) = parser.parse_args()
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--time", dest="time", type=int, default=10,
+                  help="time between two sucessive queries to Twitter API (in seconds, e.g. 10)")
+    parser.add_argument("-u", "--user", dest="user", required=True, 
+                  help="print name of the Twitter user to follow (e.g. nordez)")
+    parser.add_argument("-a", "--appid", dest="appid", default="TwitterFollowerBot",
+                  help="application identifier (added to generated events)")
+    parser.add_argument("-s", "--source", dest="source", required=True, 
+                  help="source identifier (added to generated events)")
+    parser.add_argument("-o", "--output", dest="output", required=True,
+                  help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
+    options = parser.parse_args()
 
-    publisher = client.EventPublisher("http://localhost:9001/events/publish")
-    bot = TwitterFollowerBot(publisher, options.user, options.period,
-                             options.appid, options.source)
+    publisher = client.EventPublisher(options.output)
+    bot = TwitterFollowerBot(publisher, options.user, options.time, options.appid, options.source)
+    
     try:
         bot.start()
     except KeyboardInterrupt:
