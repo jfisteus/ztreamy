@@ -15,10 +15,16 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+
+""" A sensor that converts tweets obtained from the Twitter streaming API into semantic events
+    publishing those events into an output stream
+"""
+
 import sys
 import pycurl
 import cjson as json
 import tornado
+import argparse
 
 from rdflib import Graph
 from rdflib import Namespace
@@ -30,20 +36,20 @@ from tornado.simple_httpclient import SimpleAsyncHTTPClient
 from streamsem import rdfevents
 from streamsem import client
 
-
 class TwitterStreamSensor():
-    ''' A sensor that converts tweets obtained from the Twitter streaming API into semantic events
-    '''
+    """ A sensor that converts tweets obtained from the Twitter streaming API into semantic events
+    """
     
-    def __init__(self, publisher, twitterUsr, twitterPasswd, source_id = "TwitterSensor", only_geo = False):
+    def __init__(self, publisher, twitterUsr, twitterPasswd, source_id, application_id = "TwitterSensor", only_geo = False):
 
         self.STREAM_URL = "https://stream.twitter.com/1/statuses/sample.json"
-        self.USER = twitterUsr
-        self.PASS = twitterPasswd
         self.NS = Namespace("http://webtlab.it.uc3m.es/")
         self.DC = Namespace("http://purl.org/dc/elements/1.1/")
 	self.GEO = Namespace("http://www.w3.org/2003/01/geo/wgs84_pos#")
+        self.USER = twitterUsr
+        self.PASS = twitterPasswd
         self.publisher = publisher
+        self.app_id = application_id
         self.source_id = source_id
         self.only_geo = only_geo
         
@@ -148,25 +154,30 @@ class TwitterStreamSensor():
             return
 
     def publish(self, graph):
-        event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph)
+        event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph, application_id = self.app_id)
         print event
         self.publisher.publish(event)
 
 def main():
 
-    if len(sys.argv) != 6:
-        print('Arguments: <TwitterUser> <TwitterPasswd> <Output URL> <SourceId> <PublishOnlyGeoLocated [True|False]>')
-        print('Example call: python twitterSensor.py twitterUserLogin twitterUserPasswd http://localhost:9001/events/publish TwitterSensor True')
-        return
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-g", "--geo", dest="geo", action='store_const', const=True, default=False,
+                  help="a boolean flag indicating whether all tweets, or only those that contain location information should be published")
+    parser.add_argument("-u", "--user", dest="user", required=True, 
+                  help="a Twitter account login")    
+    parser.add_argument("-p", "--passwd", dest="passwd", required=True, 
+                  help="a Twitter account password")        
+    parser.add_argument("-a", "--appid", dest="appid", default="TwitterSensor",
+                  help="application identifier (added to generated events)")
+    parser.add_argument("-s", "--source", dest="source", required=True, 
+                  help="source identifier (added to generated events)")
+    parser.add_argument("-o", "--output", dest="output", required=True,
+                  help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
 
-    user = sys.argv[1]
-    passwd = sys.argv[2]
-    outputUrl = sys.argv[3]
-    sourceId = sys.argv[4]
-    publishOnlyGeoLocated = (sys.argv[5] == "True")
+    options = parser.parse_args()
 
-    publisher = client.EventPublisher(outputUrl)
-    enc = TwitterStreamSensor(publisher, user, passwd, sourceId, only_geo = publishOnlyGeoLocated)
+    publisher = client.EventPublisher(options.output)
+    enc = TwitterStreamSensor(publisher, options.user, options.passwd, options.source, options.appid, options.geo)
     enc.start_async()
     tornado.ioloop.IOLoop.instance().start()
 
