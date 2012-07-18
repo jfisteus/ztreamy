@@ -15,6 +15,7 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+import sys
 import pycurl
 import cjson as json
 import tornado
@@ -150,8 +151,15 @@ class TwitterStreamSensor():
         self.publisher.publish(event)
 
 def main():
+
+    if len(sys.argv) != 2:
+        print('Arguments: <PublishOnlyGeoLocated [True|False]>')
+        return
+
+
+    publishOnlyGeoLocated = (sys.argv[1] == "True")
     publisher = client.EventPublisher("http://localhost:9001/events/publish")
-    enc = TwitterStreamSensor(publisher,"AppID","SrcID", only_geo = True)
+    enc = TwitterStreamSensor(publisher,"AppID","SrcID", only_geo = publishOnlyGeoLocated)
     enc.start_async()
     tornado.ioloop.IOLoop.instance().start()
 
