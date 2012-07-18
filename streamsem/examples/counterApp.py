@@ -15,10 +15,19 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+
+
+""" This application listens to a stream of tweets (produced for instance 
+    with twitterSensor.py) counts the number of times each user mention or
+    hashtag is included in tweets and, periodically, publishes to a different 
+    stream new events including the statistics gathered.
+"""
+
 import sys
 import tornado
 import uuid
 import functools
+import argparse
 
 from streamsem.client import AsyncStreamingClient
 from streamsem import rdfevents
@@ -35,8 +44,8 @@ hashtagsDict = {}
 NS = Namespace("http://webtlab.it.uc3m.es/")
 
 def buildGraph(dict, name):
-    ''' Utilitu function to build an RDF graph from the statistics in mentionsDict and hashtagsDict
-    '''    
+    """ Utility function to build an RDF graph from the statistics in mentionsDict and hashtagsDict
+    """    
 
     graph = Graph()
     graph.bind("webtlab", "http://webtlab.it.uc3m.es/")
@@ -54,8 +63,8 @@ def buildGraph(dict, name):
 
 
 def process(event, dict, name):
-    ''' Utility function to update the counters in mentionsDict and hashtagsDict
-    '''
+    """ Utility function to update the counters in mentionsDict and hashtagsDict
+    """
 
     entries = list(event.body.subject_objects(NS[name]))
     for entry in entries:
@@ -66,13 +75,21 @@ def process(event, dict, name):
             dict[obj] += 1.0
 
 
-def publish(source_id, publisher):
-    ''' Periodically called by a timer to publish events which contain the statistics of mentions and hashtags
-    '''
+def process_tweet(event):
+    """ For each incoming tweet event, update statistics of mentions and hashtags
+    """
+
+    process(event, mentionsDict, "mention")
+    process(event, hashtagsDict, "hashtag")
+
+    
+def publish(app_id, source_id, publisher):
+    """ Periodically called by a timer to publish events which contain the statistics of mentions and hashtags
+    """
     
     graph = buildGraph(mentionsDict, "mention")
     if graph != None:
-        event = rdfevents.RDFEvent(source_id, 'text/n3', graph)
+        event = rdfevents.RDFEvent(source_id, 'text/n3', graph, application_id = app_id)
         print event
         publisher.publish(event)
 
@@ -80,7 +97,7 @@ def publish(source_id, publisher):
 
     graph = buildGraph(hashtagsDict, "hashtag")
     if graph != None:    
-        event = rdfevents.RDFEvent(source_id, 'text/n3', buildGraph(hashtagsDict, "hashtag"))
+        event = rdfevents.RDFEvent(source_id, 'text/n3', graph, application_id = app_id)
         print event
         publisher.publish(event)
 
@@ -88,25 +105,27 @@ def publish(source_id, publisher):
 
 
 
-def process_tweet(event):
-    ''' For each incoming tweet event, update statistics of mentions and hashtags
-    '''
-
-    process(event, mentionsDict, "mention")
-    process(event, hashtagsDict, "hashtag")
-
-
 def main():
 
-    if len(sys.argv) != 5:
-        print('Arguments: <Input stream URL> <Output stream URL> <Timer period [msec]> <SourceId>')
-        print('Example invocation: python counterApp.py http://localhost:9001/events/stream http://localhost:9002/events/publish 30000 TwitterStatsCollector')
-        return
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--time", dest="time", type=int, default=30,
+                  help="period to generate new events with statistics (in seconds, e.g. 10)")
+    parser.add_argument("-a", "--appid", dest="appid", default="StatsGenerator",
+                  help="application identifier (added to generated events)")
+    parser.add_argument("-s", "--source", dest="source", required=True, 
+                  help="source identifier (added to generated events)")
+    parser.add_argument("-i", "--input", dest="input", required=True,
+                  help="URL for input stream where events are read (e.g. http://localhost:9001/events/stream)")
+    parser.add_argument("-o", "--output", dest="output", required=True,
+                  help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
 
-    inputUrl = sys.argv[1]
-    outputUrl = sys.argv[2]
-    period = int(sys.argv[3])
-    sourceId = sys.argv[4]
+    options = parser.parse_args()
+
+    inputUrl = options.input
+    outputUrl = options.output
+    period = options.time*1000
+    appId = options.appid
+    sourceId = options.source
     
     # Client to listen to input tweet stream
     clnt = AsyncStreamingClient(inputUrl, event_callback=process_tweet, ioloop=tornado.ioloop.IOLoop.instance())
@@ -115,7 +134,7 @@ def main():
     publisher = client.EventPublisher(outputUrl)
     
     # Scheduling stats event publishing
-    callback = functools.partial(publish, sourceId, publisher)
+    callback = functools.partial(publish, appId, sourceId, publisher)
     scheduler = tornado.ioloop.PeriodicCallback(callback, period)
     scheduler.start()
 
