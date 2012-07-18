@@ -15,7 +15,20 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+
+""" This application listens to a stream of geolocated tweets (produced for instance 
+    with twitterSensor.py) searches for the geonamesId associated to the tweet 
+    location coordinates and in case the geonamesId is included in a list
+    of identifiers to be watched, publishes the tweet (enrichted with GeoNames metadata) 
+    in another event stream.
+
+    Alternatively, instead of providing a list of identifiers to be watched,
+    a country code can be used to define the geographic area of interest.
+"""
+
 import sys
+import argparse
+import re
 
 from geonamesClient import GeonamesClient
 from streamsem.client import SynchronousClient
@@ -27,46 +40,66 @@ from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
-#
-# This client listens to a stream of geolocated tweets
-# (produced for instance with twitterSensor.py)
-# searches for the geonamesId of the tweet geolocation
-# and in case the geonamesId is included in a list
-# of identifiers to be watched, publishes the tweet in
-# to another event stream
-#
+
 def main():
-
-    if len(sys.argv) != 4:
-        print('Arguments: <Twitter stream URL> <Filter [id:2521883|country:ES]> <OnlyInWatchedList [True|False]>')
-        return
-
+    
+    # Some useful namespace declarations
     GEONAMES = Namespace("http://www.geonames.org/ontology#") 
     GEO = Namespace("http://www.w3.org/2003/01/geo/wgs84_pos#")
     DC = Namespace("http://purl.org/dc/elements/1.1/")
 
-    url = sys.argv[1]
-    filter = sys.argv[2].split(":")
-    query = filter[0]
-    datum = filter[1]
-    
-    if query != "id" and query != "country":
-        print('Argument <Filter> should be: [id|country]:[#|countryCode]. Ex.: id:2521883, country:ES')
-        return         
+    # Parse input arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u", "--user", dest="user", required=True, 
+                  help="the identifier of a registered GeoNames user (e.g. demo)")
+    parser.add_argument("-w", "--watched", dest="watched", action='store_const', const=True, default=False,
+                  help="a boolean flag indicating whether all tweets, or only those whose location is in the watched list should be published")
+    parser.add_argument("-t", "--type", dest="type", required=True,
+                  help="query type to be used to select the relevant tweets (country|id)")
+    parser.add_argument("-q", "--query", dest="query", required=True,
+                  help="query to be used to select the relevant tweets (e.g. US, 6545086)")
+    parser.add_argument("-i", "--input", dest="input", required=True,
+                  help="URL for input stream where events are read (e.g. http://localhost:9001/events/short-lived)")
+    parser.add_argument("-o", "--output", dest="output", required=True,
+                  help="URL for output stream where events are published (e.g. http://localhost:9002/events/publish)")
+    options = parser.parse_args()
 
-    onlyWatched = (sys.argv[3] == "True")
+    user = options.user
+    inputUrl = options.input
+    outputUrl = options.output
+    queryType = options.type
+    queryValue = options.query
+    onlyWatched = options.watched
+
+    # Check query format
+    if queryType != "id" and queryType != "country":
+        print('Argument query type should be: [id|country]') 
+        return
+
+    if queryType == "id":
+        try:
+            int(queryValue)
+        except ValueError:
+            print('The GeoNames identifier in id queries should be an integer number, e.g. 6544487, change -q argument')
+            return
+
+    if queryType == "country":
+        if not re.match("^[A-Z]{2}$", queryValue):
+            print('Use ISO-3166 2 digit country codes in country queries, change -q argument')
+            return     
 
     # Client to listen to geolocated tweet stream
-    clnt = SynchronousClient(url)
+    clnt = SynchronousClient(inputUrl)
 
     # Access the geonames API
-    geo = GeonamesClient(username = "dummy")
+    geo = GeonamesClient(username = user)
 
-    # Case 1: filter by list of geonamesIds
+    # Case 1: query by list of geonamesIds
     watchedIds = []
-    if query == "id":
-        # Expand the geonamesId to a list of relevant ids to be watched
-        # watchedIds = geo.children(int(datum), godown=1)
+    if queryType == "id":
+        # Expand the input geonamesId to a list of relevant ids to be watched
+        # watchedIds = geo.children(int(queryValue), godown=1)
+        #
         # Mockup for Madrid area, previously obtained by calling: children(3117735, godown=1)
         watchedIds = [6545086, 6544487, 6545080, 6947399, 6545095, 6544493, 3125239, 6544492, 6545081, 6544494, \
                            124964, 6545089, 6545079, 6545097, 3123115, 3120635, 3119589, 6545077, 6545082, 3118903, \
@@ -75,15 +108,14 @@ def main():
 
         print "List of geonamesIds to be watched: ",watchedIds
     
-    # Case 2: filter by country code
+    # Case 2: query by country code
     watchedCountry = []
-    if query == "country":
-        watchedCountry.append(datum)
+    if queryType == "country":
+        watchedCountry.append(queryValue)
         print "Country code to be watched ",watchedCountry
 
-
     # Publisher to push the generated events 
-    publisher = client.SynchronousEventPublisher("http://localhost:9002/events/publish")
+    publisher = client.SynchronousEventPublisher(outputUrl)
 
     while True:
         events = clnt.receive_events()
