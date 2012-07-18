@@ -138,9 +138,9 @@ class StreamServer(tornado.web.Application):
         """
         if self._started and not self._stopped:
             logging.info('Stopping server...')
-            self.http_server.stop()
             for stream in self.streams:
-                stream.close()
+                stream.stop()
+            self.http_server.stop()
             self._stopped = True
             if self._looping == True:
                 self.ioloop.stop()
@@ -292,9 +292,12 @@ class Stream(object):
         is stopped. User code won't probably need to call it.
 
         """
-        self.dispatcher.close()
+        self.dispatch_event(events.create_command(self.source_id,
+                                                  'Stream-Finished'))
         if self.buffering_time:
             self.buffer_dump_sched.stop()
+            self._dump_buffer()
+        self.dispatcher.close()
         self.stats_sched.stop()
 
     def dispatch_event(self, event):
@@ -680,9 +683,11 @@ class _EventStreamHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
+        last_event_seen = self.get_argument('last-seen', default=None)
         self.client = _Client(self, self._on_new_data, streaming=True,
                               compress=self.compress, priority=self.priority)
-        self.dispatcher.register_client(self.client)
+        self.dispatcher.register_client(self.client,
+                                        last_event_seen=last_event_seen)
         if self.compress:
             command = events.create_command(self.server.source_id,
                                             'Set-Compression')
