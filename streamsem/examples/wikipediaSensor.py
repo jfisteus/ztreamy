@@ -32,8 +32,8 @@ from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
-from tornado.simple_httpclient import SimpleAsyncHTTPClient
+# from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
+# from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from streamsem import events
 from streamsem import rdfevents
@@ -87,7 +87,7 @@ class WikipediaSensor():
                 if this_change_id > biggest_change_id:
                     biggest_change_id = this_change_id
                 change_id = URIRef("http://webtlab.it.uc3m.es/_" + str(change["rcid"]))
-                graph.add( ( change_id, self.DC["created"], Literal(change["timestamp"]) ))
+                graph.add( ( change_id, self.DC["date"], Literal(change["timestamp"]) ))
                 graph.add( ( change_id, self.NS["title"], Literal(change["title"]) ))	  
                 graph.add( ( change_id, self.NS["pageid"], Literal(str(change["pageid"])) ))	  
                 total_changes += 1
