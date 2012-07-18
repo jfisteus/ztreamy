@@ -30,7 +30,7 @@ import sys
 import argparse
 import re
 
-from geonamesClient import GeonamesClient
+from streamsem.examples.utils.geonamesClient import GeonamesClient
 from streamsem.client import SynchronousClient
 
 from streamsem import rdfevents

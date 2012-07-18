@@ -20,9 +20,9 @@
     his/her timeline and generating events with each tweet
 """
 
+import argparse
 import tornado.ioloop
 import tornado.options
-import argparse
 
 from rdflib import Graph
 from rdflib import Namespace
@@ -33,8 +33,7 @@ from streamsem import rdfevents
 from streamsem import client
 from streamsem import logger
 from streamsem.tools import utils
-
-from twitterRESTclient import TwitterRESTclient
+from streamsem.examples.utils.twitterRESTclient import TwitterRESTclient
 
 
 class TwitterFollowerBot():
@@ -42,7 +41,7 @@ class TwitterFollowerBot():
         his/her timeline and generating events with each tweet
     """
     
-    def __init__(self, publisher, user, time=10, source_id, app_id="TwitterFollowerBot"):
+    def __init__(self, publisher, user, time, source_id, app_id="TwitterFollowerBot"):
         
         self.NS = Namespace("http://webtlab.it.uc3m.es/")
         self.DC = Namespace("http://purl.org/dc/elements/1.1/")
