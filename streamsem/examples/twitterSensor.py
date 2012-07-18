@@ -169,7 +169,7 @@ def main():
                   help="a Twitter account password")        
     parser.add_argument("-a", "--appid", dest="appid", default="TwitterSensor",
                   help="application identifier (added to generated events)")
-    parser.add_argument("-s", "--source", dest="source", required=True, 
+    parser.add_argument("-s", "--sourceid", dest="sourceid", required=True, 
                   help="source identifier (added to generated events)")
     parser.add_argument("-o", "--output", dest="output", required=True,
                   help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
@@ -177,7 +177,7 @@ def main():
     options = parser.parse_args()
 
     publisher = client.EventPublisher(options.output)
-    enc = TwitterStreamSensor(publisher, options.user, options.passwd, options.source, options.appid, options.geo)
+    enc = TwitterStreamSensor(publisher, options.user, options.passwd, options.sourceid, options.appid, options.geo)
     enc.start_async()
     tornado.ioloop.IOLoop.instance().start()
 

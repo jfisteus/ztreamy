@@ -42,7 +42,7 @@ class TwitterFollowerBot():
         his/her timeline and generating events with each tweet
     """
     
-    def __init__(self, publisher, user, time=10, app_id="TwitterFollowerBot", source_id="TwitterFollower0"):
+    def __init__(self, publisher, user, time=10, source_id, app_id="TwitterFollowerBot"):
         
         self.NS = Namespace("http://webtlab.it.uc3m.es/")
         self.DC = Namespace("http://purl.org/dc/elements/1.1/")
@@ -103,14 +103,14 @@ def main():
                   help="print name of the Twitter user to follow (e.g. nordez)")
     parser.add_argument("-a", "--appid", dest="appid", default="TwitterFollowerBot",
                   help="application identifier (added to generated events)")
-    parser.add_argument("-s", "--source", dest="source", required=True, 
+    parser.add_argument("-s", "--sourceid", dest="sourceid", required=True, 
                   help="source identifier (added to generated events)")
     parser.add_argument("-o", "--output", dest="output", required=True,
                   help="URL for output stream where events are published (e.g. http://localhost:9001/events/publish)")
     options = parser.parse_args()
 
     publisher = client.EventPublisher(options.output)
-    bot = TwitterFollowerBot(publisher, options.user, options.time, options.appid, options.source)
+    bot = TwitterFollowerBot(publisher, options.user, options.time, options.sourceid, options.appid)
     
     try:
         bot.start()

@@ -108,10 +108,10 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--time", dest="time", type=int, default=30,
-                  help="period to generate new events with statistics (in seconds, e.g. 10)")
+                  help="period to generate new events with statistics (in seconds, defaults to 30)")
     parser.add_argument("-a", "--appid", dest="appid", default="StatsGenerator",
                   help="application identifier (added to generated events)")
-    parser.add_argument("-s", "--source", dest="source", required=True, 
+    parser.add_argument("-s", "--sourceid", dest="sourceid", required=True, 
                   help="source identifier (added to generated events)")
     parser.add_argument("-i", "--input", dest="input", required=True,
                   help="URL for input stream where events are read (e.g. http://localhost:9001/events/stream)")
@@ -124,7 +124,7 @@ def main():
     outputUrl = options.output
     period = options.time*1000
     appId = options.appid
-    sourceId = options.source
+    sourceId = options.sourceid
     
     # Client to listen to input tweet stream
     clnt = AsyncStreamingClient(inputUrl, event_callback=process_tweet, ioloop=tornado.ioloop.IOLoop.instance())
