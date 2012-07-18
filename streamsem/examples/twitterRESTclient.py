@@ -15,15 +15,16 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-import tweepy
-import argparse
-import twitter_config
 
 """ A client for Twitter REST API based on tweepy that accesses and downloads a user timeline.
     NOTE: This client requires access/consumer tokens as provided by Twitter when registering
     an application to be available on a file named twitter_config.py with the same format as
     a Java properties file: propName = propValue
 """
+
+import tweepy
+import argparse
+import twitter_config
 
 class TwitterRESTclient():    
     """ A client for Twitter REST API based on tweepy that accesses and downloads a user timeline
