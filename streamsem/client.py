@@ -351,6 +351,7 @@ class EventPublisher(object):
         self.server_url = server_url
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.headers = {'Content-Type': mimetype_event}
+        self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
 
     def publish(self, event, callback=None):
         """Publishes a new event.
@@ -378,7 +379,11 @@ class EventPublisher(object):
                           headers=self.headers, request_timeout=0,
                           connect_timeout=0)
         callback = callback or self._request_callback
-        self.http_client.fetch(req, callback)
+        # Enqueue a new callback in the ioloop, to avoid problems
+        # when this code is run from a callback of the HTTP client
+        def fetch():
+            self.http_client.fetch(req, callback)
+        self.ioloop.add_callback(fetch)
 
     def close(self):
         """Closes the event publisher.
