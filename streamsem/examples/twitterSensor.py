@@ -156,10 +156,10 @@ class TwitterStreamSensor():
 
     def publish(self, graph):
         event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph, application_id = self.app_id)
-        # print event
+        print event
         self.publisher.publish(event)
         self.counter += 1
-        # print "***",self.counter,"events published"
+        print "***",self.counter,"events published"
         
 
 def main():
