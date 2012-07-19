@@ -24,6 +24,7 @@ import sys
 import cjson as json
 import tornado
 import argparse
+import traceback
 
 from rdflib import Graph
 from rdflib import Namespace
@@ -50,6 +51,7 @@ class TwitterStreamSensor():
         self.app_id = application_id
         self.source_id = source_id
         self.only_geo = only_geo
+        self.counter = 0
         
     def toN3(self, tweet_dict):
 
@@ -111,11 +113,15 @@ class TwitterStreamSensor():
 
         return graph
 
+
     def decode(self, tweet):
+
         tweet_dict = json.decode(tweet)
         # Ignore tweets that do not contain id or timestamp
+        # (For instance, filters out delete notifications)
         if "id" in tweet_dict and "created_at" in tweet_dict:
-           return self.toN3(tweet_dict)
+            return self.toN3(tweet_dict)
+
 
     def start_async(self):
         http_client = AsyncHTTPClient()
@@ -127,27 +133,34 @@ class TwitterStreamSensor():
         http_client.fetch(req, self.on_receive)
         print "Launched Twitter request"
 
+
     def on_receive(self, data):
+        
         if isinstance(data, HTTPResponse):
-            data = data.body
+            data = data.body        
         try:
             graph = self.decode(data)
-            if self.only_geo:
-                # Publish only events with geographic information
-                if (self.GEO["long"] in graph.predicates()
-                    and self.GEO["lat"] in graph.predicates()):
-                    	self.publish(graph)
-            else:
-                self.publish(graph)
+            if graph != None:
+                if self.only_geo:
+                    # Publish only events with geographic information
+                    if (self.GEO["long"] in graph.predicates()
+                        and self.GEO["lat"] in graph.predicates()):
+                           self.publish(graph)
+                else:
+                    self.publish(graph)
         except:
             # Ignore the tweets that produce processing errors
-            # traceback.print_exc()
+            traceback.print_exc()
             return
+
 
     def publish(self, graph):
         event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph, application_id = self.app_id)
-        print event
+        # print event
         self.publisher.publish(event)
+        self.counter += 1
+        # print "***",self.counter,"events published"
+        
 
 def main():
 
