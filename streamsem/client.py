@@ -469,7 +469,7 @@ class SynchronousEventPublisher(object):
     """
     _headers = {'Content-Type': mimetype_event}
 
-    def __init__(self, server_url, io_loop=None):
+    def __init__(self, server_url):
         """Creates a new 'SynchronousEventPublisher' object.
 
         Events are sent in separate HTTP requests to the server given
@@ -512,6 +512,37 @@ class SynchronousEventPublisher(object):
         else:
             logging.error(str(response.status) + ' ' + response.reason)
             return False
+
+    def close(self):
+        """Closes the event publisher.
+
+        It does nothing in this class, but is maintained for
+        compatibility with the asynchronous publisher.
+
+        """
+        pass
+
+
+class LocalEventPublisher(object):
+    def __init__(self, stream, ioloop=None):
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
+        self.stream = stream
+
+    def publish(self, event):
+        """Publishes a new event.
+
+        Returns True.
+
+        """
+        self.stream.dispatch_event(event)
+
+    def publish_events(self, events):
+        """Publishes a list of events.
+
+        Returns True.
+
+        """
+        self.stream.dispatch_events(events)
 
     def close(self):
         """Closes the event publisher.

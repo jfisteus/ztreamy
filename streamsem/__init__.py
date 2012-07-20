@@ -92,7 +92,7 @@ from events import Deserializer, Event, Command
 from server import StreamServer, Stream, RelayStream
 from client import (Client, AsyncStreamingClient, SynchronousClient,
                     EventPublisher, SynchronousEventPublisher,
-                    LocalClient)
+                    LocalClient, LocalEventPublisher)
 from rdfevents import RDFEvent
 from filters import (Filter, SourceFilter, ApplicationFilter,
                      SimpleTripleFilter, VocabularyFilter,
