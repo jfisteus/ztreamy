@@ -56,17 +56,23 @@ AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
 class Client(object):
     """Asynchronous client for multiple stream sources.
 
-    This client is able to receive events from multiple streams. Its
-    internal implementation is based on the 'AsyncStreamingClient'
-    class.
+    This client is able to receive events from multiple streams, which
+    may be remote (trhough HTTP) or local to the process. Its internal
+    implementation is based on the 'AsyncStreamingClient' and
+    'LocalClient' classes.
 
     """
-    def __init__(self, source_urls, event_callback, error_callback=None,
+    def __init__(self, streams, event_callback, error_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True):
         """Creates a new client for one or more stream URLs.
 
-        The client connects to the stream URLs in the list
-        'source_urls' (although a single string is also accepted).
+        'streams' is a list of streams to connect to. Each stream can
+        be either a string representing the stream URL or a local
+        'server.Stream' (or compatible) object. In the later case, the
+        connection is just local to the process, without using the
+        network stack. Instead of a list, a single URL or a single
+        stream object are also accepted.
+
         For every single received event, the 'event_callback' function
         is invoked. It receives an event object as parameter.
 
@@ -78,23 +84,27 @@ class Client(object):
         the default 'ioloop' of Tornado.
 
         """
-        if isinstance(source_urls, basestring):
-            self.source_urls = [source_urls]
-        else:
-            self.source_urls = source_urls
-        self.clients = \
-            [AsyncStreamingClient(url, event_callback=event_callback,
+        if not isinstance(streams, list):
+            streams = [streams]
+        self.clients = []
+        for stream in streams:
+            if isinstance(stream, basestring):
+                self.clients.append(AsyncStreamingClient(stream,
+                         event_callback=event_callback,
                          error_callback=error_callback,
                          connection_close_callback=self._client_close_callback,
                          parse_event_body=parse_event_body,
-                         separate_events=separate_events) \
-                 for url in self.source_urls]
+                         separate_events=separate_events))
+            else:
+                self.clients.append(LocalClient(stream,
+                                            event_callback=event_callback,
+                                            separate_events=separate_events))
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self._closed = False
         self._looping = False
         self.active_clients = []
 
-    def start(self, loop=True):
+    def start(self, loop=False):
         """Starts the client.
 
         This function has to be called in order to connect to the
@@ -138,6 +148,57 @@ class Client(object):
             if len(self.active_clients) == 0 and self._looping:
                 self.ioloop.stop()
                 self._looping = False
+
+
+class LocalClient(object):
+    """Client for local use in the same process as the stream.
+
+    This client does not use the network to receive the events from a
+    stream running in the same process.
+
+    The normal usage of this class is:
+
+    client = LocalClient(stream, callback)
+    client.start()
+
+    In order to disconnect from the stream:
+
+    client.stop()
+
+    """
+    def __init__(self, stream, event_callback, separate_events=True):
+        """Creates a new local client, but does not start it.
+
+        'stream' is a 'server.Stream' object (or an object of a
+        compatible class). 'event_callback' is the callback function
+        which will receive the events. The events will be received as
+        single event objects (the default, when 'separate_events' is
+        True) or as a list of event objects (when 'separate_events' is
+        set to False).
+
+        The connection to the stream is not established until
+        'start()' is invoked.
+
+        """
+        self.stream = stream
+        self.event_callback = event_callback
+        self.separate_events = separate_events
+
+    def start(self, loop=False):
+        """Starts listening to the stream.
+
+        'loop' must always be False, but is mainatined for
+        compatibility with other clients.
+
+        """
+        assert loop is False
+        self.client_handle = \
+             self.stream.create_local_client(self.event_callback,
+                                          separate_events=self.separate_events)
+
+    def stop(self):
+        """Stops listening to the stream."""
+        self.client_handle.close()
 
 
 class AsyncStreamingClient(object):

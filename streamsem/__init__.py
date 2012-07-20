@@ -91,7 +91,8 @@ def serialize_events(evs):
 from events import Deserializer, Event, Command
 from server import StreamServer, Stream, RelayStream
 from client import (Client, AsyncStreamingClient, SynchronousClient,
-                    EventPublisher, SynchronousEventPublisher)
+                    EventPublisher, SynchronousEventPublisher,
+                    LocalClient)
 from rdfevents import RDFEvent
 from filters import (Filter, SourceFilter, ApplicationFilter,
                      SimpleTripleFilter, VocabularyFilter,

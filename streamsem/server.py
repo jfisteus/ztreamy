@@ -150,7 +150,7 @@ class StreamServer(tornado.web.Application):
         handlers = []
         for stream in self.streams:
             handler_kwargs = {
-                'server': stream,
+                'stream': stream,
                 'dispatcher': stream.dispatcher,
             }
             compressed_kwargs = {'compress': True}
@@ -173,7 +173,7 @@ class StreamServer(tornado.web.Application):
                                     kwargs=handler_kwargs),
             ])
             if stream.allow_publish:
-                publish_kwargs = {'server': stream}
+                publish_kwargs = {'stream': stream}
                 handlers.append(tornado.web.URLSpec(stream.path + r"/publish",
                                                     _EventPublishHandler,
                                                     kwargs=publish_kwargs))
@@ -275,7 +275,7 @@ class Stream(object):
                                           self.dispatcher.stats, 10000, ioloop)
 
     def start(self):
-        """Starts the relay server.
+        """Starts the stream.
 
         The StreamServer will automatically call this method when it
         is started. User code won't probably need to call it.
@@ -286,7 +286,7 @@ class Stream(object):
         self.stats_sched.start()
 
     def stop(self):
-        """Stops the relay server.
+        """Stops the stream.
 
         The StreamServer will automatically call this method when it
         is stopped. User code won't probably need to call it.
@@ -319,7 +319,7 @@ class Stream(object):
         """Publishes a list of events in this stream.
 
         The events may not be sent immediately to normal clients if
-        the server is configured to do buffering. However, they will
+        the stream is configured to do buffering. However, they will
         be sent immediately to priority clients.
 
         """
@@ -330,6 +330,20 @@ class Stream(object):
             self.dispatcher.dispatch(events)
         else:
             self._event_buffer.extend(events)
+
+    def create_local_client(self, callback, separate_events=True):
+        """Creates a local client for this stream.
+
+        'callback' is a callback function to be called when new events
+        are available in the stream. If 'separate_events' is True (the
+        default), the callback receives just one event object in each
+        call. It it is 'false', the callback receives a list which may
+        contain one or more event objects.
+
+        """
+        client = _LocalClient(callback, separate_events=separate_events)
+        self.dispatcher.register_client(client)
+        return client
 
     def _start_timing(self):
         self._cpu_timer_start = time.clock()
@@ -351,7 +365,7 @@ class Stream(object):
 class RelayStream(Stream):
     """A stream that relays events from other streams.
 
-    This server listens to other event streams and publishes their
+    This stream listens to other event streams and publishes their
     events as a new stream. A filter can optionally be applied in
     order to select which events are published.
 
@@ -361,7 +375,7 @@ class RelayStream(Stream):
                  buffering_time=None, ioloop=None):
         """Creates a new relay stream.
 
-        The server will retransmit the events of the streams specified
+        The stream will retransmit the events of the streams specified
         in 'source_urls' (either a list or a string with just one
         URL).  A filter may be specified in 'filter_' in order to
         select which events are relayed (see the 'filters' module for
@@ -392,7 +406,7 @@ class RelayStream(Stream):
                  for url in source_urls]
 
     def start(self):
-        """Starts the relay server.
+        """Starts the relay stream.
 
         The StreamServer will automatically call this method when it
         is started. User code won't probably need to call it.
@@ -403,7 +417,7 @@ class RelayStream(Stream):
         super(RelayStream, self).start()
 
     def stop(self):
-        """Stops the relay server.
+        """Stops the relay stream.
 
         The StreamServer will automatically call this method when it
         is stopped. User code won't probably need to call it.
@@ -443,6 +457,7 @@ class _Client(object):
         if self.compress:
             self.compression_synced = False
             self.compressor = zlib.compressobj()
+        self.local = False
 
     def send(self, data):
         if self.compress and not self.compression_synced:
@@ -472,6 +487,41 @@ class _Client(object):
             self.compression_synced = True
 
 
+class _LocalClient(object):
+    """Handle for a local client.
+
+    Do not create instances of this class directly. An instance will
+    be returned by calling 'create_local_client()' in 'Stream'.  In
+    order to disconnect from the stream, call 'close()' on this
+    object.
+
+    """
+    def __init__(self, callback, separate_events=True):
+        """Not intended to be called by the user.
+
+        Use 'create_local_client()' in 'Stream' instead.
+
+        """
+        self.callback = callback
+        self.separate_events = separate_events
+        self.local = True
+        self.streaming = False
+        self.compress = False
+        self.priority = False
+        self.closed = False
+
+    def close(self):
+        """Disconnects from the stream."""
+        self.closed = True
+
+    def _send_events(self, evs):
+        if not self.separate_events:
+            self.callback(evs)
+        else:
+            for event in evs:
+                self.callback(event)
+
+
 class _EventDispatcher(object):
     def __init__(self, num_recent_events=2048):
         self.priority_clients = []
@@ -479,6 +529,7 @@ class _EventDispatcher(object):
         self.compressed_streaming_clients = []
         self.unsynced_compressed_streaming_clients = []
         self.one_time_clients = []
+        self.local_clients = []
         self.event_cache = []
         self.cache_size = 200
         self._compressor = zlib.compressobj()
@@ -505,8 +556,11 @@ class _EventDispatcher(object):
                 client.send(streamsem.serialize_events(evs))
                 if not client.streaming:
                     client.close()
-        if not client.streaming and not client.closed:
+        if client.local:
+            self.local_clients.append(client)
+        elif not client.streaming and not client.closed:
             self.one_time_clients.append(client)
+
 
     def deregister_client(self, client):
         if client.streaming:
@@ -514,6 +568,8 @@ class _EventDispatcher(object):
             logging.info('Client deregistered')
             if self._next_client_cleanup < 0:
                 self._next_client_cleanup = 10
+        elif client.local:
+            client.close()
 
     def clean_closed_clients(self):
         self.priority_clients = \
@@ -525,6 +581,7 @@ class _EventDispatcher(object):
         self.unsynced_compressed_streaming_clients = \
             [c for c in self.unsynced_compressed_streaming_clients \
                  if not c.closed]
+        self.local_clients = [c for c in self.local_clients if not c.closed]
         self._next_client_cleanup = -1
         logging.info('Cleaning up clients')
 
@@ -537,7 +594,8 @@ class _EventDispatcher(object):
     def dispatch(self, evs):
         num_clients = (len(self.streaming_clients) + len(self.one_time_clients)
                        + len(self.unsynced_compressed_streaming_clients)
-                       + len(self.compressed_streaming_clients))
+                       + len(self.compressed_streaming_clients)
+                       + len(self.local_clients))
         logging.info('Sending %r events to %r clients', len(evs),
                      num_clients)
         self.recent_events.append_events(evs)
@@ -572,6 +630,9 @@ class _EventDispatcher(object):
                 self._send(serialized, client)
             for client in self.unsynced_compressed_streaming_clients:
                 self._send(serialized, client)
+            for client in self.local_clients:
+                if not client.closed:
+                    client._send_events(evs)
             for client in self.one_time_clients:
                 self._send(serialized, client)
                 client.close()
@@ -627,9 +688,9 @@ class _MainHandler(tornado.web.RequestHandler):
 
 
 class _EventPublishHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, server=None):
+    def __init__(self, application, request, stream=None):
         tornado.web.RequestHandler.__init__(self, application, request)
-        self.server = server
+        self.stream = stream
 
     def get(self):
         event_id = self.get_argument('event-id', default=None)
@@ -647,8 +708,8 @@ class _EventPublishHandler(tornado.web.RequestHandler):
                              application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
-        event.aggregator_id.append(self.server.source_id)
-        self.server.dispatch_event(event)
+        event.aggregator_id.append(self.stream.source_id)
+        self.stream.dispatch_event(event)
         self.finish()
 
     def post(self):
@@ -664,21 +725,21 @@ class _EventPublishHandler(tornado.web.RequestHandler):
         for event in evs:
             if event.syntax == 'streamsem-command':
                 if event.command == 'Event-Source-Started':
-                    self.server._start_timing()
+                    self.stream._start_timing()
                 elif event.command == 'Event-Source-Finished':
-                    self.server._stop_timing()
-            event.aggregator_id.append(self.server.source_id)
-            self.server.dispatch_event(event)
+                    self.stream._stop_timing()
+            event.aggregator_id.append(self.stream.source_id)
+            self.stream.dispatch_event(event)
         self.finish()
 
 
 class _EventStreamHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, server=None,
+    def __init__(self, application, request, stream=None,
                  dispatcher=None, compress=False, priority=False):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
         self.compress = compress
-        self.server = server
+        self.stream = stream
         self.priority = priority
 
     @tornado.web.asynchronous
@@ -689,7 +750,7 @@ class _EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
         if self.compress:
-            command = events.create_command(self.server.source_id,
+            command = events.create_command(self.stream.source_id,
                                             'Set-Compression')
             self._on_new_data(str(command))
 
@@ -705,10 +766,10 @@ class _EventStreamHandler(tornado.web.RequestHandler):
 
 
 class _ShortLivedHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, dispatcher=None, server=None):
+    def __init__(self, application, request, dispatcher=None, stream=None):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
-        # 'server' argument is ignored (not necessary)
+        # the 'stream' argument is ignored (not necessary)
 
     @tornado.web.asynchronous
     def get(self):
