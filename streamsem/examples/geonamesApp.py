@@ -29,6 +29,7 @@
 import sys
 import argparse
 import re
+import string
 
 from streamsem.examples.utils.geonamesClient import GeonamesClient
 from streamsem.client import SynchronousClient
@@ -40,6 +41,11 @@ from rdflib import Graph
 from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
+
+
+def queryParser(value):    
+    return string.translate(value, None, "{}").split(",")
+
 
 def main():
     
@@ -54,10 +60,10 @@ def main():
                   help="the identifier of a registered GeoNames user (e.g. demo)")
     parser.add_argument("-w", "--watched", dest="watched", action='store_const', const=True, default=False,
                   help="a boolean flag indicating whether all tweets, or only those whose location is in the watched list should be published")
-    parser.add_argument("-t", "--type", dest="type", required=True,
+    parser.add_argument("-t", "--type", dest="type", required=True, choices=["id","country","position"],
                   help="query type to be used to select the relevant tweets (country|id|position)")
-    parser.add_argument("-q", "--query", dest="query", required=True,
-                  help="query to be used to select the relevant tweets (e.g. US, 6545086, '-3.764647,40.332020,10')")
+    parser.add_argument("-q", "--query", dest="query", required=True, type=queryParser,
+                  help="query to be used to select the relevant tweets (e.g. US, 6545086, '{-3.764647,40.332020,10}')")
     parser.add_argument("-i", "--input", dest="input", required=True,
                   help="URL for input stream where events are read (e.g. http://localhost:9001/events/short-lived)")
     parser.add_argument("-o", "--output", dest="output", required=True,
@@ -72,30 +78,33 @@ def main():
     onlyWatched = options.watched
 
     # Check query format
-    if queryType != "id" and queryType != "country" and queryType != "position":
-        print('Argument query type should be: [id|country|position]') 
-        return
-
     if queryType == "id":
         try:
-            int(queryValue)
-        except ValueError:
+            if len(queryValue) != 1: 
+                raise Exception("Invalid Id")
+            int(queryValue[0])
+        except:
             print('The GeoNames identifier in id queries should be an integer number, e.g. 6544487, change -q argument')
             return
 
     if queryType == "country":
-        if not re.match("^[A-Z]{2}$", queryValue):
-            print('Use ISO-3166 2 digit country codes in country queries, change -q argument')
+        try:
+            if (len(queryValue) != 1) or not re.match("^[A-Z]{2}$", queryValue[0]): 
+                raise Exception("Invalid Coutry Code")
+        except:
+            print('Use ISO-3166 2 digit country codes in country queries, e.g. US, change -q argument')
             return
 
     if queryType == "position":
         try:
-            (long,lat,radius) = queryValue.split(",")
+            if len(queryValue != 3): 
+                raise Exception("Invalid Area")
+            (long,lat,radius) = tuple(queryValue)
             float(long)
             float(lat)
             float(radius)
         except:
-            print('The position query should provide three arguments, longitude, latitude and radius, e.g. "-3.764647,40.332020,10", change the -q argument')
+            print('The position query should provide three arguments, longitude, latitude and radius, e.g. "{-3.764647,40.332020,10}", change the -q argument')
 
     # Client to listen to geolocated tweet stream
     clnt = SynchronousClient(inputUrl)
@@ -120,21 +129,23 @@ def main():
     # Case 2: query by position and radius
     if queryType == "position":
         # Find geonamesId near the position
-        (long,lat,radius) = queryValue.split(",")
-        watchedIds = geo.findNearbyPlaceNames(long, lat, radius)
-        # Mockup for Madrid city center obtained by calling findNearbyPlaceNames("-3.704211", "40.416992", radius=1)
+        (long,lat,radius) = tuple(queryValue)
+        watchedIds = geo.findNearbyPlaceNames(long, lat, radius, maxResults = 30)
+        # Mockup for Madrid city center obtained by calling findNearbyPlaceNames("-3.704211", "40.416992", radius=1, maxResults=10)
         # watchedIds = [6545083, 3117735, 6544494, 6545088, 6545077, 6545082, 6545081, 6545084]
         print "List of geonamesIds to be watched: ",watchedIds
     
     # Case 3: query by country code
     watchedCountry = []
     if queryType == "country":
-        watchedCountry.append(queryValue)
+        watchedCountry.append(queryValue[0])
         print "Country code to be watched ",watchedCountry
 
     # Publisher to push the generated events 
     publisher = client.SynchronousEventPublisher(outputUrl)
 
+    counter = 0
+    
     while True:
         events = clnt.receive_events()
         for event in events:
@@ -155,16 +166,20 @@ def main():
                 (geoId, toponym, country) = place
                 event.body.add((tweet_id, GEONAMES["geonameId"], Literal(str(geoId))))
                 event.body.add((tweet_id, GEONAMES["toponymName"], Literal(toponym)))
-                event.body.add((tweet_id, GEONAMES["countryCode"], Literal(str(country))))                        
+                event.body.add((tweet_id, GEONAMES["countryCode"], Literal(str(country))))
 
             # Forward the modified event
             if onlyWatched:
                 if (geoId in watchedIds) or (country in watchedCountry):
                     publisher.publish(event)
                     print event
+                    counter += 1
+                    print "***",counter,"events published\n"
             else:
                 publisher.publish(event)
                 print event
+                counter += 1
+                print "***",counter,"events published\n"
 
 
 if __name__ == "__main__":

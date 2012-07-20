@@ -159,7 +159,7 @@ class TwitterStreamSensor():
         print event
         self.publisher.publish(event)
         self.counter += 1
-        print "***",self.counter,"events published"
+        print "***",self.counter,"events published\n"
         
 
 def main():
