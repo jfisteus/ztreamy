@@ -329,9 +329,8 @@ class SynchronousClient(object):
             if (isinstance(event, Command)
                 and event.command == 'Stream-Finished'):
                 self.stream_finished = True
-                evs.remove(event)
                 break
-        return evs
+        return [e for e in evs if not isinstance(e, Command)]
 
 
 class EventPublisher(object):
