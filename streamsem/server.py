@@ -43,9 +43,9 @@ import traceback
 import time
 
 import streamsem
+from streamsem.client import Client
 from streamsem import events
 from streamsem import StreamsemException
-from streamsem.client import AsyncStreamingClient
 from streamsem import logger
 
 param_max_events_sync = 20
@@ -370,16 +370,16 @@ class RelayStream(Stream):
     order to select which events are published.
 
     """
-    def __init__(self, path, source_urls,
-                 allow_publish=False, filter_=None,
+    def __init__(self, path, streams, allow_publish=False, filter_=None,
                  buffering_time=None, ioloop=None):
         """Creates a new relay stream.
 
         The stream will retransmit the events of the streams specified
-        in 'source_urls' (either a list or a string with just one
-        URL).  A filter may be specified in 'filter_' in order to
-        select which events are relayed (see the 'filters' module for
-        more information).
+        in 'streams' (either a list of streams or a single stream).
+        Each stream can be either a string representing the stream URL
+        or a local 'server.Stream' (or compatible) object.  A filter
+        may be specified in 'filter_' in order to select which events
+        are relayed (see the 'filters' module for more information).
 
         The rest of the parameters are as described in the constructor
         of the Stream class.
@@ -394,16 +394,10 @@ class RelayStream(Stream):
             event_callback = filter_.filter_events
         else:
             event_callback = self._relay_events
-        if isinstance(source_urls, basestring):
-            self.source_urls = [source_urls]
-        else:
-            self.source_urls = source_urls
-        self.clients = \
-            [AsyncStreamingClient(url, event_callback=event_callback,
-                                  error_callback=self._handle_error,
-                                  parse_event_body=False,
-                                  separate_events=False) \
-                 for url in source_urls]
+        self.client = Client(streams, event_callback,
+                             error_callback=self._handle_error,
+                             parse_event_body=False, separate_events=False,
+                             ioloop=ioloop)
 
     def start(self):
         """Starts the relay stream.
@@ -412,8 +406,7 @@ class RelayStream(Stream):
         is started. User code won't probably need to call it.
 
         """
-        for client in self.clients:
-            client.start(loop=False)
+        self.client.start(loop=False)
         super(RelayStream, self).start()
 
     def stop(self):
@@ -423,8 +416,7 @@ class RelayStream(Stream):
         is stopped. User code won't probably need to call it.
 
         """
-        for client in self.clients:
-            client.stop()
+        self.client.stop()
         super(RelayStream, self).stop()
 
     def _relay_events(self, evs):
