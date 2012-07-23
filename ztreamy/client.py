@@ -50,8 +50,7 @@ transferred_bytes = 0
 data_count = 0
 
 #AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
-AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
-                          max_clients=32768)
+AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
 class Client(object):
     """Asynchronous client for multiple stream sources.
