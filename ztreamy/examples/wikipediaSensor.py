@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Norberto Fernandez Garcia
 #
 # This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@ import rdflib
 import tornado
 import traceback
 import simplejson as json
-import streamsem
+import ztreamy
 import argparse
 
 from rdflib import Graph
@@ -33,9 +33,9 @@ from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
 
-from streamsem import events
-from streamsem import rdfevents
-from streamsem import client
+from ztreamy import events
+from ztreamy import rdfevents
+from ztreamy import client
 
 
 class WikipediaSensor():

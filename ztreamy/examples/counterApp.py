@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Norberto Fernandez Garcia
 #
 # This program is free software: you can redistribute it and/or modify
@@ -28,9 +28,9 @@ import uuid
 import functools
 import argparse
 
-from streamsem.client import AsyncStreamingClient
-from streamsem import rdfevents
-from streamsem import client
+from ztreamy.client import AsyncStreamingClient
+from ztreamy import rdfevents
+from ztreamy import client
 
 from rdflib import Graph
 from rdflib import Namespace

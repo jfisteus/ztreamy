@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -42,11 +42,11 @@ import zlib
 import traceback
 import time
 
-import streamsem
-from streamsem.client import Client
-from streamsem import events
-from streamsem import StreamsemException
-from streamsem import logger
+import ztreamy
+from ztreamy.client import Client
+from ztreamy import events
+from ztreamy import ZtreamyException
+from ztreamy import logger
 
 param_max_events_sync = 20
 
@@ -256,7 +256,7 @@ class Stream(object):
         if source_id is not None:
             self.source_id = source_id
         else:
-            self.source_id = streamsem.random_id()
+            self.source_id = ztreamy.random_id()
         if path.startswith('/'):
             self.path = path
         else:
@@ -545,7 +545,7 @@ class _EventDispatcher(object):
             # Send the available events after the last seen event
             evs, none_lost = self.recent_events.newer_than(last_event_seen)
             if len(evs) > 0:
-                client.send(streamsem.serialize_events(evs))
+                client.send(ztreamy.serialize_events(evs))
                 if not client.streaming:
                     client.close()
         if client.local:
@@ -579,7 +579,7 @@ class _EventDispatcher(object):
 
     def dispatch_priority(self, evs):
         if len(self.priority_clients) > 0 and len(evs) > 0:
-            serialized = streamsem.serialize_events(evs)
+            serialized = ztreamy.serialize_events(evs)
             for client in self.priority_clients:
                 self._send(serialized, client)
 
@@ -600,14 +600,14 @@ class _EventDispatcher(object):
                 self._periods_since_last_event += 1
                 if self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
-                    evs = [events.Command('', 'streamsem-command',
+                    evs = [events.Command('', 'ztreamy-command',
                                           'Test-Connection')]
                     self._periods_since_last_event = 0
                     self.dispatch_priority(evs)
                 else:
                     return
         else:
-            raise StreamsemException('Bad event type', 'send_event')
+            raise ZtreamyException('Bad event type', 'send_event')
         self._periods_since_last_event = 0
         if len(self.unsynced_compressed_streaming_clients) > 0:
             if (len(self.compressed_streaming_clients) == 0
@@ -617,7 +617,7 @@ class _EventDispatcher(object):
             logging.info('Compressed clients: %d synced; %d unsynced'%\
                              (len(self.compressed_streaming_clients),
                               len(self.unsynced_compressed_streaming_clients)))
-            serialized = streamsem.serialize_events(evs)
+            serialized = ztreamy.serialize_events(evs)
             for client in self.streaming_clients:
                 self._send(serialized, client)
             for client in self.unsynced_compressed_streaming_clients:
@@ -687,7 +687,7 @@ class _EventPublishHandler(tornado.web.RequestHandler):
     def get(self):
         event_id = self.get_argument('event-id', default=None)
         if event_id is None:
-            event_id = streamsem.random_id()
+            event_id = ztreamy.random_id()
         source_id = self.get_argument('source-id')
         syntax = self.get_argument('syntax')
         application_id = self.get_argument('application_id')
@@ -705,7 +705,7 @@ class _EventPublishHandler(tornado.web.RequestHandler):
         self.finish()
 
     def post(self):
-        if self.request.headers['Content-Type'] != streamsem.mimetype_event:
+        if self.request.headers['Content-Type'] != ztreamy.mimetype_event:
             raise tornado.web.HTTPError(400, 'Bad content type')
         deserializer = events.Deserializer()
         try:
@@ -715,7 +715,7 @@ class _EventPublishHandler(tornado.web.RequestHandler):
             traceback.print_exc()
             raise tornado.web.HTTPError(400, str(ex))
         for event in evs:
-            if event.syntax == 'streamsem-command':
+            if event.syntax == 'ztreamy-command':
                 if event.command == 'Event-Source-Started':
                     self.stream._start_timing()
                 elif event.command == 'Event-Source-Finished':
@@ -846,8 +846,8 @@ class _RecentEventsBuffer(object):
 def main():
     import time
     import tornado.options
-    from streamsem import rdfevents
-    source_id = streamsem.random_id()
+    from ztreamy import rdfevents
+    source_id = ztreamy.random_id()
     application_id = '1111-1111'
 
     def stop_server():
@@ -879,7 +879,7 @@ def main():
     if tornado.options.options.eventlog:
         print server.source_id
         comments = {'Buffer time (ms)': buffering_time}
-#        logger.logger = logger.StreamsemLogger(server.source_id,
+#        logger.logger = logger.ZtreamyLogger(server.source_id,
         logger.logger = logger.CompactServerLogger(server.source_id,
                                                    'server-' + server.source_id
                                                    + '.log', comments)

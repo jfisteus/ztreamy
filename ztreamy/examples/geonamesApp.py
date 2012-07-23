@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Norberto Fernandez Garcia
 #
 # This program is free software: you can redistribute it and/or modify
@@ -31,11 +31,11 @@ import argparse
 import re
 import string
 
-from streamsem.examples.utils.geonamesClient import GeonamesClient
-from streamsem.client import SynchronousClient
+from ztreamy.examples.utils.geonamesClient import GeonamesClient
+from ztreamy.client import SynchronousClient
 
-from streamsem import rdfevents
-from streamsem import client
+from ztreamy import rdfevents
+from ztreamy import client
 
 from rdflib import Graph
 from rdflib import Namespace

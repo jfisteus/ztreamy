@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,11 +19,11 @@ import gzip
 import tornado.options
 import tornado.ioloop
 
-import streamsem
-import streamsem.client as client
-import streamsem.events as events
-import streamsem.logger as logger
-from streamsem.tools import utils
+import ztreamy
+import ztreamy.client as client
+import ztreamy.events as events
+import ztreamy.logger as logger
+from ztreamy.tools import utils
 
 class RelayScheduler(utils.EventScheduler):
     def __init__(self, filename, num_events, source_id, io_loop, publishers,
@@ -86,7 +86,7 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
-    entity_id = streamsem.random_id()
+    entity_id = ztreamy.random_id()
     limit = tornado.options.options.limit
     publishers = [client.EventPublisher(url) for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
@@ -100,8 +100,8 @@ def main():
                                time_generator=time_generator,
                                add_timestamp=tornado.options.options.timestamp)
     if tornado.options.options.eventlog:
-        logger.logger = logger.StreamsemLogger(entity_id,
-                                               'replay-' + entity_id + '.log')
+        logger.logger = logger.ZtreamyLogger(entity_id,
+                                             'replay-' + entity_id + '.log')
     try:
         io_loop.start()
     except KeyboardInterrupt:

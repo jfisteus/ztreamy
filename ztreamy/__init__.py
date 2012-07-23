@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -20,16 +20,16 @@
 import uuid
 import time
 
-import streamsem.utils.rfc3339
+import ztreamy.utils.rfc3339
 
-mimetype_event = 'application/x-streamsem-event'
+mimetype_event = 'application/x-ztreamy-event'
 
 
-class StreamsemException(Exception):
+class ZtreamyException(Exception):
     """The type of the exceptions normally used in the framework."""
     def __init__(self, message, error_type=None):
         Exception.__init__(self, message)
-        self.code = StreamsemException._error_type_code(error_type)
+        self.code = ZtreamyException._error_type_code(error_type)
 
     @staticmethod
     def _error_type_code(error_type):
@@ -57,9 +57,9 @@ def get_timestamp(date=None):
 
     """
     if date is not None:
-        return streamsem.utils.rfc3339.rfc3339(date)
+        return ztreamy.utils.rfc3339.rfc3339(date)
     else:
-        return streamsem.utils.rfc3339.rfc3339(time.time())
+        return ztreamy.utils.rfc3339.rfc3339(time.time())
 
 _date_format = "%Y-%m-%dT%H:%M:%S"
 
@@ -80,13 +80,13 @@ def serialize_events(evs):
     data = []
     for e in evs:
         if not isinstance(e, Event):
-            raise StreamsemException('Bad event type', 'send_event')
+            raise ZtreamyException('Bad event type', 'send_event')
         data.append(str(e))
     return ''.join(data)
 
 
 # Imports of the main classes of the API provided by the framework,
-# in order to make them available in the "streamsem" namespace.
+# in order to make them available in the "ztreamy" namespace.
 #
 from events import Deserializer, Event, Command
 from server import StreamServer, Stream, RelayStream

@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -25,11 +25,11 @@ import tornado.options
 import tornado.ioloop
 import re
 
-import streamsem
-import streamsem.client as client
-import streamsem.logger as logger
-from streamsem.tools import utils
-from streamsem import StreamsemException
+import ztreamy
+import ztreamy.client as client
+import ztreamy.logger as logger
+from ztreamy.tools import utils
+from ztreamy import ZtreamyException
 
 ns_slog = Namespace('http://www.it.uc3m.es/jaf/ns/slog/#')
 ns_person = Namespace('http://www.it.uc3m.es/jaf/ns/slog/person#')
@@ -90,7 +90,7 @@ class LogEntry(object):
         if self.entry_type in LogEntry._entry_types:
             return LogEntry._entry_types[self.entry_type]
         else:
-            raise StreamsemException('Unknown event type')
+            raise ZtreamyException('Unknown event type')
 
     def _escape(self, text):
         return LogEntry._re_clean.sub('', text)
@@ -138,7 +138,7 @@ class EventScheduler(object):
 
     def _schedule_entry(self, entry):
         if not entry.subject in self.source_ids:
-            self.source_ids[entry.subject] = streamsem.random_id()
+            self.source_ids[entry.subject] = ztreamy.random_id()
         pub = utils.EventPublisher(entry, self.source_ids[entry.subject],
                                    self.publishers)
         fire_time = (self.t0_new
@@ -184,7 +184,7 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
-    entity_id = streamsem.random_id()
+    entity_id = ztreamy.random_id()
     publishers = [client.EventPublisher(url) for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
     filename = '../data-abel/EventData-sorted.csv.gz'
@@ -192,8 +192,8 @@ def main():
                                tornado.options.options.timescale,
                                compressed=True)
     if tornado.options.options.eventlog:
-        logger.logger = logger.StreamsemLogger(entity_id,
-                                               'replay-' + entity_id + '.log')
+        logger.logger = logger.ZtreamyLogger(entity_id,
+                                             'replay-' + entity_id + '.log')
     try:
         io_loop.start()
     except KeyboardInterrupt:

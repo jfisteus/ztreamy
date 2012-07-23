@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 #
 from optparse import OptionParser
 
-from streamsem.tools import utils
+from ztreamy.tools import utils
 
 class DelayStats(object):
     def __init__(self, event_num, delays):

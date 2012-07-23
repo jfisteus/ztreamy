@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -42,9 +42,9 @@ import httplib
 from urlparse import urlparse
 import datetime
 
-import streamsem
-from streamsem import Deserializer, Command, mimetype_event
-from streamsem import logger
+import ztreamy
+from ztreamy import Deserializer, Command, mimetype_event
+from ztreamy import logger
 
 transferred_bytes = 0
 data_count = 0
@@ -434,7 +434,7 @@ class EventPublisher(object):
         receives a tornado.httpclient.HTTPResponse parameter.
 
         """
-        body = streamsem.serialize_events(events)
+        body = ztreamy.serialize_events(events)
         req = HTTPRequest(self.server_url, body=body, method='POST',
                           headers=self.headers, request_timeout=0,
                           connect_timeout=0)
@@ -502,7 +502,7 @@ class SynchronousEventPublisher(object):
         receives a tornado.httpclient.HTTPResponse parameter.
 
         """
-        body = streamsem.serialize_events(events)
+        body = ztreamy.serialize_events(events)
         conn = httplib.HTTPConnection(self.hostname, self.port)
         conn.request('POST', self.path, body,
                      SynchronousEventPublisher._headers)
@@ -579,18 +579,18 @@ def main():
     def stop_client():
         client.stop()
     options = read_cmd_options()
-#    import streamsem.filters
-#    filter = streamsem.filters.SimpleTripleFilter(handle_event,
+#    import ztreamy.filters
+#    filter = ztreamy.filters.SimpleTripleFilter(handle_event,
 #                                        predicate='http://example.com/temp')
     client = Client(options.stream_urls,
                     event_callback=handle_event,
 #                    event_callback=filter.filter_event,
                     error_callback=handle_error)
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
-    node_id = streamsem.random_id()
+    node_id = ztreamy.random_id()
     if tornado.options.options.eventlog:
-        logger.logger = logger.StreamsemLogger(node_id,
-                                               'client-' + node_id + '.log')
+        logger.logger = logger.ZtreamyLogger(node_id,
+                                             'client-' + node_id + '.log')
     try:
         client.start(loop=True)
     except KeyboardInterrupt:

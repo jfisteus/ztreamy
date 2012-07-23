@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -20,8 +20,8 @@
 """
 import time
 
-import streamsem
-from streamsem import StreamsemException
+import ztreamy
+from ztreamy import ZtreamyException
 
 
 class Deserializer(object):
@@ -97,8 +97,8 @@ class Deserializer(object):
             event = self.deserialize_next(parse_body=parse_body)
         if complete and len(self._data) > 0:
             self.reset()
-            raise StreamsemException('Spurious data in the input event',
-                                     'event_deserialize')
+            raise ZtreamyException('Spurious data in the input event',
+                                   'event_deserialize')
         return events
 
     def deserialize_next(self, parse_body=True):
@@ -127,8 +127,8 @@ class Deserializer(object):
                 break
             comps = part.split(':')
             if len(comps) < 2:
-                    raise StreamsemException('Event syntax error',
-                                             'event_deserialize')
+                    raise ZtreamyException('Event syntax error',
+                                           'event_deserialize')
             header = comps[0].strip()
             value = part[len(comps[0]) + 1:].strip()
             self._update_header(header, value)
@@ -142,8 +142,8 @@ class Deserializer(object):
         if (not 'Event-Id' in self._event
             or not 'Source-Id' in self._event
             or not 'Syntax' in self._event):
-            raise StreamsemException('Missing headers in event',
-                                     'event_deserialize')
+            raise ZtreamyException('Missing headers in event',
+                                   'event_deserialize')
         end = pos + int(body_length)
         if end > len(self._data):
             self._data = self._data[pos:]
@@ -183,8 +183,8 @@ class Deserializer(object):
         elif header not in self._event:
             self._event[header] = value
         else:
-            raise StreamsemException('Duplicate header in event',
-                                     'event_deserialize')
+            raise ZtreamyException('Duplicate header in event',
+                                   'event_deserialize')
 
 
 class Event(object):
@@ -251,7 +251,7 @@ class Event(object):
         should be used instead.
 
         """
-        self.event_id = event_id or streamsem.random_id()
+        self.event_id = event_id or ztreamy.random_id()
         self.source_id = source_id
         self.syntax = syntax
         self.body = body
@@ -263,7 +263,7 @@ class Event(object):
             else:
                 self.aggregator_id = [str(e) for e in aggregator_id]
         self.event_type = event_type
-        self.timestamp = timestamp or streamsem.get_timestamp()
+        self.timestamp = timestamp or ztreamy.get_timestamp()
         self.application_id = application_id
         if extra_headers is not None:
             self.extra_headers = extra_headers
@@ -285,7 +285,7 @@ class Event(object):
     def serialize_body(self):
         """Returns a string representation of the body of the event.
 
-        Raises a `StreamsemException` if the body is None. This method
+        Raises a `ZtreamyException` if the body is None. This method
         should be overriden by subclasses in order to provide a
         syntax-specific serialization.
 
@@ -293,7 +293,7 @@ class Event(object):
         if self.body is not None:
             return str(self.body)
         else:
-            raise StreamsemException('Empty body in event', 'even_serialize')
+            raise ZtreamyException('Empty body in event', 'even_serialize')
 
     def time(self):
         """Returns the event timestamp as a seconds since the epoch value.
@@ -303,7 +303,7 @@ class Event(object):
 
         """
         if self.timestamp is not None:
-            return streamsem.rfc3339_as_time(self.timestamp)
+            return ztreamy.rfc3339_as_time(self.timestamp)
         else:
             return None
 
@@ -352,17 +352,17 @@ class Command(Event):
         be the body of the event.
 
         """
-        if syntax != 'streamsem-command':
-            raise StreamsemException('Usupported syntax in Command',
-                                     'programming')
+        if syntax != 'ztreamy-command':
+            raise ZtreamyException('Usupported syntax in Command',
+                                   'programming')
         super(Command, self).__init__(source_id, syntax, None, **kwargs)
         self.body = command
         self.command = command
         if not command in Command.valid_commands:
-            raise StreamsemException('Usupported command ' + command,
-                                     'programming')
+            raise ZtreamyException('Usupported command ' + command,
+                                   'programming')
 
-Event.register_syntax('streamsem-command', Command, always_parse=True)
+Event.register_syntax('ztreamy-command', Command, always_parse=True)
 
 
 class TestEvent(Event):
@@ -380,9 +380,9 @@ class TestEvent(Event):
         not None, the sequence number is read from ``body`` instead.
 
         """
-        if syntax != 'streamsem-test':
-            raise StreamsemException('Usupported syntax in TestEvent',
-                                     'programming')
+        if syntax != 'ztreamy-test':
+            raise ZtreamyException('Usupported syntax in TestEvent',
+                                   'programming')
         super(TestEvent, self).__init__(source_id, syntax, None, **kwargs)
         if body is not None:
             self._parse_body(body)
@@ -402,11 +402,11 @@ class TestEvent(Event):
         # This event has an empty body
         pass
 
-Event.register_syntax('streamsem-test', TestEvent, always_parse=True)
+Event.register_syntax('ztreamy-test', TestEvent, always_parse=True)
 
 
 def create_command(source_id, command):
-    return Command(source_id, 'streamsem-command', command)
+    return Command(source_id, 'ztreamy-command', command)
 
 def parse_aggregator_id(data):
     return [v.strip() for v in data.split(',') if v != '']

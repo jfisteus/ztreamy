@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Norberto Fernandez Garcia
 #
 # This program is free software: you can redistribute it and/or modify
@@ -29,11 +29,11 @@ from rdflib import Namespace
 from rdflib import Literal
 from rdflib import URIRef
 
-from streamsem import rdfevents
-from streamsem import client
-from streamsem import logger
-from streamsem.tools import utils
-from streamsem.examples.utils.twitterRESTclient import TwitterRESTclient
+from ztreamy import rdfevents
+from ztreamy import client
+from ztreamy import logger
+from ztreamy.tools import utils
+from ztreamy.examples.utils.twitterRESTclient import TwitterRESTclient
 
 
 class TwitterFollowerBot():

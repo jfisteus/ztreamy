@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 #
 import tornado.options
 
-from streamsem.server import RelayStream, StreamServer
+from ztreamy.server import RelayStream, StreamServer
 
 def read_cmd_options():
     from optparse import Values, OptionParser
@@ -40,8 +40,8 @@ def main():
     options = read_cmd_options()
     def stop_server():
         server.stop()
-#    import streamsem.filters
-#    filter_=streamsem.filters.SourceFilter(None,
+#    import ztreamy.filters
+#    filter_=ztreamy.filters.SourceFilter(None,
 #                             source_id='65f0bfeb-cc79-4188-8404-175f3a6be6c3')
     if (tornado.options.options.buffer is not None
         and tornado.options.options.buffer > 0):

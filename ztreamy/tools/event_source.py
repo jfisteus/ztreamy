@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,11 +18,11 @@
 import tornado.ioloop
 import tornado.options
 
-import streamsem
-from streamsem import events
-from streamsem import client
-from streamsem import logger
-from streamsem.tools import utils
+import ztreamy
+from ztreamy import events
+from ztreamy import client
+from ztreamy import logger
+from ztreamy.tools import utils
 
 class Scheduler(utils.EventScheduler):
     def __init__(self, num_events, source_id, io_loop, publishers,
@@ -37,7 +37,7 @@ class Scheduler(utils.EventScheduler):
         last_sequence_num = 0
         while num_events <= 0 or num_events > last_sequence_num:
             last_sequence_num += 1
-            yield events.TestEvent(source_id, 'streamsem-test', None,
+            yield events.TestEvent(source_id, 'ztreamy-test', None,
                                    sequence_num=last_sequence_num)
 
 
@@ -60,7 +60,7 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
-    entity_id = streamsem.random_id()
+    entity_id = ztreamy.random_id()
     limit = tornado.options.options.limit
     publishers = [client.EventPublisher(url) for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
@@ -68,8 +68,8 @@ def main():
     scheduler = Scheduler(limit, entity_id, io_loop, publishers,
                           time_generator=time_generator, add_timestamp=True)
     if tornado.options.options.eventlog:
-        logger.logger = logger.StreamsemLogger(entity_id,
-                                               'source-' + entity_id + '.log')
+        logger.logger = logger.ZtreamyLogger(entity_id,
+                                             'source-' + entity_id + '.log')
     try:
         io_loop.start()
     except KeyboardInterrupt:
