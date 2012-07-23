@@ -32,6 +32,8 @@ requirements = ['setuptools',
                 'rdflib',
                 'rdfextras',
                 'tweepy',
+                'pycurl',
+                'pyparsing',
                 ]
 if sys.version_info.minor == 6:
     requirements.append('argparse')
