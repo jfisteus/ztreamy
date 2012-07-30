@@ -34,6 +34,8 @@ requirements = ['setuptools',
                 'tweepy',
                 'pycurl',
                 'pyparsing',
+                'httplib2',
+                'simplejson',
                 ]
 if sys.version_info.minor == 6:
     requirements.append('argparse')
