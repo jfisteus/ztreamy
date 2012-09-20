@@ -46,7 +46,7 @@ import random
 import ztreamy
 from ztreamy import Deserializer, Command, mimetype_event
 from ztreamy import logger
-from streamsem.rdzutils import EventDecompressor
+from ztreamy.rdzutils import EventDecompressor
 
 transferred_bytes = 0
 data_count = 0

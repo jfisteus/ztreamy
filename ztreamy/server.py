@@ -47,7 +47,7 @@ from ztreamy.client import Client
 from ztreamy import events
 from ztreamy import ZtreamyException
 from ztreamy import logger
-from rdzutils import EventCompressor
+from ztreamy.rdzutils import EventCompressor
 
 param_max_events_sync = 20
 
