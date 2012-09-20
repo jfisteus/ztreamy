@@ -598,6 +598,10 @@ class _EventDispatcher(object):
         self.unsynced_compressed_streaming_clients = \
             [c for c in self.unsynced_compressed_streaming_clients \
                  if not c.closed]
+        self.rdz_streaming_clients = \
+            [c for c in self.rdz_streaming_clients if not c.closed]
+        self.unsynced_rdz_streaming_clients = \
+            [c for c in self.unsynced_rdz_streaming_clients if not c.closed]
         self.local_clients = [c for c in self.local_clients if not c.closed]
         self._next_client_cleanup = -1
         logging.info('Cleaning up clients')
