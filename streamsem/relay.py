@@ -1,9 +1,26 @@
+# streamsem: a framework for publishing semantic events on the Web
+# Copyright (C) 2011-2012 Jesus Arias Fisteus
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+#
 import tornado.options
 
-from streamsem.server import RelayServer
+from streamsem.server import RelayStream, StreamServer
 
 def read_cmd_options():
-    from optparse import Values
+    from optparse import Values, OptionParser
     tornado.options.define('port', default=8888, help='run on the given port',
                            type=int)
     tornado.options.define('aggregatorid', default=None,
@@ -15,7 +32,7 @@ def read_cmd_options():
     if len(remaining) >= 1:
         options.stream_urls = remaining
     else:
-        parser.error('At least one source stream URL required')
+        OptionParser().error('At least one source stream URL required')
     return options
 
 def main():
@@ -31,10 +48,12 @@ def main():
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = RelayServer(tornado.options.options.port, options.stream_urls,
+    server = StreamServer(tornado.options.options.port)
+    stream = RelayStream('/relay', options.stream_urls,
                          buffering_time=buffering_time)
+    server.add_stream(stream)
 
-    # Uncomment to test RelayServer.stop():
+    # Uncomment to test RelayStream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
 
     server.start()

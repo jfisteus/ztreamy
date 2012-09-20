@@ -1,4 +1,35 @@
-""" Code for event stream servers.
+# streamsem: a framework for publishing semantic events on the Web
+# Copyright (C) 2011-2012 Jesus Arias Fisteus
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+#
+""" Implementation of streams and an asynchronous HTTP server for them.
+
+Two kinds of streams are provided: 'Stream' and 'RelayStream'.
+
+'Stream' is a basic stream of events. It can transmit events received
+from remote sources or generated at the process of the server.
+
+'RelayStream' extends the basic stream with functionality to listen to
+other streams and retransmitting their events. Events from remote
+sources or generated at the process of the server can also be
+published in this type of stream.
+
+The server is asynchronous. Be careful when doing blocking calls from
+callbacks (for example, sources of events and filters), because the
+server will be blocked.
 
 """
 
@@ -12,9 +43,9 @@ import traceback
 import time
 
 import streamsem
+from streamsem.client import Client
 from streamsem import events
 from streamsem import StreamsemException
-from streamsem.client import AsyncStreamingClient
 from streamsem import logger
 from rdzutils import EventCompressor
 
@@ -23,55 +54,74 @@ param_max_events_sync = 20
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
 
-class StreamServer(object):
-    def __init__(self, port, ioloop=None, allow_publish=False,
-                 buffering_time=None, source_id=None):
+
+class StreamServer(tornado.web.Application):
+    """An HTTP server for event streams.
+
+    The server is able to serve one or more streams. Each stream is
+    identified by its path in the server. A typical use of the server
+    consists of creating it, registering one or more streams, and
+    starting it::
+
+    stream1 = Stream('/mystream1')
+    stream2 = Stream('/mystream1')
+    server = StreamServer(8080)
+    server.add_stream(stream1)
+    server.add_stream(stream2)
+    server.start()
+
+    """
+    def __init__(self, port, ioloop=None):
+        """Creates a new server.
+
+        'port' specifies the port number in which the HTTP server will
+        listen.
+
+        The server won't start to serve streams until start() is
+        called.  Streams cannot be registered in the server after it
+        has been started.
+
+        """
+        # No settings by now...
+        settings = dict()
+        super(StreamServer, self).__init__(**settings)
         logging.info('Initializing server...')
-        if source_id is not None:
-            self.source_id = source_id
-        else:
-            self.source_id = streamsem.random_id()
+        self.http_server = tornado.httpserver.HTTPServer(self)
+        self.streams = []
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
-        self.app = WebApplication(self, allow_publish=allow_publish)
-        self.http_server = tornado.httpserver.HTTPServer(self.app)
-        self.buffering_time = buffering_time
-        self._event_buffer = []
-        if buffering_time:
-            self.buffer_dump_sched = \
-                tornado.ioloop.PeriodicCallback(self._dump_buffer,
-                                                buffering_time,
-                                                self.ioloop)
-        self.stats_sched = tornado.ioloop.PeriodicCallback( \
-            self.app.dispatcher.stats, 10000, self.ioloop)
         self._looping = False
         self._started = False
         self._stopped = False
 
-    def dispatch_event(self, event):
-#        logger.logger.event_published(event)
-        self.app.dispatcher.dispatch_priority([event])
-        if self.buffering_time is None:
-            self.app.dispatcher.dispatch([event])
-        else:
-            self._event_buffer.append(event)
+    def add_stream(self, stream):
+        """Adds a new stream to be served in this server.
 
-    def dispatch_events(self, events):
-#        for e in events:
-#            logger.logger.event_published(e)
-        self.app.dispatcher.dispatch_priority(events)
-        if self.buffering_time is None:
-            self.app.dispatcher.dispatch(events)
-        else:
-            self._event_buffer.extend(events)
+        'stream' is an object of the class 'Stream', its sublcasses or
+        any other class providing a similar interface.
+
+        This method cannot be called after the server is started through
+        its 'start()' method.
+
+        """
+        assert not self._started
+        self.streams.append(stream)
 
     def start(self, loop=True):
+        """Starts the server.
+
+        The server begins to listen to HTTP requests.
+
+        If 'loop' is true (which is the default), the server will
+        block on the ioloop until 'close()' is called.
+
+        """
         assert(not self._started)
         logging.info('Starting server...')
+        self._register_handlers()
         self.http_server.listen(self.port)
-        if self.buffering_time:
-            self.buffer_dump_sched.start()
-        self.stats_sched.start()
+        for stream in self.streams:
+            stream.start()
         self._started = True
         if loop:
             self._looping = True
@@ -79,17 +129,227 @@ class StreamServer(object):
             self._looping = False
 
     def stop(self):
+        """Stops the server.
+
+        If the server is blocked on the ioloop in the 'start()'
+        method, it is released.
+
+        The server object cannot be used again after been closed.
+
+        """
         if self._started and not self._stopped:
             logging.info('Stopping server...')
+            for stream in self.streams:
+                stream.stop()
             self.http_server.stop()
-            self.app.dispatcher.close()
-            if self.buffering_time:
-                self.buffer_dump_sched.stop()
-            self.stats_sched.stop()
             self._stopped = True
             if self._looping == True:
                 self.ioloop.stop()
                 self._looping = False
+
+    def _register_handlers(self):
+        handlers = []
+        for stream in self.streams:
+            handler_kwargs = {
+                'stream': stream,
+                'dispatcher': stream.dispatcher,
+            }
+            compressed_kwargs = {'compress': True}
+            compressed_kwargs.update(handler_kwargs)
+            rdz_kwargs = {'rdz': True}
+            rdz_kwargs.update(handler_kwargs)
+            priority_kwargs = {'compress': False, 'priority': True}
+            priority_kwargs.update(handler_kwargs)
+            handlers.extend([
+                ## tornado.web.URLSpec(r"/", _MainHandler),
+                tornado.web.URLSpec(stream.path + r"/stream",
+                                    _EventStreamHandler,
+                                    kwargs=handler_kwargs),
+                tornado.web.URLSpec(stream.path + r"/compressed",
+                                    _EventStreamHandler,
+                                    kwargs=compressed_kwargs),
+                tornado.web.URLSpec(stream.path + r"/rdz",
+                                    _EventStreamHandler,
+                                    kwargs=rdz_kwargs),
+                tornado.web.URLSpec(stream.path + r"/priority",
+                                    _EventStreamHandler,
+                                    kwargs=priority_kwargs),
+                tornado.web.URLSpec(stream.path + r"/short-lived",
+                                    _ShortLivedHandler,
+                                    kwargs=handler_kwargs),
+            ])
+            if stream.allow_publish:
+                publish_kwargs = {'stream': stream}
+                handlers.append(tornado.web.URLSpec(stream.path + r"/publish",
+                                                    _EventPublishHandler,
+                                                    kwargs=publish_kwargs))
+        self.add_handlers(".*$", handlers)
+
+
+class Stream(object):
+    """Stream of events.
+
+    The stream must be published through a web server::
+
+    server = StreamServer(8080)
+    stream = Stream('/mystream')
+    server.add_stream(stream)
+
+    The stream has an associated path prefix, which is used to
+    identify the stream within the server (a server can serve more
+    than one stream). Clients connect to the server and provide the
+    appropriate HTTP path. This path is the concatenation of the
+    prefix of the stream and the following subcomponents:
+
+    '/': not implemented yet. Intended for human readable
+        information about the stream.
+
+    '/stream': uncompressed stream with long-lived response.  The
+        response is not closed by the server, and events are sent to
+        the client as they are available. A client library able to
+        notify the user as new chunks of data are received is needed
+        in order to follow this stream.
+
+    '/compressed': zlib-compressed stream with long-lived response.
+        Similar to how the previous path works with the only
+        difference of compression.
+
+    '/priority': uncompressed stream with lower delays intended for
+        clients with priority, typically relay servers.
+
+    '/next': available events are sent to the client uncompressed.
+        The request is closed immediately. The client can specify the
+        latest event it has received in order to get the events that
+        follow it.
+
+    '/publish': receives events from event sources in order to be
+        published in the stream.
+
+    There are two ways of publishing events in a stream: sending them
+    through HTTP using the .../publish path, if allowed by the
+    configuration of the stream, or using locally its
+    'dispatch_event()' or 'dispatch_events()' methods.
+
+    """
+    def __init__(self, path, allow_publish=False, buffering_time=None,
+                 source_id=None, num_recent_events=2048, ioloop=None):
+        """Creates a stream object.
+
+        The stream will be served with the specified 'path' prefix,
+        which should start with a slash ('/') and should not end with
+        one. If 'path' does not start with a slash, this constructor
+        inserts it automatically. For example, if the value of 'path'
+        is '/mystream' the stream will be served as:
+
+        http://host:port/mystream/stream
+        http://host:port/mystream/compressed
+        (etc.)
+
+        The stream does not accept events from clients, unless
+        'allow_publish' is set to 'True'.
+
+        'buffering_time' controls the period for which events are
+        accumulated in a buffer before sending them to the
+        clients. Higher times improve CPU performance in the server
+        and compression ratios, but increase the latency in the
+        delivery of events.
+
+        If a 'ioloop' object is given, it will be used by the internal
+        timers of the stream.  If not, the default 'ioloop' of the
+        Tornado instance will be used.
+
+        """
+        if source_id is not None:
+            self.source_id = source_id
+        else:
+            self.source_id = streamsem.random_id()
+        if path.startswith('/'):
+            self.path = path
+        else:
+            self.path = '/' + path
+        self.allow_publish = allow_publish
+        self.dispatcher = _EventDispatcher()
+        self.buffering_time = buffering_time
+        if ioloop is None:
+            ioloop = tornado.ioloop.IOLoop.instance()
+        self._event_buffer = []
+        if buffering_time:
+            self.buffer_dump_sched = \
+                tornado.ioloop.PeriodicCallback(self._dump_buffer,
+                                                buffering_time, ioloop)
+        self.stats_sched = tornado.ioloop.PeriodicCallback( \
+                                          self.dispatcher.stats, 10000, ioloop)
+
+    def start(self):
+        """Starts the stream.
+
+        The StreamServer will automatically call this method when it
+        is started. User code won't probably need to call it.
+
+        """
+        if self.buffering_time:
+            self.buffer_dump_sched.start()
+        self.stats_sched.start()
+
+    def stop(self):
+        """Stops the stream.
+
+        The StreamServer will automatically call this method when it
+        is stopped. User code won't probably need to call it.
+
+        """
+        self.dispatch_event(events.create_command(self.source_id,
+                                                  'Stream-Finished'))
+        if self.buffering_time:
+            self.buffer_dump_sched.stop()
+            self._dump_buffer()
+        self.dispatcher.close()
+        self.stats_sched.stop()
+
+    def dispatch_event(self, event):
+        """Publishes an event in this stream.
+
+        The event may not be sent immediately to normal clients if the
+        server is configured to do buffering. However, it will be sent
+        immediately to priority clients.
+
+        """
+#        logger.logger.event_published(event)
+        self.dispatcher.dispatch_priority([event])
+        if self.buffering_time is None:
+            self.dispatcher.dispatch([event])
+        else:
+            self._event_buffer.append(event)
+
+    def dispatch_events(self, events):
+        """Publishes a list of events in this stream.
+
+        The events may not be sent immediately to normal clients if
+        the stream is configured to do buffering. However, they will
+        be sent immediately to priority clients.
+
+        """
+#        for e in events:
+#            logger.logger.event_published(e)
+        self.dispatcher.dispatch_priority(events)
+        if self.buffering_time is None:
+            self.dispatcher.dispatch(events)
+        else:
+            self._event_buffer.extend(events)
+
+    def create_local_client(self, callback, separate_events=True):
+        """Creates a local client for this stream.
+
+        'callback' is a callback function to be called when new events
+        are available in the stream. If 'separate_events' is True (the
+        default), the callback receives just one event object in each
+        call. It it is 'false', the callback receives a list which may
+        contain one or more event objects.
+
+        """
+        client = _LocalClient(callback, separate_events=separate_events)
+        self.dispatcher.register_client(client)
+        return client
 
     def _start_timing(self):
         self._cpu_timer_start = time.clock()
@@ -104,41 +364,66 @@ class StreamServer(object):
                                     self._real_timer_start)
 
     def _dump_buffer(self):
-        self.app.dispatcher.dispatch(self._event_buffer)
+        self.dispatcher.dispatch(self._event_buffer)
         self._event_buffer = []
 
 
-class RelayServer(StreamServer):
-    """A server that relays events from other servers."""
-    def __init__(self, port, source_urls, ioloop=None,
-                 allow_publish=False, filter_=None,
-                 buffering_time=None):
-        super(RelayServer, self).__init__(port, ioloop=ioloop,
+class RelayStream(Stream):
+    """A stream that relays events from other streams.
+
+    This stream listens to other event streams and publishes their
+    events as a new stream. A filter can optionally be applied in
+    order to select which events are published.
+
+    """
+    def __init__(self, path, streams, allow_publish=False, filter_=None,
+                 buffering_time=None, ioloop=None):
+        """Creates a new relay stream.
+
+        The stream will retransmit the events of the streams specified
+        in 'streams' (either a list of streams or a single stream).
+        Each stream can be either a string representing the stream URL
+        or a local 'server.Stream' (or compatible) object.  A filter
+        may be specified in 'filter_' in order to select which events
+        are relayed (see the 'filters' module for more information).
+
+        The rest of the parameters are as described in the constructor
+        of the Stream class.
+
+        """
+        super(RelayStream, self).__init__(path,
                                           allow_publish=allow_publish,
-                                          buffering_time=buffering_time)
+                                          buffering_time=buffering_time,
+                                          ioloop=ioloop)
         if filter_ is not None:
             filter_.callback = self._relay_events
             event_callback = filter_.filter_events
         else:
             event_callback = self._relay_events
-        self.source_urls = source_urls
-        self.clients = \
-            [AsyncStreamingClient(url, event_callback=event_callback,
-                                  error_callback=self._handle_error,
-                                  parse_event_body=False,
-                                  separate_events=False) \
-                 for url in source_urls]
+        self.client = Client(streams, event_callback,
+                             error_callback=self._handle_error,
+                             parse_event_body=False, separate_events=False,
+                             ioloop=ioloop)
 
-    def start(self, loop=True):
-        for client in self.clients:
-            client.start(loop=False)
-        super(RelayServer, self).start(loop)
+    def start(self):
+        """Starts the relay stream.
+
+        The StreamServer will automatically call this method when it
+        is started. User code won't probably need to call it.
+
+        """
+        self.client.start(loop=False)
+        super(RelayStream, self).start()
 
     def stop(self):
-        if self._started and not self._stopped:
-            for client in self.clients:
-                client.stop()
-            super(RelayServer, self).stop()
+        """Stops the relay stream.
+
+        The StreamServer will automatically call this method when it
+        is stopped. User code won't probably need to call it.
+
+        """
+        self.client.stop()
+        super(RelayStream, self).stop()
 
     def _relay_events(self, evs):
         if isinstance(evs, events.Event):
@@ -154,43 +439,7 @@ class RelayServer(StreamServer):
             logging.error(message)
 
 
-class WebApplication(tornado.web.Application):
-    def __init__(self, server, allow_publish=False):
-        self.dispatcher = EventDispatcher()
-        handler_kwargs = {
-            'server': server,
-            'dispatcher': self.dispatcher,
-        }
-        compressed_kwargs = {'compress': True}
-        compressed_kwargs.update(handler_kwargs)
-        rdz_kwargs = {'rdz': True}
-        rdz_kwargs.update(handler_kwargs)
-        priority_kwargs = {'compress': False, 'priority': True}
-        priority_kwargs.update(handler_kwargs)
-        handlers = [
-            tornado.web.URLSpec(r"/", MainHandler),
-            tornado.web.URLSpec(r"/events/stream", EventStreamHandler,
-                                kwargs=handler_kwargs),
-            tornado.web.URLSpec(r"/events/compressed", EventStreamHandler,
-                                kwargs=compressed_kwargs),
-            tornado.web.URLSpec(r"/events/rdz", EventStreamHandler,
-                                kwargs=rdz_kwargs),
-            tornado.web.URLSpec(r"/events/priority", EventStreamHandler,
-                                kwargs=priority_kwargs),
-            tornado.web.URLSpec(r"/events/next", NextEventHandler,
-                                kwargs=handler_kwargs),
-        ]
-        if allow_publish:
-            publish_kwargs = {'server': server}
-            handlers.append(tornado.web.URLSpec(r"/events/publish",
-                                                EventPublishHandler,
-                                                kwargs=publish_kwargs))
-        # No settings by now...
-        settings = dict()
-        super(WebApplication, self).__init__(handlers, **settings)
-
-
-class Client(object):
+class _Client(object):
     def __init__(self, handler, callback, streaming=False, compress=False,
                  rdz=False, priority=False):
         assert streaming or not compress
@@ -211,6 +460,7 @@ class Client(object):
         elif self.rdz:
             self.compression_synced = False
             self.compressor = EventCompressor()
+        self.local = False
 
     def send(self, data):
         if self.compress and not self.compression_synced:
@@ -218,7 +468,6 @@ class Client(object):
             comp_data_extra = self.compressor.flush(zlib.Z_SYNC_FLUSH)
             self.callback(comp_data + comp_data_extra)
         elif self.rdz and not self.compression_synced:
-            assert isinstance(data, events.Event)
             comp_data = self.compressor.compress(data)
             comp_data_extra = self.compressor.sync_flush()
             self.callback(comp_data + comp_data_extra)
@@ -233,7 +482,7 @@ class Client(object):
         """
         self.closed = True
         if not self.handler.request.connection.stream.closed():
-            logging.info('Finishing a client...')
+            ## logging.info('Finishing a client...')
             self.handler.finish()
             self.compressor = None
 
@@ -248,8 +497,43 @@ class Client(object):
             self.compression_synced = True
 
 
-class EventDispatcher(object):
-    def __init__(self):
+class _LocalClient(object):
+    """Handle for a local client.
+
+    Do not create instances of this class directly. An instance will
+    be returned by calling 'create_local_client()' in 'Stream'.  In
+    order to disconnect from the stream, call 'close()' on this
+    object.
+
+    """
+    def __init__(self, callback, separate_events=True):
+        """Not intended to be called by the user.
+
+        Use 'create_local_client()' in 'Stream' instead.
+
+        """
+        self.callback = callback
+        self.separate_events = separate_events
+        self.local = True
+        self.streaming = False
+        self.compress = False
+        self.priority = False
+        self.closed = False
+
+    def close(self):
+        """Disconnects from the stream."""
+        self.closed = True
+
+    def _send_events(self, evs):
+        if not self.separate_events:
+            self.callback(evs)
+        else:
+            for event in evs:
+                self.callback(event)
+
+
+class _EventDispatcher(object):
+    def __init__(self, num_recent_events=2048):
         self.priority_clients = []
         self.streaming_clients = []
         self.compressed_streaming_clients = []
@@ -257,6 +541,7 @@ class EventDispatcher(object):
         self.rdz_streaming_clients = []
         self.unsynced_compressed_streaming_clients = []
         self.one_time_clients = []
+        self.local_clients = []
         self.event_cache = []
         self.cache_size = 200
         self._compressor = zlib.compressobj()
@@ -265,8 +550,9 @@ class EventDispatcher(object):
         self._next_client_cleanup = -1
         self._periods_since_last_event = 0
         self.sent_bytes = 0
+        self.recent_events = _RecentEventsBuffer(num_recent_events)
 
-    def register_client(self, client):
+    def register_client(self, client, last_event_seen=None):
         if client.streaming:
             if client.priority:
                 self.priority_clients.append(client)
@@ -278,8 +564,18 @@ class EventDispatcher(object):
                 self.streaming_clients.append(client)
             logging.info('Streaming client registered; stream: %i; comp: %i'\
                              %(client.streaming, client.compress))
-        else:
+        if last_event_seen != None:
+            # Send the available events after the last seen event
+            evs, none_lost = self.recent_events.newer_than(last_event_seen)
+            if len(evs) > 0:
+                client.send(self._serialize_events(evs))
+                if not client.streaming:
+                    client.close()
+        if client.local:
+            self.local_clients.append(client)
+        elif not client.streaming and not client.closed:
             self.one_time_clients.append(client)
+
 
     def deregister_client(self, client):
         if client.streaming:
@@ -287,6 +583,8 @@ class EventDispatcher(object):
             logging.info('Client deregistered')
             if self._next_client_cleanup < 0:
                 self._next_client_cleanup = 10
+        elif client.local:
+            client.close()
 
     def clean_closed_clients(self):
         self.priority_clients = \
@@ -298,6 +596,7 @@ class EventDispatcher(object):
         self.unsynced_compressed_streaming_clients = \
             [c for c in self.unsynced_compressed_streaming_clients \
                  if not c.closed]
+        self.local_clients = [c for c in self.local_clients if not c.closed]
         self._next_client_cleanup = -1
         logging.info('Cleaning up clients')
 
@@ -312,9 +611,11 @@ class EventDispatcher(object):
                        + len(self.unsynced_compressed_streaming_clients)
                        + len(self.compressed_streaming_clients)
                        + len(self.unsynced_rdz_streaming_clients)
-                       + len(self.rdz_streaming_clients))
+                       + len(self.rdz_streaming_clients)
+                       + len(self.local_clients))
         logging.info('Sending %r events to %r clients', len(evs),
                      num_clients)
+        self.recent_events.append_events(evs)
         self._next_client_cleanup -= 1
         if self._next_client_cleanup == 0:
             self.clean_closed_clients()
@@ -353,8 +654,12 @@ class EventDispatcher(object):
                 self._send(serialized, client)
             for client in self.unsynced_rdz_streaming_clients:
                 self._send(evs, client)
+            for client in self.local_clients:
+                if not client.closed:
+                    client._send_events(evs)
             for client in self.one_time_clients:
                 self._send(serialized, client)
+                client.close()
             if len(self.compressed_streaming_clients) > 0:
                 compressed_data = (self._compressor.compress(serialized)
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
@@ -430,15 +735,15 @@ class EventDispatcher(object):
             logging.error("Error in client callback", exc_info=True)
 
 
-class MainHandler(tornado.web.RequestHandler):
+class _MainHandler(tornado.web.RequestHandler):
     def get(self):
         raise tornado.web.HTTPError(404)
 
 
-class EventPublishHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, server=None):
+class _EventPublishHandler(tornado.web.RequestHandler):
+    def __init__(self, application, request, stream=None):
         tornado.web.RequestHandler.__init__(self, application, request)
-        self.server = server
+        self.stream = stream
 
     def get(self):
         event_id = self.get_argument('event-id', default=None)
@@ -456,8 +761,8 @@ class EventPublishHandler(tornado.web.RequestHandler):
                              application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
-        event.aggregator_id.append(self.server.source_id)
-        self.server.dispatch_event(event)
+        event.aggregator_id.append(self.stream.source_id)
+        self.stream.dispatch_event(event)
         self.finish()
 
     def post(self):
@@ -473,36 +778,38 @@ class EventPublishHandler(tornado.web.RequestHandler):
         for event in evs:
             if event.syntax == 'streamsem-command':
                 if event.command == 'Event-Source-Started':
-                    self.server._start_timing()
+                    self.stream._start_timing()
                 elif event.command == 'Event-Source-Finished':
-                    self.server._stop_timing()
-            event.aggregator_id.append(self.server.source_id)
-            self.server.dispatch_event(event)
+                    self.stream._stop_timing()
+            event.aggregator_id.append(self.stream.source_id)
+            self.stream.dispatch_event(event)
         self.finish()
 
 
-class EventStreamHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, server=None,
+class _EventStreamHandler(tornado.web.RequestHandler):
+    def __init__(self, application, request, stream=None,
                  dispatcher=None, compress=False, rdz=False, priority=False):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
         self.compress = compress
         self.rdz = rdz
-        self.server = server
+        self.stream = stream
         self.priority = priority
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self, self._on_new_data, streaming=True,
-                             compress=self.compress, rdz=self.rdz,
-                             priority=self.priority)
-        self.dispatcher.register_client(self.client)
+        last_event_seen = self.get_argument('last-seen', default=None)
+        self.client = _Client(self, self._on_new_data, streaming=True,
+                              compress=self.compress, rdz=self.rdz,
+                              priority=self.priority)
+        self.dispatcher.register_client(self.client,
+                                        last_event_seen=last_event_seen)
         if self.compress:
-            command = events.create_command(self.server.source_id,
+            command = events.create_command(self.stream.source_id,
                                             'Set-Compression')
             self._on_new_data(str(command))
         elif self.rdz:
-            command = events.create_command(self.server.source_id,
+            command = events.create_command(self.stream.source_id,
                                             'Set-Compression-rdz')
             self._on_new_data(str(command))
 
@@ -517,20 +824,91 @@ class EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.deregister_client(self.client)
 
 
-class NextEventHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, dispatcher=None):
+class _ShortLivedHandler(tornado.web.RequestHandler):
+    def __init__(self, application, request, dispatcher=None, stream=None):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.dispatcher = dispatcher
+        # the 'stream' argument is ignored (not necessary)
 
     @tornado.web.asynchronous
     def get(self):
-        self.client = Client(self.on_new_event, streaming=False)
-        self.dispatcher.register_client(self.client)
+        last_event_seen = self.get_argument('last-seen', default=None)
+        self.client = _Client(self, self._on_new_data, streaming=False)
+        self.dispatcher.register_client(self.client,
+                                        last_event_seen=last_event_seen)
 
-    def on_new_event(self, event):
+    def _on_new_data(self, data):
         if not self.request.connection.stream.closed():
-            self.write(str(event))
-            self.finish()
+            self.write(data)
+
+
+class _RecentEventsBuffer(object):
+    """A circular buffer that stores the latest events of a stream."""
+    def __init__(self, size):
+        """Creates a new buffer with capacity for 'size' events."""
+        self.buffer = [None] * size
+        self.position = 0
+        self.events = {}
+
+    def append_event(self, event):
+        """Appends an event to the buffer."""
+        if self.buffer[self.position] is not None:
+            del self.events[self.buffer[self.position].event_id]
+        self.buffer[self.position] = event
+        self.events[event.event_id] = self.position
+        self.position += 1
+        if self.position == len(self.buffer):
+            self.position = 0
+
+    def append_events(self, events):
+        """Appends a list of events to the buffer."""
+        if self.position + len(events) >= len(self.buffer):
+            first_block = len(self.buffer) - self.position
+            self._append_internal(events[:first_block])
+            self._append_internal(events[first_block:])
+        else:
+            self._append_internal(events)
+
+    def newer_than(self, event_id):
+        """Returns the events newer than the given 'event_id'.
+
+        If no event in the buffer has the 'event_id', all the events are
+        returned. If the newest event in the buffer has that id, an empty
+        list is returned.
+
+        Returns a tuple ('events', 'complete') where 'events' is the list
+        of events and 'complete' is True when 'event_id' is in the buffer.
+
+        """
+        if event_id in self.events:
+            pos = self.events[event_id] + 1
+            if pos == len(self.buffer):
+                pos = 0
+            if pos == self.position:
+                return [], True
+            elif pos < self.position:
+                return self.buffer[pos:self.position], True
+            else:
+                return self.buffer[pos:] + self.buffer[:self.position], True
+        else:
+            if (self.position != len(self.buffer) - 1
+                and self.buffer[self.position + 1] is None):
+                return self.buffer[:self.position], False
+            else:
+                return (self.buffer[self.position:]
+                        + self.buffer[:self.position]), False
+
+    def _append_internal(self, events):
+        self._remove_from_dict(self.position, len(events))
+        self.buffer[self.position:self.position + len(events)] = events
+        for i in range(0, len(events)):
+            self.events[events[i].event_id] = self.position + i
+        self.position = (self.position + len(events)) % len(self.buffer)
+
+    def _remove_from_dict(self, position, num_events):
+        for i in range(position, position + num_events):
+            if self.buffer[i] is not None:
+                del self.events[self.buffer[i].event_id]
 
 def main():
     import time
@@ -556,8 +934,15 @@ def main():
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = StreamServer(port, allow_publish=True,
-                          buffering_time=buffering_time)
+    server = StreamServer(port)
+    stream = Stream('/events', allow_publish=True,
+                    buffering_time=buffering_time)
+    ## relay = RelayStream('/relay', [('http://localhost:' + str(port)
+    ##                                + '/stream/priority')],
+    ##                     allow_publish=True,
+    ##                     buffering_time=buffering_time)
+    server.add_stream(stream)
+    ## server.add_stream(relay)
     if tornado.options.options.eventlog:
         print server.source_id
         comments = {'Buffer time (ms)': buffering_time}
@@ -565,7 +950,7 @@ def main():
         logger.logger = logger.CompactServerLogger(server.source_id,
                                                    'server-' + server.source_id
                                                    + '.log', comments)
-     # Uncomment to test StreamServer.stop():
+     # Uncomment to test Stream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
     try:
         server.start()
