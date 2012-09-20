@@ -146,6 +146,8 @@ class Deserializer(object):
         (even at the end).
 
         """
+        if type(text) == unicode:
+            text = text.encode('utf-8')
         headers = {}
         extra_headers = {}
         parts = text.split('\n')
