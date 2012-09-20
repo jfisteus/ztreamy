@@ -16,10 +16,30 @@
 # <http://www.gnu.org/licenses/>.
 #
 import os
+import sys
 from setuptools import setup
 
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
+
+if sys.version_info.major != 2 or sys.version_info.minor not in [6, 7]:
+    print 'ztreamy needs Python 2.6 or 2.7'
+    sys.exit(1)
+
+# Dependencies
+requirements = ['setuptools',
+                'tornado',
+                'rdflib',
+                'rdfextras',
+                'tweepy',
+                'pycurl',
+                'pyparsing',
+                'httplib2',
+                'simplejson',
+                ]
+if sys.version_info.minor == 6:
+    requirements.append('argparse')
+
 
 setup(
     name = "ztreamy",
@@ -32,10 +52,5 @@ setup(
               'ztreamy.examples', 'ztreamy.experiments',
               'ztreamy.casestudy'],
     long_description=read('README'),
-    install_requires = ['setuptools',
-                        'tornado',
-                        'rdflib',
-                        'rdfextras',
-                        'tweepy',
-                        ],
+    install_requires = requirements,
 )

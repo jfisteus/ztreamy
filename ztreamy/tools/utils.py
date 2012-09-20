@@ -16,7 +16,7 @@
 # <http://www.gnu.org/licenses/>.
 #
 import time
-import numpy
+import random
 import math
 import logging
 import tornado.ioloop
@@ -148,7 +148,7 @@ class EventScheduler(object):
 def exponential_event_scheduler(mean_time):
     last = time.time()
     while True:
-        last += numpy.random.exponential(mean_time)
+        last += random.expovariate(1.0 / mean_time)
         yield last
 
 def constant_event_scheduler(mean_time):

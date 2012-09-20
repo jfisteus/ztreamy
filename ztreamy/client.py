@@ -41,6 +41,7 @@ import urllib2
 import httplib
 from urlparse import urlparse
 import datetime
+import random
 
 import ztreamy
 from ztreamy import Deserializer, Command, mimetype_event
@@ -51,8 +52,7 @@ transferred_bytes = 0
 data_count = 0
 
 #AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
-AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
-                          max_clients=32768)
+AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
 class Client(object):
     """Asynchronous client for multiple stream sources.
@@ -212,7 +212,7 @@ class AsyncStreamingClient(object):
     def __init__(self, url, event_callback=None, error_callback=None,
                  connection_close_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True):
-        """Creates a new client for a given stream URLs.
+        """Creates a new client for a given stream URL.
 
         The client connects to the stream URL given by 'url'.  For
         every single received event, the 'event_callback' function is
@@ -289,7 +289,8 @@ class AsyncStreamingClient(object):
 
     def _reconnect(self):
         logging.info('Reconnecting to the stream...')
-        self.ioloop.add_timeout(datetime.timedelta(seconds=5), self._connect)
+        t = 3 + random.expovariate(0.3)
+        self.ioloop.add_timeout(datetime.timedelta(seconds=t), self._connect)
 
     def _finish_internal(self, notify_connection_close):
         if (notify_connection_close
@@ -317,7 +318,8 @@ class AsyncStreamingClient(object):
 
     def _request_callback(self, response):
         if response.error:
-            if self.connection_attempts < 5:
+            if (self.connection_attempts < 5
+                and not response.error.code // 100 == 4):
                 self._reconnect()
                 finish = False
             else:

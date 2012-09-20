@@ -19,6 +19,8 @@ import tornado.ioloop
 import logging
 import time
 
+from tornado.httpclient import AsyncHTTPClient
+
 import ztreamy
 from ztreamy import client
 from ztreamy import logger
@@ -135,7 +137,7 @@ class BogusClient(client.AsyncStreamingClient):
         evs = []
         compressed_len = len(data)
         if self._compressed:
-            data = self._decompresser.decompress(data)
+            data = self._decompressor.decompress(data)
         logger.logger.data_received(compressed_len, len(data))
         evs = self._deserializer.deserialize(data)
         if len(evs) > 0 and isinstance(evs[-1], events.Command):
@@ -287,6 +289,8 @@ def main():
     entity_id = ztreamy.random_id()
     num_disconnected_clients = [0]
     stats = _Stats(options.num_clients)
+    AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
+                              max_clients=options.num_clients)
     clients = []
     for i in range(0, options.num_clients):
         clients.append(BogusClient(options.stream_url, stats, no_parse,
