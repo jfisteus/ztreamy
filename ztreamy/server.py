@@ -214,6 +214,8 @@ class Stream(object):
         Similar to how the previous path works with the only
         difference of compression.
 
+    '/rdz': RDZ-compressed stream with long-lived response.
+
     '/priority': uncompressed stream with lower delays intended for
         clients with priority, typically relay servers.
 
