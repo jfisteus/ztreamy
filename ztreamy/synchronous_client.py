@@ -1,6 +1,6 @@
 import sys
 
-from streamsem.client import SynchronousClient
+from ztreamy.client import SynchronousClient
 
 def main():
     if len(sys.argv) != 2:

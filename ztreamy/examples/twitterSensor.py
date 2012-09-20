@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Norberto Fernandez Garcia
 #
 # This program is free software: you can redistribute it and/or modify
@@ -32,8 +32,8 @@ from rdflib import Literal
 from rdflib import URIRef
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
 
-from streamsem import rdfevents
-from streamsem import client
+from ztreamy import rdfevents
+from ztreamy import client
 
 class TwitterStreamSensor():
     """ A sensor that converts tweets obtained from the Twitter streaming API into semantic events

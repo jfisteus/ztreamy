@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -41,7 +41,7 @@ import rdfextras.sparql.parser
 from pyparsing import Word, Literal, NotAny, QuotedString, Group, Forward, \
                       Keyword, ZeroOrMore, printables, alphanums
 
-from streamsem import StreamsemException, RDFEvent
+from ztreamy import ZtreamyException, RDFEvent
 
 
 class Filter(object):
@@ -201,8 +201,8 @@ class SPARQLFilter(Filter):
     def __init__(self, callback, sparql_query):
         """Creates a SPARQL filter for RDF triples."""
         if sparql_query.strip()[:3].lower() != 'ask':
-            raise StreamsemException('Only ASK queries are allowed '
-                                     'in SPARQLFilter')
+            raise ZtreamyException('Only ASK queries are allowed '
+                                   'in SPARQLFilter')
         super(SPARQLFilter, self).__init__(callback)
         self.query = rdfextras.sparql.parser.parse(sparql_query)
 

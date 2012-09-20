@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@ In principle, they are intended for internal use only.
 
 import time
 
-class StreamsemDefaultLogger(object):
+class ZtreamyDefaultLogger(object):
     def __init__(self):
         self.log_file = None
 
@@ -67,7 +67,7 @@ class StreamsemDefaultLogger(object):
         self.log_file.write('\n')
 
 
-class StreamsemLogger(StreamsemDefaultLogger):
+class ZtreamyLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename):
         self._open_file(node_id, filename)
 
@@ -99,7 +99,7 @@ class StreamsemLogger(StreamsemDefaultLogger):
         self._log(parts)
 
 
-class StreamsemManycLogger(StreamsemDefaultLogger):
+class ZtreamyManycLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename):
         self._open_file(node_id, filename)
 
@@ -113,7 +113,7 @@ class StreamsemManycLogger(StreamsemDefaultLogger):
         self._log(parts)
 
 
-class CompactServerLogger(StreamsemDefaultLogger):
+class CompactServerLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename, comments):
         self._open_file(node_id, filename)
         self._write_comments(comments)
@@ -132,4 +132,4 @@ def timestamp():
     return '%.6f'%time.time()
 
 # Default logger
-logger = StreamsemDefaultLogger()
+logger = ZtreamyDefaultLogger()

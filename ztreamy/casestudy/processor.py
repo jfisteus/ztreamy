@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,9 +19,9 @@ import tornado.ioloop
 import tornado.options
 from rdflib.graph import Graph
 
-import streamsem
-from streamsem import logger
-from streamsem import client
+import ztreamy
+from ztreamy import logger
+from ztreamy import client
 
 class Processor(object):
     def __init__(self, stream_urls):
@@ -66,13 +66,13 @@ def read_cmd_options():
 
 def main():
     options = read_cmd_options()
-    node_id = streamsem.random_id()
-#    import streamsem.filters
-#    filter = streamsem.filters.SimpleTripleFilter(handle_event,
+    node_id = ztreamy.random_id()
+#    import ztreamy.filters
+#    filter = ztreamy.filters.SimpleTripleFilter(handle_event,
 #                                        predicate='http://example.com/temp')
     if tornado.options.options.eventlog:
-        logger.logger = logger.StreamsemLogger(node_id,
-                                               'processor-' + node_id + '.log')
+        logger.logger = logger.ZtreamyLogger(node_id,
+                                             'processor-' + node_id + '.log')
     processor = Processor(options.stream_urls)
     try:
         processor.start(loop=True)

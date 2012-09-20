@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,10 +19,10 @@ import tornado.ioloop
 import logging
 import time
 
-import streamsem
-from streamsem import client
-from streamsem import logger
-from streamsem import events
+import ztreamy
+from ztreamy import client
+from ztreamy import logger
+from ztreamy import events
 
 class BogusDeserializer(object):
     tokens = ['X-Float-Timestamp:', 'Event-Source-Finished', 'Set-Compression']
@@ -99,12 +99,12 @@ class BogusDeserializer(object):
         elif token == 1 and self.parse_state[1] == -2:
             self.reset()
             self.consumed_data = pos
-            return events.Command('', 'streamsem-command',
+            return events.Command('', 'ztreamy-command',
                                   'Event-Source-Finished')
         elif token == 2 and self.parse_state[2] == -2:
             self.reset()
             self.consumed_data = pos
-            return events.Command('', 'streamsem-command', 'Set-Compression')
+            return events.Command('', 'ztreamy-command', 'Set-Compression')
         return None
 
 
@@ -284,7 +284,7 @@ def main():
 
     options = read_cmd_options()
     no_parse = tornado.options.options.noparse
-    entity_id = streamsem.random_id()
+    entity_id = ztreamy.random_id()
     num_disconnected_clients = [0]
     stats = _Stats(options.num_clients)
     clients = []
@@ -301,7 +301,7 @@ def main():
     sched.start()
     if tornado.options.options.eventlog and not no_parse:
         print entity_id
-        logger.logger = logger.StreamsemManycLogger(entity_id,
+        logger.logger = logger.ZtreamyManycLogger(entity_id,
                                                 'manyc-' + entity_id + '.log')
     try:
         tornado.ioloop.IOLoop.instance().start()

@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -21,8 +21,8 @@
 
 from rdflib.graph import Graph
 
-import streamsem.events as events
-from streamsem import StreamsemException
+import ztreamy.events as events
+from ztreamy import ZtreamyException
 
 class RDFEvent(events.Event):
     """Event consisting of an RDF body.
@@ -40,8 +40,8 @@ class RDFEvent(events.Event):
 
         """
         if not syntax in RDFEvent.supported_syntaxes:
-            raise StreamsemException('Usupported syntax in RDFEvent',
-                                     'programming')
+            raise ZtreamyException('Usupported syntax in RDFEvent',
+                                   'programming')
         super(RDFEvent, self).__init__(source_id, syntax, None, **kwargs)
         if isinstance(body, Graph):
             self.body = body
@@ -52,13 +52,13 @@ class RDFEvent(events.Event):
         if self.syntax == 'text/n3':
             return self.body.serialize(format='n3')
         else:
-            raise StreamsemException('Bad RDFEvent syntax', 'event_serialize')
+            raise ZtreamyException('Bad RDFEvent syntax', 'event_serialize')
 
     def _parse_body(self, body):
         if self.syntax == 'text/n3':
             return self._parse_body_rdflib(body, syntax='n3')
         else:
-            raise StreamsemException('Unsupported syntax', 'event_syntax')
+            raise ZtreamyException('Unsupported syntax', 'event_syntax')
 
     def _parse_body_rdflib(self, body, syntax):
         g = Graph()

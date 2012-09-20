@@ -1,4 +1,4 @@
-# streamsem: a framework for publishing semantic events on the Web
+# ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2011-2012 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
@@ -21,8 +21,8 @@ import math
 import logging
 import tornado.ioloop
 
-from streamsem import StreamsemException
-from streamsem import events
+from ztreamy import ZtreamyException
+from ztreamy import events
 
 class EventPublisher(object):
     def __init__(self, event, publishers, add_timestamp=False):
@@ -131,14 +131,14 @@ class EventScheduler(object):
         return fire_time
 
     def _send_closing_event(self):
-        event = events.Command(self.source_id, 'streamsem-command',
+        event = events.Command(self.source_id, 'ztreamy-command',
                                'Event-Source-Finished')
         pub = EventPublisher(event, self.publishers, add_timestamp=False)
         self._pending_events.append(pub)
         pub.publish()
 
     def _send_init_event(self):
-        event = events.Command(self.source_id, 'streamsem-command',
+        event = events.Command(self.source_id, 'ztreamy-command',
                                'Event-Source-Started')
         pub = EventPublisher(event, self.publishers, add_timestamp=False)
         self._pending_events.append(pub)
@@ -161,19 +161,19 @@ def get_scheduler(description):
     print(description)
     pos = description.find('[')
     if pos == -1 or description[-1] != ']':
-        raise StreamsemException('error in distribution specification',
-                                 'event_source params')
+        raise ZtreamyException('error in distribution specification',
+                               'event_source params')
     distribution = description[:pos].strip()
     params = [float(num) for num in description[pos + 1:-1].split(',')]
     if distribution == 'exp':
         if len(params) != 1:
-            raise StreamsemException('exp distribution needs 1 param',
-                                     'event_source params')
+            raise ZtreamyException('exp distribution needs 1 param',
+                                   'event_source params')
         return exponential_event_scheduler(params[0])
     elif distribution == 'const':
         if len(params) != 1:
-            raise StreamsemException('const distribution needs 1 param',
-                                     'event_source params')
+            raise ZtreamyException('const distribution needs 1 param',
+                                   'event_source params')
         return constant_event_scheduler(params[0])
 
 def median(data):
