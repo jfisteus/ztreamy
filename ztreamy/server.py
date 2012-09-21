@@ -699,7 +699,7 @@ class _EventDispatcher(object):
         data = []
         for e in evs:
             if not isinstance(e, events.Event):
-                raise StreamsemException('Bad event type', 'send_event')
+                raise ZtreamyException('Bad event type', 'send_event')
             data.append(str(e))
         return ''.join(data)
 

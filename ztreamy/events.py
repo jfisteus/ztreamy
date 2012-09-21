@@ -179,8 +179,8 @@ class Deserializer(object):
         if (not 'Event-Id' in headers
             or not 'Source-Id' in headers
             or not 'Syntax' in headers):
-            raise StreamsemException('Missing headers in event',
-                                     'event_deserialize')
+            raise ZtreamyException('Missing headers in event',
+                                   'event_deserialize')
 
     @staticmethod
     def deserialize_headers(text):
@@ -199,8 +199,8 @@ class Deserializer(object):
         for part in parts:
             pos = part.find(':')
             if pos == -1:
-                raise StreamsemException('Syntax error in event header',
-                                         error_type='event_syntax')
+                raise ZtreamyException('Syntax error in event header',
+                                       error_type='event_syntax')
             header = part[:pos].strip()
             value = part[pos + 1:].strip()
             if header not in Event.headers:
@@ -210,8 +210,8 @@ class Deserializer(object):
             elif header not in headers:
                 headers[header] = value
             else:
-                raise StreamsemException('Duplicate header in event',
-                                         'event_deserialize')
+                raise ZtreamyException('Duplicate header in event',
+                                       'event_deserialize')
         Deserializer._check_mandatory_headers(headers)
         return headers, extra_headers
 
