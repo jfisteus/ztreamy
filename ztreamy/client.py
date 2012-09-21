@@ -351,7 +351,14 @@ class AsyncStreamingClient(object):
 
     def _deserialize_rdz(self, data, parse_body=True):
         logger.logger.data_received(len(data), 0)
-        return self._decompressor.decompress(data)
+        data_events = []
+        for event in self._decompressor.decompress(data):
+            if isinstance(event, Command):
+                if event.command == 'Stream-Finished':
+                    self._finish_internal(True)
+            else:
+                data_events.append(event)
+        return data_events
 
     def _deserialize_others(self, data, parse_body=True):
         evs = []

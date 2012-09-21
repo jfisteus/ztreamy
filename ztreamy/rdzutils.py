@@ -2,6 +2,7 @@ from rdz.rdzstream import StreamCompressor, StreamDecompressor
 
 from events import Deserializer
 from rdfevents import RDFEvent
+from ztreamy import ZtreamyException
 
 class EventCompressor(StreamCompressor):
     def __init__(self, **kwargs):
@@ -10,11 +11,16 @@ class EventCompressor(StreamCompressor):
     def compress(self, events):
         data = []
         for event in events:
-            assert isinstance(event, RDFEvent)
-            self.new_text_part()
-            data.extend(self.compress_text(event.serialize_headers()))
-            self.new_graph_part()
-            data.extend(self.compress_graph(event.body))
+            if isinstance(event, RDFEvent):
+                self.new_text_part()
+                data.extend(self.compress_text(event.serialize_headers()))
+                self.new_graph_part()
+                data.extend(self.compress_graph(event.body))
+            else:
+                self.new_text_part()
+                data.extend(self.compress_text(event.serialize_headers()))
+                self.new_text_part()
+                data.extend(self.compress_text(event.serialize_body()))
         return ''.join(data)
 
 
@@ -31,14 +37,18 @@ class EventDecompressor(StreamDecompressor):
             print header_part
             print body_part
             header = header_part.text
-            body = body_part.graph
+            assert header is not None
+            headers, extra_headers = Deserializer.deserialize_headers(header)
             if body_part.finished:
-                assert header is not None
+                if body_part.is_graph():
+                    body = body_part.graph
+                elif body_part.is_text():
+                    body = body_part.text
+                else:
+                    raise ZtreamyException('Bad part type for event body')
                 assert body is not None
-                headers, extra_headers = \
-                         Deserializer.deserialize_headers(header)
-                events.append(Deserializer.create_event(headers, extra_headers,
-                                                        body))
+                events.append(Deserializer.create_event(headers,
+                                                        extra_headers, body))
             else:
                 self.parts.remove(body_part)
                 break
