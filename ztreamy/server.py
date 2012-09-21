@@ -723,13 +723,13 @@ class _EventDispatcher(object):
     def _sync_rdz_compressor(self):
         for client in self.unsynced_rdz_streaming_clients:
             client.sync_compression()
+        self.rdz_streaming_clients.extend(self.unsynced_rdz_streaming_clients)
+        self.unsynced_rdz_streaming_clients = []
+        self._num_events_since_sync = 0
         data = self._rdz_compressor.full_flush()
         if len(data) > 0:
             for client in self.rdz_streaming_clients:
                 self._send(data, client)
-        self.rdz_streaming_clients.extend(self.unsynced_rdz_streaming_clients)
-        self.unsynced_rdz_streaming_clients = []
-        self._num_events_since_sync = 0
         logging.info('rdz compressor synced')
 
     def _send(self, data, client):
