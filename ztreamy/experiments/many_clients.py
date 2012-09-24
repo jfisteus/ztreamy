@@ -106,7 +106,12 @@ class BogusDeserializer(object):
         elif token == 2 and self.parse_state[2] == -2:
             self.reset()
             self.consumed_data = pos
-            return events.Command('', 'ztreamy-command', 'Set-Compression')
+            if data[pos:pos+4] == '-rdz':
+                self.consumed_data += 4
+                return events.Command('', 'ztreamy-command',
+                                      'Set-Compression-rdz')
+            else:
+                return events.Command('', 'ztreamy-command', 'Set-Compression')
         return None
 
 
@@ -138,13 +143,23 @@ class BogusClient(client.AsyncStreamingClient):
         compressed_len = len(data)
         if self._compressed:
             data = self._decompressor.decompress(data)
-        logger.logger.data_received(compressed_len, len(data))
+            logger.logger.data_received(compressed_len, len(data))
+        elif self._rdz:
+            data = self._decompressor.decompress_headers_only(data)
+            logger.logger.data_received(compressed_len, 0)
+        else:
+            logger.logger.data_received(len(data), len(data))
         evs = self._deserializer.deserialize(data)
         if len(evs) > 0 and isinstance(evs[-1], events.Command):
             if evs[-1].command == 'Set-Compression':
                 self._reset_compression()
                 pos = self._deserializer.consumed_data
                 self._deserializer.reset()
+                del evs[-1]
+                evs.extend(self._deserialize(data[pos:]))
+            elif evs[-1].command == 'Set-Compression-rdz':
+                self._reset_rdz()
+                pos = self._deserializer.consumed_data
                 del evs[-1]
                 evs.extend(self._deserialize(data[pos:]))
             elif evs[-1].command == 'Event-Source-Finished':

@@ -51,3 +51,20 @@ class EventDecompressor(StreamDecompressor):
                 break
         self.parts = self.parts[len(events) * 2:]
         return events
+
+    def decompress_headers_only(self, data):
+        """Faster decompressor for the BogusDeserializer in many_clients.
+
+        It just returns a concatenation of event headers as text. Bodies
+        are not included.
+
+        """
+        header_text = []
+        self.parts.extend(super(EventDecompressor, self).decompress(data))
+        for header_part, body_part in zip(self.parts[::2], self.parts[1::2]):
+            if body_part.finished:
+                header_text.append(header_part.text)
+            else:
+                self.parts.remove(body_part)
+                break
+        return '\n\n'.join(header_text)
