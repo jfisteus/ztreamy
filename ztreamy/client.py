@@ -379,7 +379,6 @@ class AsyncStreamingClient(object):
                                                         parse_body))
                     return evs
                 elif event.command == 'Set-Compression-rdz':
-                    print 'activated rdz support'
                     self._reset_rdz()
                     pos = self._deserializer.data_consumed()
                     evs.extend(self._deserialize_rdz(data[pos:], parse_body))

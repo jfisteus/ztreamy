@@ -30,12 +30,9 @@ class EventDecompressor(StreamDecompressor):
         self.parts = []
 
     def decompress(self, data):
-        print 'decompressing', len(data)
         events = []
         self.parts.extend(super(EventDecompressor, self).decompress(data))
         for header_part, body_part in zip(self.parts[::2], self.parts[1::2]):
-            print header_part
-            print body_part
             header = header_part.text
             assert header is not None
             headers, extra_headers = Deserializer.deserialize_headers(header)
