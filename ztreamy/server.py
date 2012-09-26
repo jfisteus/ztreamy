@@ -570,7 +570,10 @@ class _EventDispatcher(object):
             # Send the available events after the last seen event
             evs, none_lost = self.recent_events.newer_than(last_event_seen)
             if len(evs) > 0:
-                client.send(self._serialize_events(evs))
+                if not client.rdz:
+                    client.send(self._serialize_events(evs))
+                else:
+                    client.send(evs)
                 if not client.streaming:
                     client.close()
         if client.local:

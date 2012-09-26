@@ -333,7 +333,11 @@ class Event(object):
 
         """
         if self.body is not None:
-            return str(self.body)
+            if type(self.body) == unicode:
+                text = self.body.encode('utf-8')
+            else:
+                text = str(self.body)
+            return text
         else:
             raise ZtreamyException('Empty body in event', 'even_serialize')
 
