@@ -544,8 +544,6 @@ class _EventDispatcher(object):
         self.unsynced_compressed_streaming_clients = []
         self.one_time_clients = []
         self.local_clients = []
-        self.event_cache = []
-        self.cache_size = 200
         self._compressor = zlib.compressobj()
         self._rdz_compressor = EventCompressor()
         self._num_events_since_sync = 0
@@ -682,9 +680,6 @@ class _EventDispatcher(object):
             for e in evs:
                 logger.logger.event_dispatched(e)
         self.one_time_clients = []
-        self.event_cache.extend(evs)
-        if len(self.event_cache) > self.cache_size:
-            self.event_cache = self.event_cache[-self.cache_size:]
         self._num_events_since_sync += len(evs)
 
     def close(self):
@@ -871,6 +866,8 @@ class _RecentEventsBuffer(object):
 
     def append_events(self, events):
         """Appends a list of events to the buffer."""
+        if len(events) > len(self.buffer):
+            events = events[-len(self.buffer):]
         if self.position + len(events) >= len(self.buffer):
             first_block = len(self.buffer) - self.position
             self._append_internal(events[:first_block])
