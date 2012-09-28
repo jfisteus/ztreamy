@@ -301,20 +301,8 @@ class AsyncStreamingClient(object):
             self._looping = False
 
     def _stream_callback(self, data):
-        global transferred_bytes
         self.connection_attempts = 0
-        transferred_bytes += len(data)
-        evs = self._deserialize(data, parse_body=self.parse_event_body)
-        for e in evs:
-            logger.logger.event_delivered(e)
-        if self.event_callback is not None:
-            if not self.separate_events:
-                self.event_callback(evs)
-            else:
-                for ev in evs:
-                    self.event_callback(ev)
-        if len(evs) > 0:
-            self.last_event = evs[-1].event_id
+        self._process_received_data(data)
 
     def _request_callback(self, response):
         if response.error:
@@ -328,12 +316,26 @@ class AsyncStreamingClient(object):
                                         http_error=response.error)
                 finish = True
         elif len(response.body) > 0:
-#            self.data_history.append(response.body)
-            self._notify_event(response.body)
+            self._process_received_data(response.body)
             finish = True
         if finish:
             logging.info('Finishing client')
             self._finish_internal(True)
+
+    def _process_received_data(self, data):
+        global transferred_bytes
+        transferred_bytes += len(data)
+        evs = self._deserialize(data, parse_body=self.parse_event_body)
+        for e in evs:
+            logger.logger.event_delivered(e)
+        if self.event_callback is not None:
+            if not self.separate_events:
+                self.event_callback(evs)
+            else:
+                for ev in evs:
+                    self.event_callback(ev)
+        if len(evs) > 0:
+            self.last_event = evs[-1].event_id
 
     def _reset_compression(self):
         self._compressed = True
