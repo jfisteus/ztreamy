@@ -628,7 +628,7 @@ def main():
         pass
     finally:
         logger.logger.close()
-        logging.info('Bytes received: %d'%transferred_bytes
+        logging.info('Bytes received: %d'%transferred_bytes)
 
 if __name__ == "__main__":
     main()
