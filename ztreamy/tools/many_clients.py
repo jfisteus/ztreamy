@@ -282,6 +282,9 @@ def read_cmd_options():
     tornado.options.define('noparse', default=False,
                            help='quick client that does not parse events',
                            type=bool)
+    tornado.options.define('reconnect', default=False,
+                           help='reconnect disconnected clients',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) == 2:
@@ -296,13 +299,23 @@ def main():
         clients.remove(client)
         if len(clients) == 0:
             tornado.ioloop.IOLoop.instance().stop()
-        if not client.finished:
+        if tornado.options.options.reconnect and not client.finished:
+            if times_reconnected[0] >= options.num_clients:
+                num_disconnected_clients[0] += 1
+            else:
+                times_reconnected[0] += 1
+                new_client = BogusClient(options.stream_url, stats, no_parse,
+                                         close_callback=close_callback)
+                clients.append(new_client)
+                new_client.start(loop=False)
+        elif not client.finished:
             num_disconnected_clients[0] += 1
 
     options = read_cmd_options()
     no_parse = tornado.options.options.noparse
     entity_id = ztreamy.random_id()
     num_disconnected_clients = [0]
+    times_reconnected = [0]
     stats = _Stats(options.num_clients)
     AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
                               max_clients=options.num_clients)
@@ -330,8 +343,8 @@ def main():
         for c in clients:
             c.stop()
         if num_disconnected_clients[0] > 0:
-            logging.error((str(num_disconnected_clients[0])
-                           + ' clients got disconnected'))
+            logging.warning((str(num_disconnected_clients[0])
+                             + ' clients got disconnected'))
 
 if __name__ == "__main__":
     main()

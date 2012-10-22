@@ -51,6 +51,9 @@ class ZtreamyDefaultLogger(object):
     def server_traffic_sent(self, timestamp, num_bytes):
         pass
 
+    def server_close(self, num_clients):
+        pass
+
     def server_timing(self, cpu_time, real_time, init_time):
         pass
 
@@ -117,6 +120,10 @@ class CompactServerLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename, comments):
         self._open_file(node_id, filename)
         self._write_comments(comments)
+
+    def server_closed(self, num_clients):
+        parts = ['server_closed', str(time.time()), str(num_clients)]
+        self._log(parts)
 
     def server_traffic_sent(self, timestamp, num_bytes):
         parts = ['server_traffic_sent', str(timestamp), str(num_bytes)]

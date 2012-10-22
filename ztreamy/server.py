@@ -630,6 +630,11 @@ class _EventDispatcher(object):
             if evs == [] and (num_clients > 0
                               or len(self.priority_clients) > 0):
                 self._periods_since_last_event += 1
+                if self._periods_since_last_event > 20 and self._auto_finish:
+                    logger.logger.server_closed(num_clients)
+                    tornado.ioloop.IOLoop.instance().stop()
+                # Use the following line for the experiments
+                ## if False:
                 if self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
                     evs = [events.Command('', 'ztreamy-command',
