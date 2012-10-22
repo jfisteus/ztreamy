@@ -1,18 +1,38 @@
-""" A framework for transporting for semantic events."""
+# streamsem: a framework for publishing semantic events on the Web
+# Copyright (C) 2011-2012 Jesus Arias Fisteus
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see
+# <http://www.gnu.org/licenses/>.
+#
+""" A framework for publishing semantic events on the Web."""
 
 import uuid
 import time
 
-from streamsem.utils.rfc3339 import rfc3339
+import streamsem.utils.rfc3339
 
 mimetype_event = 'application/x-streamsem-event'
 
+
 class StreamsemException(Exception):
+    """The type of the exceptions normally used in the framework."""
     def __init__(self, message, error_type=None):
         Exception.__init__(self, message)
-        self.code = self.error_type_code(error_type)
+        self.code = StreamsemException._error_type_code(error_type)
 
-    def error_type_code(self, error_type):
+    @staticmethod
+    def _error_type_code(error_type):
         if error_type == 'event_syntax':
             return 1
         else:
@@ -37,9 +57,9 @@ def get_timestamp(date=None):
 
     """
     if date is not None:
-        return rfc3339(date)
+        return streamsem.utils.rfc3339.rfc3339(date)
     else:
-        return rfc3339(time.time())
+        return streamsem.utils.rfc3339.rfc3339(time.time())
 
 _date_format = "%Y-%m-%dT%H:%M:%S"
 
@@ -50,3 +70,30 @@ def rfc3339_as_time(timestamp):
 
     """
     return time.mktime(time.strptime(timestamp[:-6], _date_format))
+
+def serialize_events(evs):
+    """Returns a string with the serialization of the events.
+
+    'evs' is a list of events.
+
+    """
+    data = []
+    for e in evs:
+        if not isinstance(e, Event):
+            raise StreamsemException('Bad event type', 'send_event')
+        data.append(str(e))
+    return ''.join(data)
+
+
+# Imports of the main classes of the API provided by the framework,
+# in order to make them available in the "streamsem" namespace.
+#
+from events import Deserializer, Event, Command
+from server import StreamServer, Stream, RelayStream
+from client import (Client, AsyncStreamingClient, SynchronousClient,
+                    EventPublisher, SynchronousEventPublisher,
+                    LocalClient, LocalEventPublisher)
+from rdfevents import RDFEvent
+from filters import (Filter, SourceFilter, ApplicationFilter,
+                     SimpleTripleFilter, VocabularyFilter,
+                     SimpleTripleFilter, SPARQLFilter, TripleFilter)
