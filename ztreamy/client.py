@@ -270,9 +270,7 @@ class AsyncStreamingClient(object):
         (as of Tornado branch master september 1st 2011).
 
         """
-        if not self._closed:
-            ## self.http_client.close()
-            self._finish_internal(False)
+        self._finish_internal(True)
 
     def _connect(self):
         http_client = AsyncHTTPClient()
@@ -291,12 +289,15 @@ class AsyncStreamingClient(object):
         self.ioloop.add_timeout(datetime.timedelta(seconds=t), self._connect)
 
     def _finish_internal(self, notify_connection_close):
+        if self._closed:
+            return
         if (notify_connection_close
             and self.connection_close_callback is not None):
             self.connection_close_callback(self)
         if self._looping:
             self.ioloop.stop()
             self._looping = False
+        self._closed = True
 
     def _stream_callback(self, data):
         self.connection_attempts = 0
@@ -305,7 +306,8 @@ class AsyncStreamingClient(object):
     def _request_callback(self, response):
         if response.error:
             if (self.connection_attempts < 5
-                and not response.error.code // 100 == 4):
+                and not response.error.code // 100 == 4
+                and not self._closed):
                 self._reconnect()
                 finish = False
             else:

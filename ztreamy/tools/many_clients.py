@@ -153,6 +153,7 @@ class BogusClient(client.AsyncStreamingClient):
                 self.finished = True
                 del evs[-1]
                 evs.extend(self._deserialize(data[pos:]))
+                self.stop()
         return evs
 
 
