@@ -70,11 +70,16 @@ class StreamServer(tornado.web.Application):
     server.start()
 
     """
-    def __init__(self, port, ioloop=None):
+    def __init__(self, port, ioloop=None, stop_when_source_finishes=False):
         """Creates a new server.
 
         'port' specifies the port number in which the HTTP server will
         listen.
+
+        'stop_when_source_finishes' set to True makes the server
+        finish after the event source declares it has finished. Used
+        for the performance experiments, but its value should normally
+        be 'False'.
 
         The server won't start to serve streams until start() is
         called.  Streams cannot be registered in the server after it
@@ -89,6 +94,7 @@ class StreamServer(tornado.web.Application):
         self.streams = []
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
+        self.stop_when_source_finishes = stop_when_source_finishes
         self._looping = False
         self._started = False
         self._stopped = False
@@ -173,7 +179,9 @@ class StreamServer(tornado.web.Application):
                                     kwargs=handler_kwargs),
             ])
             if stream.allow_publish:
-                publish_kwargs = {'stream': stream}
+                publish_kwargs = {'stream': stream,
+                                  'stop_when_source_finishes': \
+                                       self.stop_when_source_finishes}
                 handlers.append(tornado.web.URLSpec(stream.path + r"/publish",
                                                     _EventPublishHandler,
                                                     kwargs=publish_kwargs))
@@ -361,6 +369,10 @@ class Stream(object):
         self.dispatcher.dispatch(self._event_buffer)
         self._event_buffer = []
 
+    def _finish_when_possible(self):
+        self.dispatcher._auto_finish = True
+
+
 
 class RelayStream(Stream):
     """A stream that relays events from other streams.
@@ -527,6 +539,7 @@ class _EventDispatcher(object):
         self._next_client_cleanup = -1
         self._periods_since_last_event = 0
         self.sent_bytes = 0
+        self._auto_finish = False
         self.recent_events = _RecentEventsBuffer(num_recent_events)
 
     def register_client(self, client, last_event_seen=None):
@@ -601,7 +614,7 @@ class _EventDispatcher(object):
                     tornado.ioloop.IOLoop.instance().stop()
                 # Use the following line for the experiments
                 ## if False:
-                if self._periods_since_last_event > 20:
+                elif self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
                     evs = [events.Command('', 'ztreamy-command',
                                           'Test-Connection')]
@@ -680,9 +693,11 @@ class _MainHandler(tornado.web.RequestHandler):
 
 
 class _EventPublishHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, stream=None):
+    def __init__(self, application, request, stream=None,
+                 stop_when_source_finishes=False):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.stream = stream
+        self.stop_when_source_finishes = stop_when_source_finishes
 
     def get(self):
         event_id = self.get_argument('event-id', default=None)
@@ -720,6 +735,8 @@ class _EventPublishHandler(tornado.web.RequestHandler):
                     self.stream._start_timing()
                 elif event.command == 'Event-Source-Finished':
                     self.stream._stop_timing()
+                    if self.stop_when_source_finishes:
+                        self.stream._finish_when_possible()
             event.aggregator_id.append(self.stream.source_id)
             self.stream.dispatch_event(event)
         self.finish()
@@ -862,6 +879,9 @@ def main():
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
                            type=bool)
+    tornado.options.define('autostop', default=False,
+                           help='stop the server when the source finishes',
+                           type=bool)
     tornado.options.parse_command_line()
     port = tornado.options.options.port
     if (tornado.options.options.buffer is not None
@@ -869,7 +889,8 @@ def main():
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = StreamServer(port)
+    server = StreamServer(port,
+                 stop_when_source_finishes=tornado.options.options.autostop)
     stream = Stream('/events', allow_publish=True,
                     buffering_time=buffering_time)
     ## relay = RelayStream('/relay', [('http://localhost:' + str(port)

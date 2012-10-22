@@ -51,7 +51,7 @@ class ZtreamyDefaultLogger(object):
     def server_traffic_sent(self, timestamp, num_bytes):
         pass
 
-    def server_close(self, num_clients):
+    def server_closed(self, num_clients):
         pass
 
     def server_timing(self, cpu_time, real_time, init_time):
