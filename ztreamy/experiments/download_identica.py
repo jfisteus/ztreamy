@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import sys
 import urllib2
 import time
+import random
 import json
 from rdflib import Graph, Namespace, Literal, URIRef, BNode
 
@@ -92,9 +93,10 @@ def process_post(post):
 
     event = ztreamy.RDFEvent(source_id, 'text/n3', graph,
                              application_id=application_id)
-    print(str(event), end='')
+    return event
 
 def process_download(data, max_num_posts):
+    events = []
     num_posts = 0
     for post in data['items']:
         if not post['verb'] == 'post':
@@ -106,15 +108,31 @@ def process_download(data, max_num_posts):
             raise
         if not post_id in seen_posts:
             seen_posts.add(post_id)
-            process_post(post)
+            events.append(process_post(post))
             num_posts += 1
             if num_posts == max_num_posts:
-                return
+                break
+    return events
+
+def randomize_timestamps(events, interval_duration):
+    current_time = ztreamy.rfc3339_as_time(events[0].timestamp)
+    time_max = current_time + interval_duration - 1
+    exp_rate = 1.3 * len(events) / interval_duration
+    for event in events:
+        current_time += random.expovariate(exp_rate)
+        timestamp = int(current_time)
+        if timestamp > time_max:
+            timestamp = time_max
+        event.timestamp = ztreamy.get_timestamp(date=timestamp)
 
 def loop(delay, num_posts):
     while len(seen_posts) < num_posts:
         data = identica_download()
-        process_download(data, num_posts - len(seen_posts))
+        new_events = process_download(data, num_posts - len(seen_posts))
+        if new_events:
+            randomize_timestamps(new_events, delay)
+        for event in new_events:
+            print(str(event), end='')
         print('Gathered {0} posts'.format(len(seen_posts)), file=sys.stderr)
         time.sleep(delay)
 
