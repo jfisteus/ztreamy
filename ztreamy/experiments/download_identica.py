@@ -59,7 +59,13 @@ def _add_location(data, subject_uri, predicate_uri, graph):
         graph.add((place, uri_longitude, Literal(location[1])))
 
 def process_post(post):
-    ## print(post['url'])
+    if (not 'url' in post
+        or not 'actor' in post
+        or not 'id' in post['actor']
+        or not 'displayName' in post['actor']
+        or not 'object' in post
+        or not 'displayName' in post['object']):
+        return None
     graph = Graph()
     graph.bind('geo', ns_geo)
     graph.bind('webtlab', ns_webtlab)
@@ -108,7 +114,9 @@ def process_download(data, max_num_posts):
             raise
         if not post_id in seen_posts:
             seen_posts.add(post_id)
-            events.append(process_post(post))
+            event = process_post(post)
+            if event is not None:
+                events.append(event)
             num_posts += 1
             if num_posts == max_num_posts:
                 break
