@@ -1,0 +1,131 @@
+from __future__ import print_function
+from __future__ import unicode_literals
+
+import sys
+import urllib2
+import time
+import json
+from rdflib import Graph, Namespace, Literal, URIRef, BNode
+
+import ztreamy
+#from ztreamy import rdfevents
+
+seen_posts = set()
+source_id = ztreamy.random_id()
+application_id = 'identi.ca dataset'
+
+ns_geo = Namespace("http://www.w3.org/2003/01/geo/wgs84_pos#")
+ns_webtlab = Namespace("http://webtlab.it.uc3m.es/ns/")
+ns_dc = Namespace("http://purl.org/dc/elements/1.1/")
+ns_foaf = Namespace('http://xmlns.com/foaf/0.1/')
+ns_rdf = Namespace('http://www.w3.org/1999/02/22-rdf-syntax-ns#')
+
+uri_content = ns_webtlab['content']
+uri_sent_to = ns_webtlab['sent_to']
+uri_conversation = ns_webtlab['conversation']
+uri_reply_to = ns_webtlab['reply_to']
+uri_hashtag = ns_webtlab['hashtag']
+uri_location = ns_webtlab['location']
+uri_date = ns_dc['date']
+uri_creator = ns_dc['creator']
+uri_foaf_name = ns_foaf['name']
+uri_longitude = ns_geo['long']
+uri_latitude = ns_geo['lat']
+uri_place = ns_geo['Place']
+uri_based_near = ns_foaf['based_near']
+uri_type = ns_rdf['type']
+
+uri_tag = 'http://activityschema.org/object/hashtag'
+
+def identica_download():
+    data = urllib2.urlopen('http://identi.ca/api/statuses/public_timeline.as')
+    return json.load(data)
+
+def _add_location(data, subject_uri, predicate_uri, graph):
+    if 'location' in data:
+        location = data['location']
+        place = BNode()
+        graph.add((subject_uri, predicate_uri, place))
+        graph.add((place, uri_type, uri_place))
+        graph.add((place, uri_latitude, Literal(location['lat'])))
+        graph.add((place, uri_longitude, Literal(location['lon'])))
+    elif 'geopoint' in data:
+        location = data['geopoint']['coordinates']
+        place = BNode()
+        graph.add((subject_uri, predicate_uri, place))
+        graph.add((place, uri_type, uri_place))
+        graph.add((place, uri_latitude, Literal(location[0])))
+        graph.add((place, uri_longitude, Literal(location[1])))
+
+def process_post(post):
+    ## print(post['url'])
+    graph = Graph()
+    graph.bind('geo', ns_geo)
+    graph.bind('webtlab', ns_webtlab)
+    graph.bind('dc', ns_dc)
+    graph.bind('rdf', ns_rdf)
+    graph.bind('foaf', ns_foaf)
+    post_id = URIRef(post['url'])
+    author_id = Literal(post['actor']['id'])
+    graph.add((post_id, uri_date, Literal(post['published'])))
+    graph.add((post_id, uri_creator, author_id))
+    graph.add((author_id, uri_foaf_name,
+               Literal(post['actor']['displayName'])))
+    graph.add((post_id, uri_content, Literal(post['object']['displayName'])))
+
+    if 'to' in post and 'url' in post['to']:
+        graph.add((post_id, uri_sent_to, URIRef(post['to']['url'])))
+    if 'context' in post:
+        context = post['context']
+        if 'conversation' in context:
+            graph.add((post_id, uri_conversation,
+                       Literal(context['conversation'])))
+        if 'inReplyTo' in context:
+            graph.add((post_id, uri_reply_to,
+                       Literal(context['inReplyTo']['url'])))
+    if 'tags' in post['object']:
+        for tag in post['object']['tags']:
+            if tag['objectType'] == uri_tag:
+                graph.add((post_id, uri_hashtag, Literal(tag['displayName'])))
+    _add_location(post, post_id, uri_location, graph)
+    _add_location(post['actor'], author_id, uri_based_near, graph)
+
+    event = ztreamy.RDFEvent(source_id, 'text/n3', graph,
+                             application_id=application_id)
+    print(str(event), end='')
+
+def process_download(data, max_num_posts):
+    num_posts = 0
+    for post in data['items']:
+        if not post['verb'] == 'post':
+            continue
+        try:
+            post_id = post['object']['id']
+        except:
+            print(repr(post))
+            raise
+        if not post_id in seen_posts:
+            seen_posts.add(post_id)
+            process_post(post)
+            num_posts += 1
+            if num_posts == max_num_posts:
+                return
+
+def loop(delay, num_posts):
+    while len(seen_posts) < num_posts:
+        data = identica_download()
+        process_download(data, num_posts - len(seen_posts))
+        print('Gathered {0} posts'.format(len(seen_posts)), file=sys.stderr)
+        time.sleep(delay)
+
+def main():
+    if len(sys.argv) != 3:
+        print('Arguments expected: period (float in seconds) and num. posts',
+              file=sys.stderr)
+        print('e.g. python download_identica 30.0 50',
+              file=sys.stderr)
+    else:
+        loop(float(sys.argv[1]), int(sys.argv[2]))
+
+if __name__ == '__main__':
+    main()
