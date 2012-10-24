@@ -5,6 +5,7 @@ import sys
 import urllib2
 import time
 import random
+import gzip
 import json
 from rdflib import Graph, Namespace, Literal, URIRef, BNode
 
@@ -133,25 +134,32 @@ def randomize_timestamps(events, interval_duration):
             timestamp = time_max
         event.timestamp = ztreamy.get_timestamp(date=timestamp)
 
-def loop(delay, num_posts):
+def loop(delay, num_posts, file_):
     while len(seen_posts) < num_posts:
         data = identica_download()
         new_events = process_download(data, num_posts - len(seen_posts))
         if new_events:
             randomize_timestamps(new_events, delay)
         for event in new_events:
-            print(str(event), end='')
+            file_.write(str(event))
         print('Gathered {0} posts'.format(len(seen_posts)), file=sys.stderr)
         time.sleep(delay)
 
 def main():
-    if len(sys.argv) != 3:
-        print('Arguments expected: period (float in seconds) and num. posts',
+    if len(sys.argv) != 4:
+        print('Arguments expected: period (float in seconds), num. posts,'
+              ' output file',
               file=sys.stderr)
-        print('e.g. python download_identica 30.0 50',
+        print('e.g. python download_identica 30.0 50 events.txt.gz',
               file=sys.stderr)
     else:
-        loop(float(sys.argv[1]), int(sys.argv[2]))
+        output = gzip.GzipFile(sys.argv[3], 'w')
+        try:
+            loop(float(sys.argv[1]), int(sys.argv[2]), output)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            output.close()
 
 if __name__ == '__main__':
     main()
