@@ -15,6 +15,7 @@ import ztreamy
 seen_posts = set()
 source_id = ztreamy.random_id()
 application_id = 'identi.ca dataset'
+identica_url = 'http://identi.ca/api/statuses/public_timeline.as'
 
 ns_geo = Namespace("http://www.w3.org/2003/01/geo/wgs84_pos#")
 ns_webtlab = Namespace("http://webtlab.it.uc3m.es/ns/")
@@ -40,8 +41,14 @@ uri_type = ns_rdf['type']
 uri_tag = 'http://activityschema.org/object/hashtag'
 
 def identica_download():
-    data = urllib2.urlopen('http://identi.ca/api/statuses/public_timeline.as')
-    return json.load(data)
+    try:
+        data = urllib2.urlopen(identica_url)
+        json_message = json.load(data)
+    except:
+        json_message = None
+        print('warning: the HTTP request failed. Continuing...',
+              file=sys.stderr)
+    return json_message
 
 def _add_location(data, subject_uri, predicate_uri, graph):
     if 'location' in data:
@@ -137,11 +144,12 @@ def randomize_timestamps(events, interval_duration):
 def loop(delay, num_posts, file_):
     while len(seen_posts) < num_posts:
         data = identica_download()
-        new_events = process_download(data, num_posts - len(seen_posts))
-        if new_events:
-            randomize_timestamps(new_events, delay)
-        for event in new_events:
-            file_.write(str(event))
+        if data is not None:
+            new_events = process_download(data, num_posts - len(seen_posts))
+            if new_events:
+                randomize_timestamps(new_events, delay)
+            for event in new_events:
+                file_.write(str(event))
         print('Gathered {0} posts'.format(len(seen_posts)), file=sys.stderr)
         time.sleep(delay)
 
