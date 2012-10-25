@@ -59,6 +59,17 @@ class RelayScheduler(utils.EventScheduler):
         file_.close()
 
 
+def _create_publisher(url):
+    """Creates a publisher object for the given server URL.
+
+    If the URL is '-', events are written to stdout.
+
+    """
+    if url == '-':
+        return utils.StdoutPublisher()
+    else:
+        return client.EventPublisher(url)
+
 def read_cmd_options():
     from optparse import OptionParser, Values
     tornado.options.define('distribution', default=None,
@@ -88,17 +99,17 @@ def main():
     options = read_cmd_options()
     entity_id = ztreamy.random_id()
     limit = tornado.options.options.limit
-    publishers = [client.EventPublisher(url) for url in options.server_urls]
+    publishers = [_create_publisher(url) for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
     if tornado.options.options.distribution is not None:
         time_generator = \
             utils.get_scheduler(tornado.options.options.distribution)
     else:
         time_generator = None
-    scheduler = RelayScheduler(options.filename, limit, entity_id, io_loop,
-                               publishers, tornado.options.options.timescale,
-                               time_generator=time_generator,
-                               add_timestamp=tornado.options.options.timestamp)
+    scheduler = utils.RelayScheduler(options.filename, limit, entity_id, io_loop,
+                                     publishers, tornado.options.options.timescale,
+                                     time_generator=time_generator,
+                                     add_timestamp=tornado.options.options.timestamp)
     if tornado.options.options.eventlog:
         logger.logger = logger.ZtreamyLogger(entity_id,
                                              'replay-' + entity_id + '.log')

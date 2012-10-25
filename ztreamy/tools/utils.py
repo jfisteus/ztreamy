@@ -18,11 +18,14 @@
 import time
 import random
 import math
+import sys
 import logging
 import tornado.ioloop
 
+import ztreamy
 from ztreamy import ZtreamyException
 from ztreamy import events
+from ztreamy import logger
 
 class EventPublisher(object):
     def __init__(self, event, publishers, add_timestamp=False):
@@ -56,6 +59,31 @@ class EventPublisher(object):
             logging.info('Event successfully sent to server')
         if self._external_callback is not None:
             self._external_callback()
+
+
+class StdoutPublisher(object):
+    """Simulates the interface of client.EventPublisher to write to stdout.
+
+    Useful mainly for sending the serialized events through a pipe to
+    other processes.
+
+    """
+    def __init__(self):
+        pass
+
+    def publish(self, event, callback=None):
+        """Publishes a new event. 'callback' is ignored."""
+        logger.logger.event_published(event)
+        self.publish_events([event], callback=callback)
+
+    def publish_events(self, events, callback=None):
+        """Publishes a list of events. 'callback' is ignored."""
+        body = ztreamy.serialize_events(events)
+        sys.stdout.write(body)
+
+    def close(self):
+        """Closes the event publisher."""
+        pass
 
 
 class EventScheduler(object):
