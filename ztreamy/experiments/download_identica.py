@@ -113,7 +113,8 @@ def process_download(data, max_num_posts):
     events = []
     num_posts = 0
     for post in data['items']:
-        if not post['verb'] == 'post':
+        if (not 'verb' in post or post['verb'] != 'post'
+            or not 'object' in post or not 'id' in post['object']):
             continue
         try:
             post_id = post['object']['id']
