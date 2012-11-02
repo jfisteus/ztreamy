@@ -331,6 +331,7 @@ def main():
         if num_disconnected_clients[0] > 0:
             logging.warning((str(num_disconnected_clients[0])
                              + ' clients got disconnected'))
+        logger.logger.close()
 
 if __name__ == "__main__":
     main()
