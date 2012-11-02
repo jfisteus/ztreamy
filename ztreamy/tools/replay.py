@@ -27,13 +27,15 @@ from ztreamy.tools import utils
 
 class RelayScheduler(utils.EventScheduler):
     def __init__(self, filename, num_events, source_id, io_loop, publishers,
-                 time_scale, time_generator=None, add_timestamp=False):
+                 time_scale, time_generator=None, add_timestamp=False,
+                 initial_delay=2.0):
         generator = self._read_event_file(filename, num_events)
         super(RelayScheduler, self).__init__(source_id, io_loop, publishers,
                                              time_scale,
                                              time_generator=time_generator,
                                              add_timestamp=add_timestamp,
-                                             event_generator=generator)
+                                             event_generator=generator,
+                                             initial_delay=initial_delay)
 
     def _read_event_file(self, filename, num_events):
         last_sequence_num = 0
@@ -85,6 +87,9 @@ def read_cmd_options():
     tornado.options.define('timescale', default=1.0,
                            help='accelerate time by this factor',
                            type=float)
+    tornado.options.define('delay', default=2.0,
+                           help='initial delay, in seconds',
+                           type=float)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 2:
@@ -106,10 +111,11 @@ def main():
             utils.get_scheduler(tornado.options.options.distribution)
     else:
         time_generator = None
-    scheduler = utils.RelayScheduler(options.filename, limit, entity_id, io_loop,
-                                     publishers, tornado.options.options.timescale,
-                                     time_generator=time_generator,
-                                     add_timestamp=tornado.options.options.timestamp)
+    scheduler = RelayScheduler(options.filename, limit, entity_id, io_loop,
+                               publishers, tornado.options.options.timescale,
+                               time_generator=time_generator,
+                               add_timestamp=tornado.options.options.timestamp,
+                               initial_delay=tornado.options.options.delay)
     if tornado.options.options.eventlog:
         logger.logger = logger.ZtreamyLogger(entity_id,
                                              'replay-' + entity_id + '.log')

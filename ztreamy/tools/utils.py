@@ -88,7 +88,8 @@ class StdoutPublisher(object):
 
 class EventScheduler(object):
     def __init__(self, source_id, io_loop, publishers, time_scale,
-                 event_generator, time_generator=None, add_timestamp=False):
+                 event_generator, time_generator=None, add_timestamp=False,
+                 initial_delay=2.0):
         """ Schedules the events of the given file and sends.
 
         `source_id`: identifier to be set in command events generated
@@ -111,6 +112,7 @@ class EventScheduler(object):
         self._pending_events = []
         self._event_generator = event_generator
         self._time_generator = time_generator
+        self.initial_delay = initial_delay
         self.sched = tornado.ioloop.PeriodicCallback(self._schedule_next_events,
                                                      self.period * 1000)
         self.sched.start()
@@ -120,7 +122,7 @@ class EventScheduler(object):
         self._send_init_event()
         event = self._event_generator.next()
         self.t0_original = event.time()
-        self.t0_new = time.time() + 2
+        self.t0_new = time.time() + 2 + self.initial_delay
         self._schedule_event(event)
         self._schedule_next_events()
 
@@ -170,7 +172,7 @@ class EventScheduler(object):
                                'Event-Source-Started')
         pub = EventPublisher(event, self.publishers, add_timestamp=False)
         self._pending_events.append(pub)
-        pub.publish()
+        self.io_loop.add_timeout(time.time() + self.initial_delay, pub.publish)
 
 
 def exponential_event_scheduler(mean_time):
