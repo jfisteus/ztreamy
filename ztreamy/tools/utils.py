@@ -40,7 +40,8 @@ class EventPublisher(object):
     def publish(self):
         if self.add_timestamp:
             self.event.set_extra_header('X-Float-Timestamp',
-                         str(self.event.sequence_num) + '/' + str(time.time()))
+                                        (str(self.event.sequence_num) + '/'
+                                         + "%.3f"%time.time()))
         for publisher in self.publishers:
             publisher.publish(self.event, self._callback)
         self._num_pending = len(self.publishers)
