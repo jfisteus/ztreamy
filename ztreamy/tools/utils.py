@@ -28,7 +28,7 @@ from ztreamy import events
 from ztreamy import logger
 
 class EventPublisher(object):
-    def __init__(self, event, publishers, add_timestamp=False):
+    def __init__(self, event, publishers, add_timestamp=False, ioloop=None):
         self.event = event
         self.publishers = publishers
         self.add_timestamp = add_timestamp
@@ -36,15 +36,16 @@ class EventPublisher(object):
         self.error = False
         self._num_pending = 0
         self._external_callback = None
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
 
     def publish(self):
         if self.add_timestamp:
             self.event.set_extra_header('X-Float-Timestamp',
                                         (str(self.event.sequence_num) + '/'
                                          + "%.3f"%time.time()))
+        self._num_pending = len(self.publishers)
         for publisher in self.publishers:
             publisher.publish(self.event, self._callback)
-        self._num_pending = len(self.publishers)
 
     def set_external_callback(self, callback):
         self._external_callback = callback
@@ -53,13 +54,19 @@ class EventPublisher(object):
         self._num_pending -= 1
         if self._num_pending == 0:
             self.finished = True
+            if self._external_callback is not None:
+                self._external_callback()
         if response.error:
             self.error = True
             logging.error(response.error)
         else:
             logging.info('Event successfully sent to server')
-        if self._external_callback is not None:
-            self._external_callback()
+
+
+class _FakeResponse(object):
+    """Class used from StdoutPublisher to simulate a Tornado HTTP response."""
+    def __init__(self, error=False):
+        self.error = error
 
 
 class StdoutPublisher(object):
@@ -69,18 +76,18 @@ class StdoutPublisher(object):
     other processes.
 
     """
-    def __init__(self):
-        pass
+    def __init__(self, ioloop=None):
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
 
     def publish(self, event, callback=None):
-        """Publishes a new event. 'callback' is ignored."""
+        """Publishes a new event."""
         logger.logger.event_published(event)
-        self.publish_events([event], callback=callback)
-
-    def publish_events(self, events, callback=None):
-        """Publishes a list of events. 'callback' is ignored."""
-        body = ztreamy.serialize_events(events)
+        body = ztreamy.serialize_events([event])
         sys.stdout.write(body)
+        if callback is not None:
+            def new_callback():
+                callback(_FakeResponse())
+            self.ioloop.add_callback(new_callback)
 
     def close(self):
         """Closes the event publisher."""
@@ -95,7 +102,7 @@ class EventScheduler(object):
 
         `source_id`: identifier to be set in command events generated
         by the scheduler.  `io_loop`: instance of the ioloop to use.
-        `publlishers`: list of EventPublisher objects.  `time_scale`:
+        `publishers`: list of EventPublisher objects.  `time_scale`:
         factor to accelerate time (used only when time_distribution is
         None.). `time_generator`: if not None, override times in the
         events and use the given interator as a source of event fire
@@ -140,9 +147,10 @@ class EventScheduler(object):
                         break
             except StopIteration:
                 self.finished = True
+                print('pending', len(self._pending_events))
                 if len(self._pending_events) > 0:
-                    self._pending_events[-1].set_external_callback( \
-                        self._send_closing_event)
+                    for event in self._pending_events:
+                        event.set_external_callback(self._check_if_finished)
                 else:
                     self._send_closing_event()
         elif len(self._pending_events) == 0:
@@ -160,6 +168,12 @@ class EventScheduler(object):
             fire_time = self._time_generator.next()
         self.io_loop.add_timeout(fire_time, pub.publish)
         return fire_time
+
+    def _check_if_finished(self):
+        self._pending_events = [p for p in self._pending_events \
+                                if not p.finished]
+        if len(self._pending_events) == 0:
+            self._send_closing_event()
 
     def _send_closing_event(self):
         event = events.Command(self.source_id, 'ztreamy-command',

@@ -67,10 +67,11 @@ def _create_publisher(url):
     If the URL is '-', events are written to stdout.
 
     """
+    ioloop = tornado.ioloop.IOLoop.instance()
     if url == '-':
-        return utils.StdoutPublisher()
+        return utils.StdoutPublisher(ioloop=ioloop)
     else:
-        return client.EventPublisher(url)
+        return client.EventPublisher(url, ioloop=ioloop)
 
 def read_cmd_options():
     from optparse import OptionParser, Values
