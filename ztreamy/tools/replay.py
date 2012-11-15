@@ -109,7 +109,8 @@ def main():
     io_loop = tornado.ioloop.IOLoop.instance()
     if tornado.options.options.distribution is not None:
         time_generator = \
-            utils.get_scheduler(tornado.options.options.distribution)
+            utils.get_scheduler(tornado.options.options.distribution,
+                                initial_delay=tornado.options.options.delay)
     else:
         time_generator = None
     scheduler = RelayScheduler(options.filename, limit, entity_id, io_loop,

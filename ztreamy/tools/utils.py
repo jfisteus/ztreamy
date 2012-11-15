@@ -147,7 +147,6 @@ class EventScheduler(object):
                         break
             except StopIteration:
                 self.finished = True
-                print('pending', len(self._pending_events))
                 if len(self._pending_events) > 0:
                     for event in self._pending_events:
                         event.set_external_callback(self._check_if_finished)
@@ -190,19 +189,19 @@ class EventScheduler(object):
         self.io_loop.add_timeout(time.time() + self.initial_delay, pub.publish)
 
 
-def exponential_event_scheduler(mean_time):
-    last = time.time()
+def exponential_event_scheduler(mean_time, initial_delay=0.0):
+    last = time.time() + initial_delay
     while True:
         last += random.expovariate(1.0 / mean_time)
         yield last
 
-def constant_event_scheduler(mean_time):
-    last = time.time()
+def constant_event_scheduler(mean_time, initial_delay=0.0):
+    last = time.time() + initial_delay
     while True:
         last += mean_time
         yield last
 
-def get_scheduler(description):
+def get_scheduler(description, initial_delay=0.0):
     pos = description.find('[')
     if pos == -1 or description[-1] != ']':
         raise ZtreamyException('error in distribution specification',
@@ -213,12 +212,14 @@ def get_scheduler(description):
         if len(params) != 1:
             raise ZtreamyException('exp distribution needs 1 param',
                                    'event_source params')
-        return exponential_event_scheduler(params[0])
+        return exponential_event_scheduler(params[0],
+                                           initial_delay=initial_delay)
     elif distribution == 'const':
         if len(params) != 1:
             raise ZtreamyException('const distribution needs 1 param',
                                    'event_source params')
-        return constant_event_scheduler(params[0])
+        return constant_event_scheduler(params[0],
+                                        initial_delay=initial_delay)
 
 def median(data):
     """Returns the statistic median of a list of values."""
