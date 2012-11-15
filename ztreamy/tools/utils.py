@@ -84,6 +84,7 @@ class StdoutPublisher(object):
         logger.logger.event_published(event)
         body = ztreamy.serialize_events([event])
         sys.stdout.write(body)
+        sys.stdout.flush()
         if callback is not None:
             def new_callback():
                 callback(_FakeResponse())
