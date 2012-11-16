@@ -71,7 +71,7 @@ def _create_publisher(url):
     if url == '-':
         return utils.StdoutPublisher(ioloop=ioloop)
     else:
-        return client.EventPublisher(url, ioloop=ioloop)
+        return client.EventPublisher(url, io_loop=ioloop)
 
 def read_cmd_options():
     from optparse import OptionParser, Values
