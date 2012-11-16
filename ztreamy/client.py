@@ -210,7 +210,8 @@ class AsyncStreamingClient(object):
     """
     def __init__(self, url, event_callback=None, error_callback=None,
                  connection_close_callback=None,
-                 ioloop=None, parse_event_body=True, separate_events=True):
+                 ioloop=None, parse_event_body=True, separate_events=True,
+                 reconnect=True):
         """Creates a new client for a given stream URL.
 
         The client connects to the stream URL given by 'url'.  For
@@ -237,6 +238,7 @@ class AsyncStreamingClient(object):
         self._compressed = False
         self._deserializer = Deserializer()
         self.last_event = None
+        self.reconnect = reconnect
         self.connection_attempts = 0
 #        self.data_history = []
 
@@ -307,7 +309,8 @@ class AsyncStreamingClient(object):
         if response.error:
             if (self.connection_attempts < 5
                 and not response.error.code // 100 == 4
-                and not self._closed):
+                and not self._closed
+                and self.reconnect):
                 self._reconnect()
                 finish = False
             else:
