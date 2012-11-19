@@ -1,4 +1,4 @@
-A quick start guide to Streamsem
+A quick start guide to Ztreamy
 ==================================
 
 :Author: Jesús Arias Fisteus
@@ -14,6 +14,8 @@ semantically-described events on the Web. It is implemented on top of
 the `Tornado Web Server <http://www.tornadoweb.org/>`_.  This guide
 describes how to install the software, start a simple stream and
 consume its events.
+
+
 
 Installation
 ------------
@@ -33,7 +35,7 @@ transmitted through the stream::
 
     python -m ztreamy.server --port=9000
 
-This command launches an HTTP server in the port 9000 of your computer
+This command launches an HTTP server in the port 9000 of your computer,
 and serves an event stream from it.
 
 In another command window, launch a client to listen to that stream::
