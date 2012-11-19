@@ -258,7 +258,6 @@ class SaturationMonitor(object):
             elif self.delayed:
                 self.delayed = False
                 logging.info('Normal operation again')
-        print 'Clients:', len(self.clients)
 
 
 def read_cmd_options():
