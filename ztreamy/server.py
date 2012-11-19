@@ -900,11 +900,11 @@ def main():
     server.add_stream(stream)
     ## server.add_stream(relay)
     if tornado.options.options.eventlog:
-        print server.source_id
+        print stream.source_id
         comments = {'Buffer time (ms)': buffering_time}
-#        logger.logger = logger.ZtreamyLogger(server.source_id,
-        logger.logger = logger.CompactServerLogger(server.source_id,
-                                                   'server-' + server.source_id
+#        logger.logger = logger.ZtreamyLogger(stream.source_id,
+        logger.logger = logger.CompactServerLogger(stream.source_id,
+                                                   'server-' + stream.source_id
                                                    + '.log', comments)
      # Uncomment to test Stream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
