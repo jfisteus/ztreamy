@@ -41,6 +41,7 @@ import tornado.httpserver
 import zlib
 import traceback
 import time
+from datetime import timedelta
 
 import ztreamy
 from ztreamy.client import Client
@@ -272,15 +273,15 @@ class Stream(object):
         self.allow_publish = allow_publish
         self.dispatcher = _EventDispatcher()
         self.buffering_time = buffering_time
-        if ioloop is None:
-            ioloop = tornado.ioloop.IOLoop.instance()
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self._event_buffer = []
         if buffering_time:
             self.buffer_dump_sched = \
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
-                                                buffering_time, ioloop)
+                                                buffering_time, self.ioloop)
         self.stats_sched = tornado.ioloop.PeriodicCallback( \
-                                          self.dispatcher.stats, 10000, ioloop)
+                                          self.dispatcher.stats, 10000,
+                                          self.ioloop)
 
     def start(self):
         """Starts the stream.
@@ -371,7 +372,12 @@ class Stream(object):
 
     def _finish_when_possible(self):
         self.dispatcher._auto_finish = True
+        if self.buffering_time is None or self.buffering_time <= 0:
+            self.ioloop.add_timeout(timedelta(seconds=20), self._finish)
 
+    def _finish(self):
+        self.dispatcher.close()
+        self.ioloop.stop()
 
 
 class RelayStream(Stream):
@@ -527,7 +533,7 @@ class _LocalClient(object):
 
 
 class _EventDispatcher(object):
-    def __init__(self, num_recent_events=2048):
+    def __init__(self, num_recent_events=2048, ioloop=None):
         self.priority_clients = []
         self.streaming_clients = []
         self.compressed_streaming_clients = []
@@ -540,6 +546,7 @@ class _EventDispatcher(object):
         self._periods_since_last_event = 0
         self.sent_bytes = 0
         self._auto_finish = False
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.recent_events = _RecentEventsBuffer(num_recent_events)
 
     def register_client(self, client, last_event_seen=None):
@@ -611,7 +618,8 @@ class _EventDispatcher(object):
                 self._periods_since_last_event += 1
                 if self._periods_since_last_event > 20 and self._auto_finish:
                     logger.logger.server_closed(num_clients)
-                    tornado.ioloop.IOLoop.instance().stop()
+                    self.close()
+                    self.ioloop.stop()
                 # Use the following line for the experiments
                 ## if False:
                 elif self._periods_since_last_event > 20:
