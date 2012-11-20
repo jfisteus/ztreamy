@@ -365,6 +365,7 @@ class Stream(object):
         real_time = real_timer_stop - self._real_timer_start
         logger.logger.server_timing(cpu_time, real_time,
                                     self._real_timer_start)
+        logger.logger.flush()
 
     def _dump_buffer(self):
         self.dispatcher.dispatch(self._event_buffer)
