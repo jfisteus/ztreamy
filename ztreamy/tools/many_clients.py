@@ -330,6 +330,7 @@ def main():
         print entity_id
         logger.logger = logger.ZtreamyManycLogger(entity_id,
                                                 'manyc-' + entity_id + '.log')
+        logger.logger.auto_flush = True
     try:
         tornado.ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
