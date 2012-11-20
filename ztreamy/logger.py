@@ -22,6 +22,7 @@ In principle, they are intended for internal use only.
 """
 
 import time
+from socket import gethostname
 
 class ZtreamyDefaultLogger(object):
     def __init__(self):
@@ -59,7 +60,8 @@ class ZtreamyDefaultLogger(object):
 
     def _open_file(self, node_id, filename):
         self.log_file = open(filename, 'a')
-        self.log_file.write('# Node: %s\n#\n'%node_id)
+        self.log_file.write('# Node: %s\n# Host: %s\n#\n'%(node_id,
+                                                           gethostname()))
 
     def _write_comments(self, dict_data):
         for key, value in dict_data.iteritems():
