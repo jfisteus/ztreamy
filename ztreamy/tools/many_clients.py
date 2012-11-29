@@ -117,7 +117,8 @@ class BogusClient(client.AsyncStreamingClient):
 
     """
 
-    def __init__(self, url, stats, no_parse, ioloop=None, close_callback=None):
+    def __init__(self, url, stats, no_parse, ioloop=None, close_callback=None,
+                 finish_callback=None):
         super(BogusClient, self).__init__(url, ioloop=ioloop,
                                     connection_close_callback=close_callback,
                                     reconnect=False)
@@ -128,6 +129,7 @@ class BogusClient(client.AsyncStreamingClient):
         else:
             self._deserializer = BogusDeserializer()
         self.finished = False
+        self.finish_callback = finish_callback
 
     def _stream_callback(self, data):
         evs = self._deserialize(data)
@@ -154,6 +156,8 @@ class BogusClient(client.AsyncStreamingClient):
                 self.finished = True
                 del evs[-1]
                 evs.extend(self._deserialize(data[pos:]))
+                if self.finish_callback is not None:
+                    self.finish_callback()
                 self.stop()
         return evs
 
@@ -297,6 +301,13 @@ def main():
         elif not client.finished:
             num_disconnected_clients[0] += 1
 
+    def finish_callback():
+        for client in clients:
+            client.finished = True
+            client.stop(notify_connection_close=False)
+        del clients[:]
+        tornado.ioloop.IOLoop.instance().stop()
+
     options = read_cmd_options()
     no_parse = tornado.options.options.noparse
     assert options.num_clients > 0
@@ -318,7 +329,8 @@ def main():
             clients.append(BogusClient(options.stream_url, stats, True,
                                        close_callback=close_callback))
         clients.append(BogusClient(options.stream_url, stats, False,
-                                   close_callback=close_callback))
+                                   close_callback=close_callback,
+                                   finish_callback=finish_callback))
     for c in clients:
         c.start(loop=False)
     sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)

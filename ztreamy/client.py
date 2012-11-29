@@ -258,10 +258,14 @@ class AsyncStreamingClient(object):
             self.ioloop.start()
             self._looping = False
 
-    def stop(self):
+    def stop(self, notify_connection_close=True):
         """Stops and closes this client.
 
         The client can no longer be used in the future.
+
+        Unless the keywork parameter `notify_connection_close` is set
+        to false, the connection close callback will be invoked if set
+        for this client.
 
         If the server is blocked on the ioloop in the 'start()'
         method, it is released.
@@ -272,7 +276,7 @@ class AsyncStreamingClient(object):
         (as of Tornado branch master september 1st 2011).
 
         """
-        self._finish_internal(True)
+        self._finish_internal(notify_connection_close)
 
     def _connect(self):
         http_client = AsyncHTTPClient()
