@@ -39,13 +39,13 @@ import zlib
 import sys
 import urllib2
 import httplib
-from urlparse import urlparse
 import datetime
 import random
 
 import ztreamy
 from ztreamy import Deserializer, Command, mimetype_event
 from ztreamy import logger
+from ztreamy import split_url
 
 transferred_bytes = 0
 data_count = 0
@@ -448,15 +448,7 @@ class EventPublisher(object):
 
         """
         body = ztreamy.serialize_events(events)
-        req = HTTPRequest(self.server_url, body=body, method='POST',
-                          headers=self.headers, request_timeout=0,
-                          connect_timeout=0)
-        callback = callback or self._request_callback
-        # Enqueue a new callback in the ioloop, to avoid problems
-        # when this code is run from a callback of the HTTP client
-        def fetch():
-            self.http_client.fetch(req, callback)
-        self.ioloop.add_callback(fetch)
+        self._send_request(body, callback=callback)
 
     def close(self):
         """Closes the event publisher.
@@ -472,6 +464,17 @@ class EventPublisher(object):
             logging.error(response.error)
         else:
             logging.info('Event successfully sent to server')
+
+    def _send_request(self, body, callback=None):
+        req = HTTPRequest(self.server_url, body=body, method='POST',
+                          headers=self.headers, request_timeout=0,
+                          connect_timeout=0)
+        callback = callback or self._request_callback
+        # Enqueue a new callback in the ioloop, to avoid problems
+        # when this code is run from a callback of the HTTP client
+        def fetch():
+            self.http_client.fetch(req, callback)
+        self.ioloop.add_callback(fetch)
 
 
 class SynchronousEventPublisher(object):
@@ -489,13 +492,8 @@ class SynchronousEventPublisher(object):
         by 'server_url'.
 
         """
-        url_parts = urlparse(server_url)
-        assert url_parts.scheme == 'http'
-        self.hostname = url_parts.hostname
-        self.port = url_parts.port or 80
-        self.path = url_parts.path
-        if url_parts.query is not None:
-            self.path += '?' + url_parts.query
+        scheme, self.hostname, self.port, self.part = split_url(server_url)
+        assert scheme == 'http'
 
     def publish(self, event):
         """Publishes a new event.

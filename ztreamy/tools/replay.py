@@ -24,6 +24,8 @@ import ztreamy.client as client
 import ztreamy.events as events
 import ztreamy.logger as logger
 from ztreamy.tools import utils
+from ztreamy.tools.bayeux import BayeuxEventPublisher
+from ztreamy import split_url
 
 class RelayScheduler(utils.EventScheduler):
     def __init__(self, filename, num_events, source_id, io_loop, publishers,
@@ -61,7 +63,7 @@ class RelayScheduler(utils.EventScheduler):
         file_.close()
 
 
-def _create_publisher(url):
+def _create_publisher(url, publisher_type='ztreamy'):
     """Creates a publisher object for the given server URL.
 
     If the URL is '-', events are written to stdout.
@@ -70,8 +72,14 @@ def _create_publisher(url):
     ioloop = tornado.ioloop.IOLoop.instance()
     if url == '-':
         return utils.StdoutPublisher(ioloop=ioloop)
-    else:
+    elif publisher_type == 'ztreamy':
         return client.EventPublisher(url, io_loop=ioloop)
+    elif publisher_type == 'bayeux':
+        # Use the path as channel name
+        scheme, server, port, path = split_url(url)
+        assert scheme == 'http'
+        server_url = '{0}://{1}:{2}/'.format(scheme, server, port)
+        return BayeuxEventPublisher(server_url, path, io_loop=ioloop)
 
 def read_cmd_options():
     from optparse import OptionParser, Values
@@ -84,6 +92,9 @@ def read_cmd_options():
                            type=bool)
     tornado.options.define('timestamp', default=False,
                            help='add an X-Float-Timestamp header to events',
+                           type=bool)
+    tornado.options.define('bayeux', default=False,
+                           help='use the Bayeux protocol for publishing',
                            type=bool)
     tornado.options.define('timescale', default=1.0,
                            help='accelerate time by this factor',
@@ -105,7 +116,12 @@ def main():
     options = read_cmd_options()
     entity_id = ztreamy.random_id()
     limit = tornado.options.options.limit
-    publishers = [_create_publisher(url) for url in options.server_urls]
+    if not tornado.options.options.bayeux:
+        publisher_type = 'ztreamy'
+    else:
+        publisher_type = 'bayeux'
+    publishers = [_create_publisher(url, publisher_type=publisher_type) \
+                  for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
     if tornado.options.options.distribution is not None:
         time_generator = \

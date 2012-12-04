@@ -19,6 +19,7 @@
 
 """
 import time
+import json
 
 import ztreamy
 from ztreamy import ZtreamyException
@@ -307,6 +308,30 @@ class Event(object):
         else:
             return None
 
+    def as_dictionary(self):
+        """Returns the event as a dictionary.
+
+        The keys of the dictionary are the headers of the event and
+        the special header 'Body'.
+
+        """
+        data = {}
+        data['Event-Id'] = self.event_id
+        data['Source-Id'] = str(self.source_id)
+        data['Syntax'] = str(self.syntax)
+        if self.application_id is not None:
+            data['Application-Id'] = str(self.application_id)
+        if self.aggregator_id != []:
+            data['Aggregator-Ids'] = self.aggregator_id
+        if self.event_type is not None:
+            data['Event-Type'] = self.event_type
+        if self.timestamp is not None:
+            data['Timestamp'] = self.timestamp
+        for header, value in self.extra_headers.iteritems():
+            data[header] = value
+        data['Body'] = self.serialize_body()
+        return data
+
     def _serialize(self):
         data = []
         data.append('Event-Id: ' + self.event_id)
@@ -327,6 +352,9 @@ class Event(object):
         data.append('')
         data.append(serialized_body)
         return '\n'.join(data)
+
+    def _serialize_json(self):
+        return json.dumps(self.as_dictionary())
 
 
 class Command(Event):

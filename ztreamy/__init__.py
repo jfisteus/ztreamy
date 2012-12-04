@@ -19,6 +19,7 @@
 
 import uuid
 import time
+from urlparse import urlparse
 
 import ztreamy.utils.rfc3339
 
@@ -71,18 +72,40 @@ def rfc3339_as_time(timestamp):
     """
     return time.mktime(time.strptime(timestamp[:-6], _date_format))
 
-def serialize_events(evs):
+def serialize_events(events, serialization='ztreamy'):
     """Returns a string with the serialization of the events.
 
-    'evs' is a list of events.
+    'events' is a list of events. 'serrialization' is a string with
+    the desired serialization format. Currently only 'ztreamy' and
+    'json' are supported. The default value is 'ztreamy'.
 
     """
+    if serialization == 'ztreamy':
+        formatter_func = lambda event: event._serialize
+    elif serialization == 'json':
+        formatter_func = lambda event: event._serialize_json
+    else:
+        raise ZtreamyException('Unknown serialization format', 'send_event')
     data = []
-    for e in evs:
+    for e in events:
         if not isinstance(e, Event):
             raise ZtreamyException('Bad event type', 'send_event')
-        data.append(str(e))
+        data.append(formatter_func(e)())
     return ''.join(data)
+
+def split_url(url):
+    """Returns the URL splitted in components.
+
+    Returns the tuple (scheme, hostname, port, path). `path` includes
+    the query string if present in the URL.
+
+    """
+    url_parts = urlparse(url)
+    port = url_parts.port or 80
+    path = url_parts.path
+    if url_parts.query:
+        path += '?' + url_parts.query
+    return url_parts.scheme, url_parts.hostname, port, path
 
 
 # Imports of the main classes of the API provided by the framework,
