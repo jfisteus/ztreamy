@@ -915,6 +915,7 @@ def main():
         logger.logger = logger.CompactServerLogger(stream.source_id,
                                                    'server-' + stream.source_id
                                                    + '.log', comments)
+        logger.logger.auto_flush = True
      # Uncomment to test Stream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
     try:
