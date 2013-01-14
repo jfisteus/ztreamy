@@ -421,7 +421,12 @@ class EventPublisher(object):
         by 'server_url'.
 
         """
-        self.server_url = server_url
+        if server_url.endswith('/publish'):
+            self.server_url = server_url
+        elif server_url.endswith('/'):
+            self.server_url = server_url + 'publish'
+        else:
+            self.server_url = server_url + '/publish'
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.headers = {'Content-Type': mimetype_event}
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
@@ -492,8 +497,13 @@ class SynchronousEventPublisher(object):
         by 'server_url'.
 
         """
-        scheme, self.hostname, self.port, self.part = split_url(server_url)
+        scheme, self.hostname, self.port, self.path = split_url(server_url)
         assert scheme == 'http'
+        if not self.path.endswith('/publish'):
+            if self.path.endswith('/'):
+                self.path = self.path + 'publish'
+            else:
+                self.path = self.path + '/publish'
 
     def publish(self, event):
         """Publishes a new event.
