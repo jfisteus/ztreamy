@@ -5,7 +5,9 @@ import tornado.ioloop
 
 # Create a server with two streams
 server = ztreamy.StreamServer(9000)
-stream1 = ztreamy.Stream('/stream1')
+
+# Create the streams; stream1 allows remote producers to publish through HTTP
+stream1 = ztreamy.Stream('/stream1', allow_publish=True)
 stream2 = ztreamy.Stream('/stream2')
 server.add_stream(stream1)
 server.add_stream(stream2)

@@ -64,7 +64,7 @@ class StreamServer(tornado.web.Application):
     starting it::
 
     stream1 = Stream('/mystream1')
-    stream2 = Stream('/mystream1')
+    stream2 = Stream('/mystream2')
     server = StreamServer(8080)
     server.add_stream(stream1)
     server.add_stream(stream2)

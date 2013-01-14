@@ -22,7 +22,7 @@ try:
     # Start receiving events and block on the IOLoop
     client.start(loop=True)
 except KeyboardInterrupt:
-    # Allow ctrl-c to close the application
+    # Ctrl-c finishes the program
     pass
 finally:
     client.stop()
