@@ -1,3 +1,4 @@
+
 Programming applications in Ztreamy
 ===================================
 
@@ -20,7 +21,7 @@ those kinds of applications in Python.
 
 
 Asynchronous programming vs. synchronous programming
-----------------------------------------------------
+....................................................
 
 Ztreamy is built on top of the `Tornado Web Server
 <http://www.tornadoweb.org/>`_. Tornado's architecture is based on an
@@ -32,6 +33,27 @@ immediately instead of waiting for the operation to complete (new data
 to arrive or the data to be sent to be effectively dispatched). They
 register callback functions that the system calls when the operation
 completes.
+
+
+Running the examples of this guide
+..................................
+
+The examples of this guide are distributed inside the `examples`
+directory of the source code of Ztreamy. Assuming you have `installed
+Ztreamy <quick-start-guide.html>`_, you can run them from a console.
+
+For running consumers, you need to have the example server running::
+
+    $ python server.py
+
+Then, in another console, run the client you want to try::
+
+    $ python client_async.py
+
+If you want to try the event producer, you need to run the server and
+a client as shown above, and then, in another console::
+
+    $ python publisher_async.py
 
 
 Consuming events
