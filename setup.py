@@ -22,7 +22,7 @@ from setuptools import setup
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
-if sys.version_info.major != 2 or sys.version_info.minor not in [6, 7]:
+if sys.version_info[0] != 2 or sys.version_info[1] not in [6, 7]:
     print 'ztreamy needs Python 2.6 or 2.7'
     sys.exit(1)
 
@@ -37,7 +37,7 @@ requirements = ['setuptools',
                 'httplib2',
                 'simplejson',
                 ]
-if sys.version_info.minor == 6:
+if sys.version_info[1] == 6:
     requirements.append('argparse')
 
 
