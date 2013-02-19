@@ -294,7 +294,7 @@ class Event(object):
         if self.body is not None:
             return str(self.body)
         else:
-            raise ZtreamyException('Empty body in event', 'even_serialize')
+            raise ZtreamyException('Empty body in event', 'event_serialize')
 
     def time(self):
         """Returns the event timestamp as a seconds since the epoch value.

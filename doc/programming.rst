@@ -242,14 +242,104 @@ which the events are published.
 Event objects
 -------------
 
-What all the events have in common
-..................................
+Ztreamy serializes events as a series of headers and a body. A header
+is similar to an HTTP header. It contains a name and a value. The body
+contains the main data of the event. There is no assumption on the
+kind of data that the body stores. This is an example serialization of
+an event::
+
+    Event-Id: 1100254f-f4ba-49aa-8c47-605e3110169e
+    Source-Id: 83a4c888-c395-4bb7-a635-c5b864d6bd06
+    Syntax: text/n3
+    Application-Id: identi.ca dataset
+    Timestamp: 2012-10-25T13:31:24+02:00
+    Body-Length: 843
+    
+    @prefix dc: <http://purl.org/dc/elements/1.1/> .
+    @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+    @prefix geo: <http://www.w3.org/2003/01/geo/wgs84_pos#> .
+    @prefix webtlab: <http://webtlab.it.uc3m.es/ns/> .
+    
+    <http://identi.ca/notice/97535534> dc:creator "http://identi.ca/user/94360";
+        dc:date "2012-10-25T11:28:51+00:00";
+        webtlab:content "Completed registrations for #wmbangalore !Wikimedia
+                         DevCamp Banglalore: 2430 applications, 130 invitations
+                         sent http://is.gd/FtXMhT";
+        webtlab:conversation "http://identi.ca/conversation/96703048";
+        webtlab:hashtag "wmbangalore";
+        webtlab:location [ a geo:Place;
+                geo:lat "13.018",
+                geo:long "77.568" ] .
+    
+    "http://identi.ca/user/94360" foaf:based_near [ a geo:Place;
+                geo:lat "52.392";
+                geo:long "4.899" ];
+        foaf:name "S....... M......" .
+
+Ztreamy provides an API for representing events as objects, and for
+serializing and deserializing them. The `Event` class is the base
+class for all the events. Classes for specific types of events, such
+as `RDFEvent`, which is used events whose body is RDF, subclass
+`Event`.
+
+
+Creating event objects
+......................
+
+You can create an event directly using the `Event` class or using one
+of its subclass. This is an example of a generic event::
+
+    import ztreamy
+    source_id = ztreamy.random_id()
+    event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
+
+If there is an appropriate class for representing a type of event,
+events should be created with the constructor of that class (see the
+example for RDF events below).
+
+
+Accessing event objects
+.......................
+
+In order to access the contents of an event object, you can use its
+attributes: `event_id`, `source_id`, `syntax`, `application_id`,
+`aggregator id`, `event_type`, `timestamp`, `extra_headers` (a
+dictionary with the application-specific headers) and `body`.
+
+All the attributes above can also be accessed through the dictionary
+that the method `as_dictionay` returns::
+
+    dictionary = event.as_dictionary()
+    print dictionary['Source-Id']
+
+In addition, you can obtain a textual representation of its body with
+the method `serialize_body`::
+
+    print event.serialize_body()
+
 
 RDF events
 ..........
 
+The events whose body is represented as RDF are represented as objects
+of the `RDFEvent` class. This is an example of an RDF event, in which
+an RDF graph is used for the body of the event::
+
+    import ztreamy
+    from rdflib import Graph, Namespace, Literal
+    source_id = ztreamy.random_id()
+    graph = Graph()
+    ns_example = Namespace('http://example.com/ns/')
+    graph.add((ns_example['dog'], ns_example['eats'], Literal('10')))
+    event = ztreamy.RDFEvent(source_id, 'text/n3', graph)
+
+
 Creating custom event classes
 .............................
+
+In order to create a custom event type, you must create a class with a
+constructor and
+
 
 
 Selecting specific events (filtering)
