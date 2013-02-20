@@ -321,9 +321,11 @@ the method `serialize_body`::
 RDF events
 ..........
 
-The events whose body is represented as RDF are represented as objects
-of the `RDFEvent` class. This is an example of an RDF event, in which
-an RDF graph is used for the body of the event::
+Ztreamy uses internally the `rdflib library
+<https://github.com/RDFLib>`_ to work with RDF data.  The events whose
+body is represented as RDF are represented as objects of the
+`RDFEvent` class. This is an example of an RDF event, in which an RDF
+graph is used for the body of the event::
 
     import ztreamy
     from rdflib import Graph, Namespace, Literal
@@ -333,15 +335,130 @@ an RDF graph is used for the body of the event::
     graph.add((ns_example['dog'], ns_example['eats'], Literal('10')))
     event = ztreamy.RDFEvent(source_id, 'text/n3', graph)
 
+`RDFEvent` objects return the body of the event also as an *rdflib*
+`Graph` object.
+
 
 Creating custom event classes
 .............................
 
-In order to create a custom event type, you must create a class with a
-constructor and
+In order to create a custom event type, you must create a class that
+extends from `Event`. It should have a constructor and the code for
+serializing and deserializing the body of the events. The constructor
+must receive the parameters `source_id, syntax, body, **kwargs` and
+call the constructor of its superclass.
 
+Then, you need to registrer in the system the MIME types it
+handles. This way, when the platform finds an event of one of those
+types, it automatically creates the event using the custom class.
+
+As an example, this is the source code of the implementation of
+`RDFEvent` in ztreamy::
+
+    .. include:: ../ztreamy/rdfevents.py
+       :literal:
 
 
 Selecting specific events (filtering)
 -------------------------------------
 
+The `ztreamy.filters` module provides a base class for filtering
+events, called `Filter`, and several subclasses that implement some
+built-in filter. If you need to select just a subset of the events,
+you can use one of those built-in filters or program your own filter
+by subclassing the `Filter` class.
+
+The built-in filters currently available in Ztreamy are:
+
+- `SourceFilter`: selects the events that match one of the given
+  source identifiers.
+
+- `ApplicationFilter`: selects the events that match one of the given
+  application identifiers.
+
+- `VocabularyFilter`: selects the RDF events that contain URIs for
+  which one of the given URI prefixes match.
+
+- `SimpleTripleFilter`: select the RDF events whose bodies contain
+  triples that match the given triple pattern, given by subject,
+  predicate and object. Not all the three components need to be
+  specified.
+
+- `SPARQLFilter`: selects the RDF events that match a given SPARQL ASK
+  query.
+
+- `TripleFilter`: selects events containing certain triple patterns,
+  including boolean expressions that combine these patterns. This
+  filter uses internally the `SPARQLFilter`, but receives the patterns
+  with a different syntax.
+
+
+Implementing a custom filter class
+..................................
+
+For implementing a custom filter class, just create a class that
+extends `Filter` and implements the method `filter_event(self,
+event)`. Remember to ask in the constructor of your class for a
+callback function, and invoke the constructor of `Filter` with that
+callback.
+
+As an example, look how the built-in filters are programmed. For
+example, this is the implementation of `SourceFilter`::
+
+    class SourceFilter(Filter):
+        def __init__(self, callback, source_id=None, source_ids=[]):
+            """Creates a filter for source ids.
+    
+            'source_id' must be only one id, whereas 'source_ids' must be
+            a list of ids. If both are present, 'source_id' is appended to
+            the list of ids.
+    
+            """
+            super(SourceFilter, self).__init__(callback)
+            self.source_ids = set()
+            if source_id is not None:
+                self.source_ids.add(source_id)
+            for source in source_ids:
+                self.source_ids.add(source)
+    
+        def filter_event(self, event):
+            if event.source_id in self.source_ids:
+                self.callback(event)
+
+
+Filtering events in a client
+............................
+
+Filter objects can act as event handlers. You can filter events when
+using a client object by passing an instance of the filter in the
+place of the event callback. This is an example::
+
+    filter_ = ApplicationFilter(callback, application_id='ztreamy-example-a')
+    client = Client(streams, event_callback=filter_, error_callback=error)
+
+In the example, the filter receives the callback function and some
+filter-specific configuration parameters (in this case, the
+application id to filter). Then, it creates the client and passes the
+filter object as an event callback.
+
+This is a complete example that you can find in the examples directory
+under the name of `consumer_filter.py`::
+
+    .. include:: ../examples/publisher_async.py
+       :literal:
+
+In order to try it, run the example server of `Publishing events from
+the stream server`_ and, in another terminal, run the consumer above.
+You can compare the output of this consumer with the one described at
+`Developing a consumer asynchronously`_. which does not apply filters.
+
+
+Filtering events in a relay
+............................
+
+You can also apply filters in the `RelayStream` class, which
+implements a stream that relays the events of other streams. Pass a
+filter object with the keyword parameter `filter_` to the constructor
+of `RelayStream`. Only the events that match the filter will be
+relayed. Note that `RelayStream` will overwrite the callback of the
+filter with its own internal code.

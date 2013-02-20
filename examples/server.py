@@ -1,4 +1,5 @@
 import time
+import random
 
 import ztreamy
 import tornado.ioloop
@@ -16,16 +17,20 @@ server.add_stream(stream2)
 publisher1 = ztreamy.LocalEventPublisher(stream1)
 publisher2 = ztreamy.LocalEventPublisher(stream2)
 source_id = ztreamy.random_id()
+application_ids = ['ztreamy-example-a', 'ztreamy-example-b']
 
 # Publish events periodically
 def publish_hi():
     print 'Publishing "hi"'
-    event = ztreamy.Event(source_id, 'text/plain', 'Hi')
+    app_id = random.choice(application_ids)
+    event = ztreamy.Event(source_id, 'text/plain', 'Hi', application_id=app_id)
     publisher1.publish(event)
 
 def publish_there():
     print 'Publishing "there"'
-    event = ztreamy.Event(source_id, 'text/plain', 'there!')
+    app_id = random.choice(application_ids)
+    event = ztreamy.Event(source_id, 'text/plain', 'there!',
+                          application_id=app_id)
     publisher2.publish(event)
 
 tornado.ioloop.PeriodicCallback(publish_hi, 10000).start()
