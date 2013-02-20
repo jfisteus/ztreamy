@@ -112,11 +112,11 @@ def split_url(url):
 # in order to make them available in the "ztreamy" namespace.
 #
 from events import Deserializer, Event, Command
-from server import StreamServer, Stream, RelayStream
-from client import (Client, AsyncStreamingClient, SynchronousClient,
-                    EventPublisher, SynchronousEventPublisher,
-                    LocalClient, LocalEventPublisher)
 from rdfevents import RDFEvent
 from filters import (Filter, SourceFilter, ApplicationFilter,
                      SimpleTripleFilter, VocabularyFilter,
                      SimpleTripleFilter, SPARQLFilter, TripleFilter)
+from server import StreamServer, Stream, RelayStream
+from client import (Client, AsyncStreamingClient, SynchronousClient,
+                    EventPublisher, SynchronousEventPublisher,
+                    LocalClient, LocalEventPublisher)

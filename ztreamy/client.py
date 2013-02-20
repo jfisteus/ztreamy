@@ -43,7 +43,7 @@ import datetime
 import random
 
 import ztreamy
-from ztreamy import Deserializer, Command, mimetype_event
+from ztreamy import Deserializer, Command, Filter, mimetype_event
 from ztreamy import logger
 from ztreamy import split_url
 
@@ -180,6 +180,8 @@ class LocalClient(object):
         'start()' is invoked.
 
         """
+        if isinstance(event_callback, Filter):
+            event_callback = event_callback.filter_event
         self.stream = stream
         self.event_callback = event_callback
         self.separate_events = separate_events
@@ -226,6 +228,8 @@ class AsyncStreamingClient(object):
         the default 'ioloop' of Tornado.
 
         """
+        if isinstance(event_callback, Filter):
+            event_callback = event_callback.filter_event
         self.url = url
         self.event_callback = event_callback
         self.error_callback = error_callback
