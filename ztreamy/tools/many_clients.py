@@ -18,6 +18,8 @@
 import tornado.ioloop
 import logging
 import time
+import datetime
+import random
 
 from tornado.httpclient import AsyncHTTPClient
 
@@ -122,16 +124,20 @@ class BogusClient(client.AsyncStreamingClient):
 
     """
 
-    def __init__(self, url, stats, no_parse, ioloop=None, close_callback=None):
+    def __init__(self, url, stats, no_parse, ioloop=None, close_callback=None,
+                 finish_callback=None):
         super(BogusClient, self).__init__(url, ioloop=ioloop,
-                                    connection_close_callback=close_callback)
+                                    connection_close_callback=close_callback,
+                                    reconnect=False)
         self.stats = stats
         self._deserializer = BogusDeserializer()
+        self.no_parse = no_parse
         if no_parse:
             self._stream_callback = None
         else:
             self._deserializer = BogusDeserializer()
         self.finished = False
+        self.finish_callback = finish_callback
 
     def _stream_callback(self, data):
         evs = self._deserialize(data)
@@ -168,6 +174,9 @@ class BogusClient(client.AsyncStreamingClient):
                 self.finished = True
                 del evs[-1]
                 evs.extend(self._deserialize(data[pos:]))
+                if self.finish_callback is not None:
+                    self.finish_callback()
+                self.stop()
         return evs
 
 
@@ -271,8 +280,11 @@ class SaturationMonitor(object):
             elif self.delayed:
                 self.delayed = False
                 logging.info('Normal operation again')
-        print 'Clients:', len(self.clients)
 
+
+def _invoke_later(function):
+    t = datetime.timedelta(seconds=1 + random.expovariate(1))
+    tornado.ioloop.IOLoop.instance().add_timeout(t, function)
 
 def read_cmd_options():
     from optparse import OptionParser, Values
@@ -296,45 +308,91 @@ def read_cmd_options():
 
 def main():
     def close_callback(client):
+        reconnecting = False
         clients.remove(client)
-        if len(clients) == 0:
-            tornado.ioloop.IOLoop.instance().stop()
         if tornado.options.options.reconnect and not client.finished:
-            if times_reconnected[0] >= options.num_clients:
+            if times_reconnected[0] >= max_reconnections:
+                print 'Active clients:', len(clients), '/', options.num_clients
                 num_disconnected_clients[0] += 1
+                print 'A client got disconnected with times overflown.', \
+                      entity_id
             else:
+                print 'preparing reconnection', entity_id
+                reconnecting = True
                 times_reconnected[0] += 1
-                new_client = BogusClient(options.stream_url, stats, no_parse,
-                                         close_callback=close_callback)
-                clients.append(new_client)
-                new_client.start(loop=False)
+                if client.no_parse:
+                    _invoke_later(connect_new_client_no_parsing)
+                else:
+                    _invoke_later(connect_new_client_parsing)
         elif not client.finished:
             num_disconnected_clients[0] += 1
+            print 'A client got disconnected with reconnect disabled.', \
+                  entity_id
+        if len(clients) == 0 and not reconnecting:
+            tornado.ioloop.IOLoop.instance().stop()
+
+    def connect_new_client_no_parsing():
+        times_reconnected[0] += 1
+        new_client = BogusClient(options.stream_url, stats, True,
+                                 close_callback=close_callback)
+        clients.append(new_client)
+        new_client.start(loop=False)
+        print "Created a new non-parsing client for reconnection", entity_id
+
+    def connect_new_client_parsing():
+        times_reconnected[0] += 1
+        new_client = BogusClient(options.stream_url, stats, False,
+                                 close_callback=close_callback,
+                                 finish_callback=finish_callback)
+        clients.append(new_client)
+        new_client.start(loop=False)
+        print "Created parsing client for reconnection", entity_id
+
+    def finish_callback():
+        for client in clients:
+            client.finished = True
+            client.stop(notify_connection_close=False)
+        del clients[:]
+        tornado.ioloop.IOLoop.instance().stop()
 
     options = read_cmd_options()
     no_parse = tornado.options.options.noparse
+    assert options.num_clients > 0
     entity_id = ztreamy.random_id()
     num_disconnected_clients = [0]
     times_reconnected = [0]
-    stats = _Stats(options.num_clients)
+    max_reconnections = 3 * options.num_clients
+    if max_reconnections < 100:
+        max_reconnections = 100
     AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
                               max_clients=options.num_clients)
     clients = []
-    for i in range(0, options.num_clients):
-        clients.append(BogusClient(options.stream_url, stats, no_parse,
-                                   close_callback=close_callback))
+    if not no_parse:
+        stats = _Stats(options.num_clients)
+        for i in range(0, options.num_clients):
+            clients.append(BogusClient(options.stream_url, stats, False,
+                                       close_callback=close_callback))
+    else:
+        # One client parses, and the rest don't
+        stats = _Stats(1)
+        for i in range(0, options.num_clients - 1):
+            clients.append(BogusClient(options.stream_url, stats, True,
+                                       close_callback=close_callback))
+        clients.append(BogusClient(options.stream_url, stats, False,
+                                   close_callback=close_callback,
+                                   finish_callback=finish_callback))
     for c in clients:
         c.start(loop=False)
-    if not no_parse:
-        sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
-    else:
+    sched = tornado.ioloop.PeriodicCallback(stats.log_stats, 5000)
+    if no_parse:
         saturation_mon = SaturationMonitor(5.0, clients)
         sched = tornado.ioloop.PeriodicCallback(saturation_mon.fire, 5000)
     sched.start()
-    if tornado.options.options.eventlog and not no_parse:
+    if tornado.options.options.eventlog:
         print entity_id
         logger.logger = logger.ZtreamyManycLogger(entity_id,
                                                 'manyc-' + entity_id + '.log')
+        logger.logger.auto_flush = True
     try:
         tornado.ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
@@ -345,6 +403,7 @@ def main():
         if num_disconnected_clients[0] > 0:
             logging.warning((str(num_disconnected_clients[0])
                              + ' clients got disconnected'))
+        logger.logger.close()
 
 if __name__ == "__main__":
     main()

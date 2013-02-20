@@ -1,5 +1,7 @@
 ztreamy: a framework for publishing semantic events on the Web
 
+http://www.it.uc3m.es/jaf/ztreamy/
+
 ztreamy is a prototype implementation of a framework for publishing
 streams of events through on the Web, built on top of the Tornado Web
 server. The framework provides services that are specific to events
@@ -19,5 +21,9 @@ the future.
 This is an alpha version of the framework. There is no guarantee that
 the main programming interfaces will no change in the near future.
 
-Basic documentation for installing and testing the framework will be
-available soon.
+Basic documentation for installing and testing the framework is
+available at:
+
+http://www.it.uc3m.es/jaf/ztreamy/doc/
+
+This documentation is still work in progress.

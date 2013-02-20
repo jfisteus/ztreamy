@@ -41,6 +41,7 @@ import tornado.httpserver
 import zlib
 import traceback
 import time
+from datetime import timedelta
 
 import ztreamy
 from ztreamy.client import Client
@@ -64,18 +65,23 @@ class StreamServer(tornado.web.Application):
     starting it::
 
     stream1 = Stream('/mystream1')
-    stream2 = Stream('/mystream1')
+    stream2 = Stream('/mystream2')
     server = StreamServer(8080)
     server.add_stream(stream1)
     server.add_stream(stream2)
     server.start()
 
     """
-    def __init__(self, port, ioloop=None):
+    def __init__(self, port, ioloop=None, stop_when_source_finishes=False):
         """Creates a new server.
 
         'port' specifies the port number in which the HTTP server will
         listen.
+
+        'stop_when_source_finishes' set to True makes the server
+        finish after the event source declares it has finished. Used
+        for the performance experiments, but its value should normally
+        be 'False'.
 
         The server won't start to serve streams until start() is
         called.  Streams cannot be registered in the server after it
@@ -90,6 +96,7 @@ class StreamServer(tornado.web.Application):
         self.streams = []
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
+        self.stop_when_source_finishes = stop_when_source_finishes
         self._looping = False
         self._started = False
         self._stopped = False
@@ -179,7 +186,9 @@ class StreamServer(tornado.web.Application):
                                     kwargs=handler_kwargs),
             ])
             if stream.allow_publish:
-                publish_kwargs = {'stream': stream}
+                publish_kwargs = {'stream': stream,
+                                  'stop_when_source_finishes': \
+                                       self.stop_when_source_finishes}
                 handlers.append(tornado.web.URLSpec(stream.path + r"/publish",
                                                     _EventPublishHandler,
                                                     kwargs=publish_kwargs))
@@ -272,15 +281,15 @@ class Stream(object):
         self.allow_publish = allow_publish
         self.dispatcher = _EventDispatcher()
         self.buffering_time = buffering_time
-        if ioloop is None:
-            ioloop = tornado.ioloop.IOLoop.instance()
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self._event_buffer = []
         if buffering_time:
             self.buffer_dump_sched = \
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
-                                                buffering_time, ioloop)
+                                                buffering_time, self.ioloop)
         self.stats_sched = tornado.ioloop.PeriodicCallback( \
-                                          self.dispatcher.stats, 10000, ioloop)
+                                          self.dispatcher.stats, 10000,
+                                          self.ioloop)
 
     def start(self):
         """Starts the stream.
@@ -364,10 +373,20 @@ class Stream(object):
         real_time = real_timer_stop - self._real_timer_start
         logger.logger.server_timing(cpu_time, real_time,
                                     self._real_timer_start)
+        logger.logger.flush()
 
     def _dump_buffer(self):
         self.dispatcher.dispatch(self._event_buffer)
         self._event_buffer = []
+
+    def _finish_when_possible(self):
+        self.dispatcher._auto_finish = True
+        if self.buffering_time is None or self.buffering_time <= 0:
+            self.ioloop.add_timeout(timedelta(seconds=20), self._finish)
+
+    def _finish(self):
+        self.dispatcher.close()
+        self.ioloop.stop()
 
 
 class RelayStream(Stream):
@@ -535,7 +554,7 @@ class _LocalClient(object):
 
 
 class _EventDispatcher(object):
-    def __init__(self, num_recent_events=2048):
+    def __init__(self, num_recent_events=2048, ioloop=None):
         self.priority_clients = []
         self.streaming_clients = []
         self.compressed_streaming_clients = []
@@ -550,6 +569,8 @@ class _EventDispatcher(object):
         self._next_client_cleanup = -1
         self._periods_since_last_event = 0
         self.sent_bytes = 0
+        self._auto_finish = False
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.recent_events = _RecentEventsBuffer(num_recent_events)
 
     def register_client(self, client, last_event_seen=None):
@@ -632,10 +653,11 @@ class _EventDispatcher(object):
                 self._periods_since_last_event += 1
                 if self._periods_since_last_event > 20 and self._auto_finish:
                     logger.logger.server_closed(num_clients)
-                    tornado.ioloop.IOLoop.instance().stop()
+                    self.close()
+                    self.ioloop.stop()
                 # Use the following line for the experiments
                 ## if False:
-                if self._periods_since_last_event > 20:
+                elif self._periods_since_last_event > 20:
                     logging.info('Sending Test-Connection event')
                     evs = [events.Command('', 'ztreamy-command',
                                           'Test-Connection')]
@@ -750,9 +772,11 @@ class _MainHandler(tornado.web.RequestHandler):
 
 
 class _EventPublishHandler(tornado.web.RequestHandler):
-    def __init__(self, application, request, stream=None):
+    def __init__(self, application, request, stream=None,
+                 stop_when_source_finishes=False):
         tornado.web.RequestHandler.__init__(self, application, request)
         self.stream = stream
+        self.stop_when_source_finishes = stop_when_source_finishes
 
     def get(self):
         event_id = self.get_argument('event-id', default=None)
@@ -790,6 +814,8 @@ class _EventPublishHandler(tornado.web.RequestHandler):
                     self.stream._start_timing()
                 elif event.command == 'Event-Source-Finished':
                     self.stream._stop_timing()
+                    if self.stop_when_source_finishes:
+                        self.stream._finish_when_possible()
             event.aggregator_id.append(self.stream.source_id)
             self.stream.dispatch_event(event)
         self.finish()
@@ -938,6 +964,9 @@ def main():
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
                            type=bool)
+    tornado.options.define('autostop', default=False,
+                           help='stop the server when the source finishes',
+                           type=bool)
     tornado.options.parse_command_line()
     port = tornado.options.options.port
     if (tornado.options.options.buffer is not None
@@ -945,7 +974,8 @@ def main():
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = StreamServer(port)
+    server = StreamServer(port,
+                 stop_when_source_finishes=tornado.options.options.autostop)
     stream = Stream('/events', allow_publish=True,
                     buffering_time=buffering_time)
     ## relay = RelayStream('/relay', [('http://localhost:' + str(port)
@@ -955,12 +985,13 @@ def main():
     server.add_stream(stream)
     ## server.add_stream(relay)
     if tornado.options.options.eventlog:
-        print server.source_id
+        print stream.source_id
         comments = {'Buffer time (ms)': buffering_time}
-#        logger.logger = logger.ZtreamyLogger(server.source_id,
-        logger.logger = logger.CompactServerLogger(server.source_id,
-                                                   'server-' + server.source_id
+#        logger.logger = logger.ZtreamyLogger(stream.source_id,
+        logger.logger = logger.CompactServerLogger(stream.source_id,
+                                                   'server-' + stream.source_id
                                                    + '.log', comments)
+        logger.logger.auto_flush = True
      # Uncomment to test Stream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
     try:

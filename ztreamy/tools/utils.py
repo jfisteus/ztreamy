@@ -18,14 +18,17 @@
 import time
 import random
 import math
+import sys
 import logging
 import tornado.ioloop
 
+import ztreamy
 from ztreamy import ZtreamyException
 from ztreamy import events
+from ztreamy import logger
 
 class EventPublisher(object):
-    def __init__(self, event, publishers, add_timestamp=False):
+    def __init__(self, event, publishers, add_timestamp=False, ioloop=None):
         self.event = event
         self.publishers = publishers
         self.add_timestamp = add_timestamp
@@ -33,14 +36,16 @@ class EventPublisher(object):
         self.error = False
         self._num_pending = 0
         self._external_callback = None
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
 
     def publish(self):
         if self.add_timestamp:
             self.event.set_extra_header('X-Float-Timestamp',
-                         str(self.event.sequence_num) + '/' + str(time.time()))
+                                        (str(self.event.sequence_num) + '/'
+                                         + "%.3f"%time.time()))
+        self._num_pending = len(self.publishers)
         for publisher in self.publishers:
             publisher.publish(self.event, self._callback)
-        self._num_pending = len(self.publishers)
 
     def set_external_callback(self, callback):
         self._external_callback = callback
@@ -49,23 +54,56 @@ class EventPublisher(object):
         self._num_pending -= 1
         if self._num_pending == 0:
             self.finished = True
+            if self._external_callback is not None:
+                self._external_callback()
         if response.error:
             self.error = True
             logging.error(response.error)
         else:
             logging.info('Event successfully sent to server')
-        if self._external_callback is not None:
-            self._external_callback()
+
+
+class _FakeResponse(object):
+    """Class used from StdoutPublisher to simulate a Tornado HTTP response."""
+    def __init__(self, error=False):
+        self.error = error
+
+
+class StdoutPublisher(object):
+    """Simulates the interface of client.EventPublisher to write to stdout.
+
+    Useful mainly for sending the serialized events through a pipe to
+    other processes.
+
+    """
+    def __init__(self, ioloop=None):
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
+
+    def publish(self, event, callback=None):
+        """Publishes a new event."""
+        logger.logger.event_published(event)
+        body = ztreamy.serialize_events([event])
+        sys.stdout.write(body)
+        sys.stdout.flush()
+        if callback is not None:
+            def new_callback():
+                callback(_FakeResponse())
+            self.ioloop.add_callback(new_callback)
+
+    def close(self):
+        """Closes the event publisher."""
+        pass
 
 
 class EventScheduler(object):
     def __init__(self, source_id, io_loop, publishers, time_scale,
-                 event_generator, time_generator=None, add_timestamp=False):
+                 event_generator, time_generator=None, add_timestamp=False,
+                 initial_delay=2.0):
         """ Schedules the events of the given file and sends.
 
         `source_id`: identifier to be set in command events generated
         by the scheduler.  `io_loop`: instance of the ioloop to use.
-        `publlishers`: list of EventPublisher objects.  `time_scale`:
+        `publishers`: list of EventPublisher objects.  `time_scale`:
         factor to accelerate time (used only when time_distribution is
         None.). `time_generator`: if not None, override times in the
         events and use the given interator as a source of event fire
@@ -83,6 +121,7 @@ class EventScheduler(object):
         self._pending_events = []
         self._event_generator = event_generator
         self._time_generator = time_generator
+        self.initial_delay = initial_delay
         self.sched = tornado.ioloop.PeriodicCallback(self._schedule_next_events,
                                                      self.period * 1000)
         self.sched.start()
@@ -92,7 +131,7 @@ class EventScheduler(object):
         self._send_init_event()
         event = self._event_generator.next()
         self.t0_original = event.time()
-        self.t0_new = time.time() + 2
+        self.t0_new = time.time() + 2 + self.initial_delay
         self._schedule_event(event)
         self._schedule_next_events()
 
@@ -110,8 +149,8 @@ class EventScheduler(object):
             except StopIteration:
                 self.finished = True
                 if len(self._pending_events) > 0:
-                    self._pending_events[-1].set_external_callback( \
-                        self._send_closing_event)
+                    for event in self._pending_events:
+                        event.set_external_callback(self._check_if_finished)
                 else:
                     self._send_closing_event()
         elif len(self._pending_events) == 0:
@@ -130,6 +169,12 @@ class EventScheduler(object):
         self.io_loop.add_timeout(fire_time, pub.publish)
         return fire_time
 
+    def _check_if_finished(self):
+        self._pending_events = [p for p in self._pending_events \
+                                if not p.finished]
+        if len(self._pending_events) == 0:
+            self._send_closing_event()
+
     def _send_closing_event(self):
         event = events.Command(self.source_id, 'ztreamy-command',
                                'Event-Source-Finished')
@@ -142,23 +187,23 @@ class EventScheduler(object):
                                'Event-Source-Started')
         pub = EventPublisher(event, self.publishers, add_timestamp=False)
         self._pending_events.append(pub)
-        pub.publish()
+        self.io_loop.add_timeout(time.time() + self.initial_delay, pub.publish)
 
 
-def exponential_event_scheduler(mean_time):
-    last = time.time()
+def exponential_event_scheduler(mean_time, initial_delay=0.0):
+    last = time.time() + initial_delay
     while True:
         last += random.expovariate(1.0 / mean_time)
         yield last
 
-def constant_event_scheduler(mean_time):
-    last = time.time()
+def constant_event_scheduler(mean_time, initial_delay=0.0):
+    last = time.time() + initial_delay
     while True:
         last += mean_time
         yield last
 
-def get_scheduler(description):
-    print(description)
+
+def get_scheduler(description, initial_delay=0.0):
     pos = description.find('[')
     if pos == -1 or description[-1] != ']':
         raise ZtreamyException('error in distribution specification',
@@ -169,12 +214,14 @@ def get_scheduler(description):
         if len(params) != 1:
             raise ZtreamyException('exp distribution needs 1 param',
                                    'event_source params')
-        return exponential_event_scheduler(params[0])
+        return exponential_event_scheduler(params[0],
+                                           initial_delay=initial_delay)
     elif distribution == 'const':
         if len(params) != 1:
             raise ZtreamyException('const distribution needs 1 param',
                                    'event_source params')
-        return constant_event_scheduler(params[0])
+        return constant_event_scheduler(params[0],
+                                        initial_delay=initial_delay)
 
 def median(data):
     """Returns the statistic median of a list of values."""

@@ -24,16 +24,20 @@ import ztreamy.client as client
 import ztreamy.events as events
 import ztreamy.logger as logger
 from ztreamy.tools import utils
+from ztreamy.tools.bayeux import BayeuxEventPublisher
+from ztreamy import split_url
 
 class RelayScheduler(utils.EventScheduler):
     def __init__(self, filename, num_events, source_id, io_loop, publishers,
-                 time_scale, time_generator=None, add_timestamp=False):
+                 time_scale, time_generator=None, add_timestamp=False,
+                 initial_delay=2.0):
         generator = self._read_event_file(filename, num_events)
         super(RelayScheduler, self).__init__(source_id, io_loop, publishers,
                                              time_scale,
                                              time_generator=time_generator,
                                              add_timestamp=add_timestamp,
-                                             event_generator=generator)
+                                             event_generator=generator,
+                                             initial_delay=initial_delay)
 
     def _read_event_file(self, filename, num_events):
         last_sequence_num = 0
@@ -59,6 +63,24 @@ class RelayScheduler(utils.EventScheduler):
         file_.close()
 
 
+def _create_publisher(url, publisher_type='ztreamy'):
+    """Creates a publisher object for the given server URL.
+
+    If the URL is '-', events are written to stdout.
+
+    """
+    ioloop = tornado.ioloop.IOLoop.instance()
+    if url == '-':
+        return utils.StdoutPublisher(ioloop=ioloop)
+    elif publisher_type == 'ztreamy':
+        return client.EventPublisher(url, io_loop=ioloop)
+    elif publisher_type == 'bayeux':
+        # Use the path as channel name
+        scheme, server, port, path = split_url(url)
+        assert scheme == 'http'
+        server_url = '{0}://{1}:{2}/'.format(scheme, server, port)
+        return BayeuxEventPublisher(server_url, path, io_loop=ioloop)
+
 def read_cmd_options():
     from optparse import OptionParser, Values
     tornado.options.define('distribution', default=None,
@@ -71,8 +93,14 @@ def read_cmd_options():
     tornado.options.define('timestamp', default=False,
                            help='add an X-Float-Timestamp header to events',
                            type=bool)
+    tornado.options.define('bayeux', default=False,
+                           help='use the Bayeux protocol for publishing',
+                           type=bool)
     tornado.options.define('timescale', default=1.0,
                            help='accelerate time by this factor',
+                           type=float)
+    tornado.options.define('delay', default=2.0,
+                           help='initial delay, in seconds',
                            type=float)
     remaining = tornado.options.parse_command_line()
     options = Values()
@@ -88,17 +116,24 @@ def main():
     options = read_cmd_options()
     entity_id = ztreamy.random_id()
     limit = tornado.options.options.limit
-    publishers = [client.EventPublisher(url) for url in options.server_urls]
+    if not tornado.options.options.bayeux:
+        publisher_type = 'ztreamy'
+    else:
+        publisher_type = 'bayeux'
+    publishers = [_create_publisher(url, publisher_type=publisher_type) \
+                  for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
     if tornado.options.options.distribution is not None:
         time_generator = \
-            utils.get_scheduler(tornado.options.options.distribution)
+            utils.get_scheduler(tornado.options.options.distribution,
+                                initial_delay=tornado.options.options.delay)
     else:
         time_generator = None
     scheduler = RelayScheduler(options.filename, limit, entity_id, io_loop,
                                publishers, tornado.options.options.timescale,
                                time_generator=time_generator,
-                               add_timestamp=tornado.options.options.timestamp)
+                               add_timestamp=tornado.options.options.timestamp,
+                               initial_delay=tornado.options.options.delay)
     if tornado.options.options.eventlog:
         logger.logger = logger.ZtreamyLogger(entity_id,
                                              'replay-' + entity_id + '.log')

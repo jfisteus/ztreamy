@@ -39,13 +39,13 @@ import zlib
 import sys
 import urllib2
 import httplib
-from urlparse import urlparse
 import datetime
 import random
 
 import ztreamy
-from ztreamy import Deserializer, Command, mimetype_event
+from ztreamy import Deserializer, Command, Filter, mimetype_event
 from ztreamy import logger
+from ztreamy import split_url
 from ztreamy.rdzutils import EventDecompressor
 
 transferred_bytes = 0
@@ -181,6 +181,8 @@ class LocalClient(object):
         'start()' is invoked.
 
         """
+        if isinstance(event_callback, Filter):
+            event_callback = event_callback.filter_event
         self.stream = stream
         self.event_callback = event_callback
         self.separate_events = separate_events
@@ -211,7 +213,8 @@ class AsyncStreamingClient(object):
     """
     def __init__(self, url, event_callback=None, error_callback=None,
                  connection_close_callback=None,
-                 ioloop=None, parse_event_body=True, separate_events=True):
+                 ioloop=None, parse_event_body=True, separate_events=True,
+                 reconnect=True):
         """Creates a new client for a given stream URL.
 
         The client connects to the stream URL given by 'url'.  For
@@ -226,6 +229,8 @@ class AsyncStreamingClient(object):
         the default 'ioloop' of Tornado.
 
         """
+        if isinstance(event_callback, Filter):
+            event_callback = event_callback.filter_event
         self.url = url
         self.event_callback = event_callback
         self.error_callback = error_callback
@@ -239,6 +244,7 @@ class AsyncStreamingClient(object):
         self._rdz = False
         self._deserializer = Deserializer()
         self.last_event = None
+        self.reconnect = reconnect
         self.connection_attempts = 0
 #        self.data_history = []
 
@@ -258,10 +264,14 @@ class AsyncStreamingClient(object):
             self.ioloop.start()
             self._looping = False
 
-    def stop(self):
+    def stop(self, notify_connection_close=True):
         """Stops and closes this client.
 
         The client can no longer be used in the future.
+
+        Unless the keywork parameter `notify_connection_close` is set
+        to false, the connection close callback will be invoked if set
+        for this client.
 
         If the server is blocked on the ioloop in the 'start()'
         method, it is released.
@@ -272,9 +282,7 @@ class AsyncStreamingClient(object):
         (as of Tornado branch master september 1st 2011).
 
         """
-        if not self._closed:
-            ## self.http_client.close()
-            self._finish_internal(False)
+        self._finish_internal(notify_connection_close)
 
     def _connect(self):
         http_client = AsyncHTTPClient()
@@ -293,12 +301,15 @@ class AsyncStreamingClient(object):
         self.ioloop.add_timeout(datetime.timedelta(seconds=t), self._connect)
 
     def _finish_internal(self, notify_connection_close):
+        if self._closed:
+            return
         if (notify_connection_close
             and self.connection_close_callback is not None):
             self.connection_close_callback(self)
         if self._looping:
             self.ioloop.stop()
             self._looping = False
+        self._closed = True
 
     def _stream_callback(self, data):
         self.connection_attempts = 0
@@ -307,7 +318,9 @@ class AsyncStreamingClient(object):
     def _request_callback(self, response):
         if response.error:
             if (self.connection_attempts < 5
-                and not response.error.code // 100 == 4):
+                and not response.error.code // 100 == 4
+                and not self._closed
+                and self.reconnect):
                 self._reconnect()
                 finish = False
             else:
@@ -441,7 +454,12 @@ class EventPublisher(object):
         by 'server_url'.
 
         """
-        self.server_url = server_url
+        if server_url.endswith('/publish'):
+            self.server_url = server_url
+        elif server_url.endswith('/'):
+            self.server_url = server_url + 'publish'
+        else:
+            self.server_url = server_url + '/publish'
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.headers = {'Content-Type': mimetype_event}
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
@@ -468,15 +486,7 @@ class EventPublisher(object):
 
         """
         body = ztreamy.serialize_events(events)
-        req = HTTPRequest(self.server_url, body=body, method='POST',
-                          headers=self.headers, request_timeout=0,
-                          connect_timeout=0)
-        callback = callback or self._request_callback
-        # Enqueue a new callback in the ioloop, to avoid problems
-        # when this code is run from a callback of the HTTP client
-        def fetch():
-            self.http_client.fetch(req, callback)
-        self.ioloop.add_callback(fetch)
+        self._send_request(body, callback=callback)
 
     def close(self):
         """Closes the event publisher.
@@ -492,6 +502,17 @@ class EventPublisher(object):
             logging.error(response.error)
         else:
             logging.info('Event successfully sent to server')
+
+    def _send_request(self, body, callback=None):
+        req = HTTPRequest(self.server_url, body=body, method='POST',
+                          headers=self.headers, request_timeout=0,
+                          connect_timeout=0)
+        callback = callback or self._request_callback
+        # Enqueue a new callback in the ioloop, to avoid problems
+        # when this code is run from a callback of the HTTP client
+        def fetch():
+            self.http_client.fetch(req, callback)
+        self.ioloop.add_callback(fetch)
 
 
 class SynchronousEventPublisher(object):
@@ -509,13 +530,13 @@ class SynchronousEventPublisher(object):
         by 'server_url'.
 
         """
-        url_parts = urlparse(server_url)
-        assert url_parts.scheme == 'http'
-        self.hostname = url_parts.hostname
-        self.port = url_parts.port or 80
-        self.path = url_parts.path
-        if url_parts.query is not None:
-            self.path += '?' + url_parts.query
+        scheme, self.hostname, self.port, self.path = split_url(server_url)
+        assert scheme == 'http'
+        if not self.path.endswith('/publish'):
+            if self.path.endswith('/'):
+                self.path = self.path + 'publish'
+            else:
+                self.path = self.path + '/publish'
 
     def publish(self, event):
         """Publishes a new event.

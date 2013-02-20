@@ -22,10 +22,12 @@ In principle, they are intended for internal use only.
 """
 
 import time
+from socket import gethostname
 
 class ZtreamyDefaultLogger(object):
     def __init__(self):
         self.log_file = None
+        self.auto_flush = False
 
     def close(self):
         pass
@@ -51,7 +53,7 @@ class ZtreamyDefaultLogger(object):
     def server_traffic_sent(self, timestamp, num_bytes):
         pass
 
-    def server_close(self, num_clients):
+    def server_closed(self, num_clients):
         pass
 
     def server_timing(self, cpu_time, real_time, init_time):
@@ -59,7 +61,8 @@ class ZtreamyDefaultLogger(object):
 
     def _open_file(self, node_id, filename):
         self.log_file = open(filename, 'a')
-        self.log_file.write('# Node: %s\n#\n'%node_id)
+        self.log_file.write('# Node: %s\n# Host: %s\n#\n'%(node_id,
+                                                           gethostname()))
 
     def _write_comments(self, dict_data):
         for key, value in dict_data.iteritems():
@@ -68,10 +71,13 @@ class ZtreamyDefaultLogger(object):
     def _log(self, parts):
         self.log_file.write('\t'.join(parts))
         self.log_file.write('\n')
+        if self.auto_flush:
+            self.log_file.flush()
 
 
 class ZtreamyLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename):
+        super(ZtreamyLogger, self).__init__()
         self._open_file(node_id, filename)
 
     def close(self):
@@ -104,6 +110,7 @@ class ZtreamyLogger(ZtreamyDefaultLogger):
 
 class ZtreamyManycLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename):
+        super(ZtreamyDefaultLogger, self).__init__()
         self._open_file(node_id, filename)
 
     def data_received(self, compressed, uncompressed):
@@ -118,6 +125,7 @@ class ZtreamyManycLogger(ZtreamyDefaultLogger):
 
 class CompactServerLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename, comments):
+        super(CompactServerLogger, self).__init__()
         self._open_file(node_id, filename)
         self._write_comments(comments)
 
