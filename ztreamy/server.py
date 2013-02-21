@@ -869,7 +869,8 @@ class _RecentEventsBuffer(object):
     def _remove_from_dict(self, position, num_events):
         for i in range(position, position + num_events):
             if self.buffer[i] is not None:
-                del self.events[self.buffer[i].event_id]
+                if self.buffer[i].event_id in self.events:
+                    del self.events[self.buffer[i].event_id]
 
 def main():
     import time
