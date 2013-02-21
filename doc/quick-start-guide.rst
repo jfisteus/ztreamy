@@ -57,10 +57,14 @@ inside it. The second command makes this virtual environment the
 default in the current terminal. The second command has to be executed
 every time a new terminal is opened for using Ztreamy.
 
-Finally, you have to download Ztreamy and install it::
+Finally, you have to download Ztreamy and install it. Download the
+file `ztreamy-<version>.tar.gz` (where `<version>` represents the
+version number of the release of Ztreamy) from the `downloads page of
+Ztreamy <http://www.it.uc3m.es/jaf/ztreamy/download/>`_. Then, install
+it with `easy_install`. For example, if you downloaded
+`ztreamy-0.1.1.tar.gz` you would install it with::
 
-    curl http://www.it.uc3m.es/jaf/ztreamy/downloads/ztreamy-0.1.tar.gz
-    easy_install ztreamy-0.1.tar.gz
+    easy_install ztreamy-0.1.1.tar.gz
 
 The `easy_install` command will install Ztreamy inside the virtual
 environment. In addition, it will also download and install all the
