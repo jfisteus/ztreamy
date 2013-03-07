@@ -1,3 +1,13 @@
+2013-03-07  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.1.2.
+
+	* Fix a problem with pyparsing: current versions are only for
+	python 3. The installation script forces the latest 2.x-compatible
+	version to be selected.
+
+	* Client for the Air Quality Egg project in COSM (by Norberto).
+
 2013-02-21  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.1.1.
