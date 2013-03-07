@@ -33,7 +33,7 @@ requirements = ['setuptools',
                 'rdfextras',
                 'tweepy',
                 'pycurl',
-                'pyparsing',
+                'pyparsing==1.5.7',
                 'httplib2',
                 'simplejson',
                 ]
