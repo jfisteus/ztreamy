@@ -33,7 +33,7 @@ requirements = ['setuptools',
                 'rdfextras',
                 'tweepy',
                 'pycurl',
-                'pyparsing',
+                'pyparsing==1.5.7',
                 'httplib2',
                 'simplejson',
                 ]
@@ -43,7 +43,7 @@ if sys.version_info[1] == 6:
 
 setup(
     name = "ztreamy",
-    version = "0.1.1",
+    version = "0.1.2",
     author = "Jesus Arias Fisteus",
     description = ("A framework for publishing semantic events on the Web"),
     keywords = "rdf sensors web semantic-sensor-web",
