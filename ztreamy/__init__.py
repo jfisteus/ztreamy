@@ -63,6 +63,7 @@ def get_timestamp(date=None):
         return ztreamy.utils.rfc3339.rfc3339(time.time())
 
 _date_format = "%Y-%m-%dT%H:%M:%S"
+_date_format_alt = "%Y-%m-%d %H:%M:%S"
 
 def rfc3339_as_time(timestamp):
     """Returns the given RFC 3339 timestamp as a seconds since the epoch value.
@@ -70,7 +71,17 @@ def rfc3339_as_time(timestamp):
     Note that the timezone information from the timestamp is lost.
 
     """
-    return time.mktime(time.strptime(timestamp[:-6], _date_format))
+    try:
+        t = time.mktime(time.strptime(timestamp[:-6], _date_format))
+    except ValueError:
+        try:
+            # For timestamps of the style of '2013-03-07 11:41:04.321215'
+            t = time.mktime(time.strptime(timestamp[:-7], _date_format_alt))
+        except ValueError:
+            raise ZtreamyException(('Incorrect RFC3339 timestamp: '
+                                    + timestamp[:-6] + '; expected '
+                                    + _date_format))
+    return t
 
 def serialize_events(events, serialization='ztreamy'):
     """Returns a string with the serialization of the events.
