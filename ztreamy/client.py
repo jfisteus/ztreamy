@@ -63,6 +63,8 @@ class Client(object):
 
     """
     def __init__(self, streams, event_callback, error_callback=None,
+                 connection_close_callback=None,
+                 source_start_callback=None, source_finish_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True):
         """Creates a new client for one or more stream URLs.
 
@@ -92,6 +94,8 @@ class Client(object):
                 self.clients.append(AsyncStreamingClient(stream,
                          event_callback=event_callback,
                          error_callback=error_callback,
+                         source_start_callback=source_start_callback,
+                         source_finish_callback=source_finish_callback,
                          connection_close_callback=self._client_close_callback,
                          parse_event_body=parse_event_body,
                          separate_events=separate_events))
@@ -103,6 +107,7 @@ class Client(object):
         self._closed = False
         self._looping = False
         self.active_clients = []
+        self.connection_close_callback = connection_close_callback
 
     def start(self, loop=False):
         """Starts the client.
@@ -148,6 +153,8 @@ class Client(object):
             if len(self.active_clients) == 0 and self._looping:
                 self.ioloop.stop()
                 self._looping = False
+                if self.connection_close_callback:
+                    self.connection_close_callback()
 
 
 class LocalClient(object):
@@ -212,6 +219,7 @@ class AsyncStreamingClient(object):
     """
     def __init__(self, url, event_callback=None, error_callback=None,
                  connection_close_callback=None,
+                 source_start_callback=None, source_finish_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True,
                  reconnect=True):
         """Creates a new client for a given stream URL.
@@ -234,6 +242,8 @@ class AsyncStreamingClient(object):
         self.event_callback = event_callback
         self.error_callback = error_callback
         self.connection_close_callback = connection_close_callback
+        self.source_start_callback = source_start_callback
+        self.source_finish_callback = source_finish_callback
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.parse_event_body = parse_event_body
         self.separate_events = separate_events
@@ -369,6 +379,14 @@ class AsyncStreamingClient(object):
                     self._deserializer.reset()
                     evs.extend(self._deserialize(data[pos:], parse_body))
                     return evs
+                elif event.command == 'Event-Source-Started':
+                    if self.source_start_callback:
+                        self.source_start_callback()
+                    evs.append(event)
+                elif event.command == 'Event-Source-Finished':
+                    if self.source_finish_callback:
+                        self.source_finish_callback()
+                    evs.append(event)
                 elif event.command == 'Stream-Finished':
                     self._finish_internal(True)
                     ## logging.info('Stream finished')
