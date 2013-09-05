@@ -398,7 +398,8 @@ class RelayStream(Stream):
 
     """
     def __init__(self, path, streams, allow_publish=False, filter_=None,
-                 buffering_time=None, ioloop=None):
+                 buffering_time=None, ioloop=None,
+                 stop_when_source_finishes=False):
         """Creates a new relay stream.
 
         The stream will retransmit the events of the streams specified
@@ -421,10 +422,14 @@ class RelayStream(Stream):
             event_callback = filter_.filter_events
         else:
             event_callback = self._relay_events
+        self.stop_when_source_finishes = stop_when_source_finishes
         self.client = Client(streams, event_callback,
-                             error_callback=self._handle_error,
-                             parse_event_body=False, separate_events=False,
-                             ioloop=ioloop)
+                        error_callback=self._handle_error,
+#                        connection_close_callback=self._handle_source_finish,
+                        source_start_callback=self._start_timing,
+                        source_finish_callback=self._handle_source_finish,
+                        parse_event_body=False, separate_events=False,
+                        ioloop=ioloop)
 
     def start(self):
         """Starts the relay stream.
@@ -458,6 +463,11 @@ class RelayStream(Stream):
             logging.error(message + ': ' + str(http_error))
         else:
             logging.error(message)
+
+    def _handle_source_finish(self):
+        self._stop_timing()
+        if self.stop_when_source_finishes:
+            self._finish_when_possible()
 
 
 class _Client(object):
@@ -600,7 +610,6 @@ class _EventDispatcher(object):
         elif not client.streaming and not client.closed:
             self.one_time_clients.append(client)
 
-
     def deregister_client(self, client):
         if client.streaming:
             client.closed = True
@@ -648,8 +657,7 @@ class _EventDispatcher(object):
         if self._next_client_cleanup == 0:
             self.clean_closed_clients()
         if isinstance(evs, list):
-            if evs == [] and (num_clients > 0
-                              or len(self.priority_clients) > 0):
+            if evs == []:
                 self._periods_since_last_event += 1
                 if self._periods_since_last_event > 20 and self._auto_finish:
                     logger.logger.server_closed(num_clients)
@@ -657,7 +665,9 @@ class _EventDispatcher(object):
                     self.ioloop.stop()
                 # Use the following line for the experiments
                 ## if False:
-                elif self._periods_since_last_event > 20:
+                elif ((num_clients > 0
+                      or len(self.priority_clients) > 0)
+                      and self._periods_since_last_event > 20):
                     logging.info('Sending Test-Connection event')
                     evs = [events.Command('', 'ztreamy-command',
                                           'Test-Connection')]

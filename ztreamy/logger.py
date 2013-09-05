@@ -110,7 +110,7 @@ class ZtreamyLogger(ZtreamyDefaultLogger):
 
 class ZtreamyManycLogger(ZtreamyDefaultLogger):
     def __init__(self, node_id, filename):
-        super(ZtreamyDefaultLogger, self).__init__()
+        super(ZtreamyManycLogger, self).__init__()
         self._open_file(node_id, filename)
 
     def data_received(self, compressed, uncompressed):

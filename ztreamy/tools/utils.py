@@ -176,6 +176,7 @@ class EventScheduler(object):
             self._send_closing_event()
 
     def _send_closing_event(self):
+#        time.sleep(0.5)
         event = events.Command(self.source_id, 'ztreamy-command',
                                'Event-Source-Finished')
         pub = EventPublisher(event, self.publishers, add_timestamp=False)

@@ -17,7 +17,8 @@
 #
 import tornado.options
 
-from ztreamy.server import RelayStream, StreamServer
+from ztreamy import RelayStream, StreamServer, logger
+
 
 def read_cmd_options():
     from optparse import Values, OptionParser
@@ -27,6 +28,12 @@ def read_cmd_options():
                            help='aggregator id', type=str)
     tornado.options.define('buffer', default=None, help='event buffer time (s)',
                            type=float)
+    tornado.options.define('eventlog', default=False,
+                           help='dump event log',
+                           type=bool)
+    tornado.options.define('autostop', default=False,
+                           help='stop the server when the source finishes',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 1:
@@ -48,15 +55,33 @@ def main():
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = StreamServer(tornado.options.options.port)
+    server = StreamServer(tornado.options.options.port,
+                stop_when_source_finishes=tornado.options.options.autostop)
     stream = RelayStream('/relay', options.stream_urls,
-                         buffering_time=buffering_time)
+                buffering_time=buffering_time,
+                stop_when_source_finishes=tornado.options.options.autostop)
     server.add_stream(stream)
 
     # Uncomment to test RelayStream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
 
-    server.start()
+    if tornado.options.options.eventlog:
+        print stream.source_id
+        comments = {'Buffer time (ms)': buffering_time}
+#        logger.logger = logger.ZtreamyLogger(stream.source_id,
+        logger.logger = logger.CompactServerLogger(stream.source_id,
+                                                   'relay-' + stream.source_id
+                                                   + '.log', comments)
+        logger.logger.auto_flush = True
+
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+        logger.logger.close()
+
 
 if __name__ == "__main__":
     main()
