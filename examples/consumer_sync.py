@@ -2,7 +2,7 @@ from __future__ import print_function
 
 from ztreamy import SynchronousClient
 
-stream = 'http://localhost:9000/stream1/short-lived'
+stream = 'http://localhost:9000/stream1/long-polling'
 
 client = SynchronousClient(stream)
 try:

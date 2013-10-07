@@ -175,7 +175,7 @@ class StreamServer(tornado.web.Application):
                 tornado.web.URLSpec(stream.path + r"/priority",
                                     _EventStreamHandler,
                                     kwargs=priority_kwargs),
-                tornado.web.URLSpec(stream.path + r"/short-lived",
+                tornado.web.URLSpec(stream.path + r"/long-polling",
                                     _ShortLivedHandler,
                                     kwargs=handler_kwargs),
             ])

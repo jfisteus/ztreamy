@@ -86,7 +86,7 @@ access mode, which can be one of the following:
   connects. The server sends data as new events are available, but it
   does not finish the response.
 
-- Short-lived requests: every time the client wants more data, it
+- Long-polling requests: every time the client wants more data, it
   issues a new HTTP request. The server returns the events that are
   new since the previous request of the client and finishes the
   request. If there are no new events, the server keeps the request on
@@ -99,7 +99,7 @@ of the URI one of the following components:
 
 - `/stream`: long-lived requests with no compression.
 
-- `/short-lived`: short lived requests with no compression.
+- `/long-polling`: long-polling requests with no compression.
 
 
 Developing a consumer asynchronously
@@ -162,8 +162,8 @@ There are two main steps:
    new events or the server closes the connection.
 
 Note that the URI of the stream must instruct the server to use the
-short-lived requests mode: the stream name in the path must be
-followed by `/short-lived`, like in the example.
+long polling requests mode: the stream name in the path must be
+followed by `/long-polling`, like in the example.
 
 
 Publishing events
