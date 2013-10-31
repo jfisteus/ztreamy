@@ -399,7 +399,7 @@ class AsyncStreamingClient(object):
 class SynchronousClient(object):
     """Synchronous client.
 
-    This client should be used in short-lived mode.
+    This client should be used in long-polling mode.
 
     """
     def __init__(self, server_url, parse_event_body=True,
