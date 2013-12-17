@@ -27,3 +27,13 @@ available at:
 http://www.it.uc3m.es/jaf/ztreamy/doc/
 
 This documentation is still work in progress.
+
+A thorough description and evaluation of Ztreamy has been published at
+the Journal of Web Semantics. If you want to cite Ztreamy from a
+research publication or report, please use the following bibliographic
+reference:
+
+- Jesus Arias Fisteus, Norberto Fernandez Garcia, Luis Sanchez
+  Fernandez, Damaris Fuentes-Lorenzo, "Ztreamy: a middleware for
+  publishing semantic streams on the Web". Journal of Web Semantics
+  (2013).  doi:10.1016/j.websem.2013.11.002.
