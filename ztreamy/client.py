@@ -358,10 +358,6 @@ class AsyncStreamingClient(object):
         if len(evs) > 0:
             self.last_event = evs[-1].event_id
 
-    def _reset_compression(self):
-        self._compressed = True
-        self._decompressor = zlib.decompressobj()
-
     def _deserialize(self, data, parse_body=True):
         evs = []
         event = None
@@ -373,13 +369,7 @@ class AsyncStreamingClient(object):
         event = self._deserializer.deserialize_next(parse_body=parse_body)
         while event is not None:
             if isinstance(event, Command):
-                if event.command == 'Set-Compression':
-                    self._reset_compression()
-                    pos = self._deserializer.data_consumed()
-                    self._deserializer.reset()
-                    evs.extend(self._deserialize(data[pos:], parse_body))
-                    return evs
-                elif event.command == 'Event-Source-Started':
+                if event.command == 'Event-Source-Started':
                     if self.source_start_callback:
                         self.source_start_callback()
                     evs.append(event)

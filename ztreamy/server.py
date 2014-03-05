@@ -778,9 +778,7 @@ class _EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
         if self.compress:
-            command = events.create_command(self.stream.source_id,
-                                            'Set-Compression')
-            self._on_new_data(str(command))
+            self.set_header('Content-Encoding', 'deflate')
 
     def _on_new_data(self, data):
         if self.request.connection.stream.closed():
