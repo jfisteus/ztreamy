@@ -50,6 +50,7 @@ from ztreamy import ZtreamyException
 from ztreamy import logger
 
 param_max_events_sync = 20
+stream_media_type = 'text/ztreamy-stream'
 
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
@@ -777,6 +778,7 @@ class _EventStreamHandler(tornado.web.RequestHandler):
                               compress=self.compress, priority=self.priority)
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
+        self.set_header('Content-Type', stream_media_type)
         if self.compress:
             self.set_header('Content-Encoding', 'deflate')
 
@@ -803,6 +805,7 @@ class _ShortLivedHandler(tornado.web.RequestHandler):
         self.client = _Client(self, self._on_new_data, streaming=False)
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
+        self.set_header('Content-Type', stream_media_type)
 
     def _on_new_data(self, data):
         if not self.request.connection.stream.closed():
