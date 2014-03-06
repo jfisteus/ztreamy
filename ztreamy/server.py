@@ -50,7 +50,7 @@ from ztreamy import ZtreamyException
 from ztreamy import logger
 
 param_max_events_sync = 20
-stream_media_type = 'text/ztreamy-stream'
+stream_media_type = 'application/ztreamy-stream'
 
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
