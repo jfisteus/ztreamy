@@ -779,6 +779,8 @@ class _EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
         self.set_header('Content-Type', stream_media_type)
+        # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
+        self.set_header('Access-Control-Allow-Origin', '*')
         if self.compress:
             self.set_header('Content-Encoding', 'deflate')
 
@@ -806,6 +808,7 @@ class _ShortLivedHandler(tornado.web.RequestHandler):
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
         self.set_header('Content-Type', stream_media_type)
+        self.set_header('Access-Control-Allow-Origin', '*')
 
     def _on_new_data(self, data):
         if not self.request.connection.stream.closed():
