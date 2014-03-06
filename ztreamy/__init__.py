@@ -20,6 +20,7 @@
 import uuid
 import time
 from urlparse import urlparse
+import simplejson as json
 
 import ztreamy.utils.rfc3339
 
@@ -94,15 +95,17 @@ def serialize_events(events, serialization='ztreamy'):
     if serialization == 'ztreamy':
         formatter_func = lambda event: event._serialize
     elif serialization == 'json':
-        formatter_func = lambda event: event._serialize_json
+        return serialize_events_json(events)
     else:
         raise ZtreamyException('Unknown serialization format', 'send_event')
     data = []
     for e in events:
-        if not isinstance(e, Event):
-            raise ZtreamyException('Bad event type', 'send_event')
         data.append(formatter_func(e)())
     return ''.join(data)
+
+def serialize_events_json(events):
+    data = [e.as_json() for e in events]
+    return json.dumps(data)
 
 def split_url(url):
     """Returns the URL splitted in components.

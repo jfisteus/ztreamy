@@ -20,6 +20,7 @@
 """
 
 from rdflib.graph import Graph
+import simplejson as json
 
 import ztreamy.events as events
 from ztreamy import ZtreamyException
@@ -30,7 +31,7 @@ class RDFEvent(events.Event):
     Right now, only the Notation3 serialization is allowed.
 
     """
-    supported_syntaxes = ['text/n3']
+    supported_syntaxes = ['text/n3', 'application/ld+json']
 
     def __init__(self, source_id, syntax, body, **kwargs):
         """Creates a new event.
@@ -51,12 +52,20 @@ class RDFEvent(events.Event):
     def serialize_body(self):
         if self.syntax == 'text/n3':
             return self.body.serialize(format='n3')
+        elif self.syntax == 'application/ld+json':
+            return self.body.serialize(format='json-ld')
         else:
             raise ZtreamyException('Bad RDFEvent syntax', 'event_serialize')
+
+    def body_as_json(self):
+        json_obj = json.loads(self.body.serialize(format='json-ld'))
+        return json_obj
 
     def _parse_body(self, body):
         if self.syntax == 'text/n3':
             return self._parse_body_rdflib(body, syntax='n3')
+        elif self.syntax == 'application/ld+json':
+            return self._parse_body_rdflib(body, syntax='json-ld')
         else:
             raise ZtreamyException('Unsupported syntax', 'event_syntax')
 

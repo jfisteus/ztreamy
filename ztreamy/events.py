@@ -308,17 +308,19 @@ class Event(object):
         else:
             return None
 
-    def as_dictionary(self):
+    def as_dictionary(self, json=False):
         """Returns the event as a dictionary.
 
         The keys of the dictionary are the headers of the event and
         the special header 'Body'.
 
+        If json is True, the body is represented also as JSON if
+        possible. In addition, some headers are dropped.
+
         """
         data = {}
         data['Event-Id'] = self.event_id
         data['Source-Id'] = str(self.source_id)
-        data['Syntax'] = str(self.syntax)
         if self.application_id is not None:
             data['Application-Id'] = str(self.application_id)
         if self.aggregator_id != []:
@@ -329,8 +331,25 @@ class Event(object):
             data['Timestamp'] = self.timestamp
         for header, value in self.extra_headers.iteritems():
             data[header] = value
-        data['Body'] = self.serialize_body()
+        if json:
+            body = self.body_as_json()
+        else:
+            body = None
+        if body is None:
+            data['Syntax'] = str(self.syntax)
+            data['Body'] = self.serialize_body()
+        else:
+            data['Body'] = body
         return data
+
+    def as_json(self):
+        return self.as_dictionary(json=True)
+
+    def body_as_json(self):
+        return None
+
+    def serialize_json(self):
+        return json.dumps(self.as_json())
 
     def _serialize(self):
         data = []
@@ -352,9 +371,6 @@ class Event(object):
         data.append('')
         data.append(serialized_body)
         return '\n'.join(data)
-
-    def _serialize_json(self):
-        return json.dumps(self.as_dictionary())
 
 
 class Command(Event):
