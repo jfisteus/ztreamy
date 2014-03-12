@@ -35,7 +35,6 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.curl_httpclient import CurlAsyncHTTPClient
 import tornado.options
 import logging
-import zlib
 import sys
 import urllib2
 import httplib
@@ -526,13 +525,11 @@ class SynchronousEventPublisher(object):
         """
         self.publish_events([event])
 
-    def publish_events(self, events, callback=None):
+    def publish_events(self, events):
         """Publishes a list of events.
 
-        The events in the list 'events' are sent to the server in a
-        new HTTP request. If a 'callback' is given, it will be called
-        when the response is received from the server. The callback
-        receives a tornado.httpclient.HTTPResponse parameter.
+        The events in the list 'events' are sent to the server in a new
+        HTTP request.
 
         """
         body = ztreamy.serialize_events(events)
@@ -601,7 +598,6 @@ def read_cmd_options():
     return options
 
 def main():
-    import time
     def handle_event(event):
         sys.stdout.write(str(event))
     def handle_error(message, http_error=None):
@@ -619,6 +615,7 @@ def main():
                     event_callback=handle_event,
 #                    event_callback=filter.filter_event,
                     error_callback=handle_error)
+#    import time
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     node_id = ztreamy.random_id()
     if tornado.options.options.eventlog:
