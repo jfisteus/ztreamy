@@ -1,0 +1,1009 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.11: http://docutils.sourceforge.net/" />
+<title>How to reproduce the experiments with Ztreamy</title>
+<meta name="author" content="Jesús Arias Fisteus" />
+<style type="text/css">
+
+/*
+:Authors: Ian Bicking, Michael Foord
+:Contact: fuzzyman@voidspace.org.uk
+:Date: 2005/08/26 
+:Version: 0.1.0
+:Copyright: This stylesheet has been placed in the public domain.
+
+Stylesheet for Docutils.
+Based on ``blue_box.css`` by Ian Bicking
+and ``html4css1.css`` revision 1.46.
+*/
+
+@import url(html4css1.css);
+
+body {
+  font-family: Arial, sans-serif;
+}
+
+em, i {
+  /* Typically serif fonts have much nicer italics */
+  font-family: Times New Roman, Times, serif;
+}
+
+a.target {
+  color: blue;
+}
+
+a.target {
+  color: blue;
+}
+
+a.toc-backref {
+  text-decoration: none;
+  color: black;
+}
+
+a.toc-backref:hover {
+  background-color: inherit;
+}
+
+a:hover {
+  background-color: #cccccc;
+}
+
+div.attention, div.caution, div.danger, div.error, div.hint,
+div.important, div.note, div.tip, div.warning {
+  background-color: #cccccc;
+  padding: 3px;
+  width: 80%;
+}
+
+div.admonition p.admonition-title, div.hint p.admonition-title,
+div.important p.admonition-title, div.note p.admonition-title,
+div.tip p.admonition-title  {
+  text-align: center;
+  background-color: #999999;
+  display: block;
+  margin: 0;
+}
+
+div.attention p.admonition-title, div.caution p.admonition-title,
+div.danger p.admonition-title, div.error p.admonition-title,
+div.warning p.admonition-title {
+  color: #cc0000;
+  font-family: sans-serif;
+  text-align: center;
+  background-color: #999999;
+  display: block;
+  margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: Helvetica, Arial, sans-serif;
+  border: thin solid black;
+  /* This makes the borders rounded on Mozilla, which pleases me */
+  -moz-border-radius: 8px;
+  padding: 4px;
+}
+
+h1 {
+  background-color: #444499;
+  color: #ffffff;
+  border: medium solid black;
+}
+
+h1 a.toc-backref, h2 a.toc-backref { 
+  color: #ffffff;
+}
+
+h2 {
+  background-color: #666666;
+  color: #ffffff;
+  border: medium solid black;
+}
+
+h3, h4, h5, h6 {
+  background-color: #cccccc;
+  color: #000000;
+}
+
+h3 a.toc-backref, h4 a.toc-backref, h5 a.toc-backref, 
+h6 a.toc-backref { 
+  color: #000000;
+}
+
+h1.title {
+  text-align: center;
+  background-color: #444499;
+  color: #eeeeee;
+  border: thick solid black;
+  -moz-border-radius: 20px;
+}
+
+table.footnote {
+  padding-left: 0.5ex;
+}
+
+table.citation {
+  padding-left: 0.5ex
+}
+
+pre.literal-block, pre.doctest-block {
+  border: thin black solid;
+  padding: 5px;
+}
+
+.image img { border-style : solid;
+            border-width : 2px;
+}
+
+h1 tt, h2 tt, h3 tt, h4 tt, h5 tt, h6 tt {
+  font-size: 100%;
+}
+
+code, tt {
+  color: #000066;
+}
+
+</style>
+</head>
+<body>
+<div class="document" id="how-to-reproduce-the-experiments-with-ztreamy">
+<h1 class="title">How to reproduce the experiments with Ztreamy</h1>
+<table class="docinfo" frame="void" rules="none">
+<col class="docinfo-name" />
+<col class="docinfo-content" />
+<tbody valign="top">
+<tr><th class="docinfo-name">Author:</th>
+<td>Jesús Arias Fisteus</td></tr>
+</tbody>
+</table>
+<div class="contents topic" id="contents">
+<p class="topic-title first">Contents</p>
+<ul class="auto-toc simple">
+<li><a class="reference internal" href="#introduction" id="id2">1&nbsp;&nbsp;&nbsp;Introduction</a></li>
+<li><a class="reference internal" href="#downloads" id="id3">2&nbsp;&nbsp;&nbsp;Downloads</a></li>
+<li><a class="reference internal" href="#experimental-setup" id="id4">3&nbsp;&nbsp;&nbsp;Experimental setup</a><ul class="auto-toc">
+<li><a class="reference internal" href="#clock-synchronization" id="id5">3.1&nbsp;&nbsp;&nbsp;Clock synchronization</a></li>
+<li><a class="reference internal" href="#users-and-ssh-access" id="id6">3.2&nbsp;&nbsp;&nbsp;Users and SSH access</a></li>
+<li><a class="reference internal" href="#configuring-cpu-frequence-scaling" id="id7">3.3&nbsp;&nbsp;&nbsp;Configuring CPU frequence scaling</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#methodology" id="id8">4&nbsp;&nbsp;&nbsp;Methodology</a></li>
+<li><a class="reference internal" href="#running-the-experiments" id="id9">5&nbsp;&nbsp;&nbsp;Running the experiments</a><ul class="auto-toc">
+<li><a class="reference internal" href="#setting-up-the-computers" id="id10">5.1&nbsp;&nbsp;&nbsp;Setting up the computers</a><ul class="auto-toc">
+<li><a class="reference internal" href="#required-software" id="id11">5.1.1&nbsp;&nbsp;&nbsp;Required software</a></li>
+<li><a class="reference internal" href="#installation-of-ntp" id="id12">5.1.2&nbsp;&nbsp;&nbsp;Installation of NTP</a></li>
+<li><a class="reference internal" href="#increasing-the-limits-of-open-file-descriptors" id="id13">5.1.3&nbsp;&nbsp;&nbsp;Increasing the limits of open file descriptors</a></li>
+<li><a class="reference internal" href="#deployment-of-our-package" id="id14">5.1.4&nbsp;&nbsp;&nbsp;Deployment of our package</a></li>
+<li><a class="reference internal" href="#the-configuration-file" id="id15">5.1.5&nbsp;&nbsp;&nbsp;The configuration file</a></li>
+<li><a class="reference internal" href="#uninstalling-the-package" id="id16">5.1.6&nbsp;&nbsp;&nbsp;Uninstalling the package</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#running-the-script" id="id17">5.2&nbsp;&nbsp;&nbsp;Running the script</a><ul class="auto-toc">
+<li><a class="reference internal" href="#varying-the-number-of-clients" id="id18">5.2.1&nbsp;&nbsp;&nbsp;Varying the number of clients</a></li>
+<li><a class="reference internal" href="#varying-the-event-rate" id="id19">5.2.2&nbsp;&nbsp;&nbsp;Varying the event rate</a></li>
+<li><a class="reference internal" href="#running-many-experiments-with-just-one-command" id="id20">5.2.3&nbsp;&nbsp;&nbsp;Running many experiments with just one command</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#processing-the-data-from-the-experiments" id="id21">6&nbsp;&nbsp;&nbsp;Processing the data from the experiments</a><ul class="auto-toc">
+<li><a class="reference internal" href="#understanding-the-data-gathered-in-the-experiments" id="id22">6.1&nbsp;&nbsp;&nbsp;Understanding the data gathered in the experiments</a><ul class="auto-toc">
+<li><a class="reference internal" href="#the-file-metadata-txt" id="id23">6.1.1&nbsp;&nbsp;&nbsp;The file metadata.txt</a></li>
+<li><a class="reference internal" href="#the-file-server-log" id="id24">6.1.2&nbsp;&nbsp;&nbsp;The file server-*.log</a></li>
+<li><a class="reference internal" href="#the-file-manyc-log" id="id25">6.1.3&nbsp;&nbsp;&nbsp;The file manyc-*.log</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#aggregating-the-results-of-the-experiments" id="id26">6.2&nbsp;&nbsp;&nbsp;Aggregating the results of the experiments</a></li>
+<li><a class="reference internal" href="#plotting-the-data" id="id27">6.3&nbsp;&nbsp;&nbsp;Plotting the data</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#the-log-files-of-our-experiments" id="id28">7&nbsp;&nbsp;&nbsp;The log files of our experiments</a></li>
+</ul>
+</div>
+<div class="section" id="introduction">
+<h1><a class="toc-backref" href="#id2">1&nbsp;&nbsp;&nbsp;Introduction</a></h1>
+<p>This guide explains how you can reproduce the experiments of the paper
+<em>A middleware for publishing semantic event streams on the Web</em>.</p>
+</div>
+<div class="section" id="downloads">
+<h1><a class="toc-backref" href="#id3">2&nbsp;&nbsp;&nbsp;Downloads</a></h1>
+<p>In addition to this guide, we provide the dataset we used in our
+experiments, the scripts that run the experiments and the scripts that
+process and plot the data gathered from the experiments.  The
+following download includes those files as well as scripts that will
+help you to setup your computers for running the experiments:</p>
+<p><a class="reference external" href="http://www.it.uc3m.es/jaf/ztreamy-dl/experiments/ztreamy-experiments.tar.gz">http://www.it.uc3m.es/jaf/ztreamy-dl/experiments/ztreamy-experiments.tar.gz</a></p>
+<p>For instructions about how to install this package in the computers in
+which you will run the experiments, see section <a class="reference internal" href="#setting-up-the-computers">Setting up the
+computers</a>, below in this document.</p>
+</div>
+<div class="section" id="experimental-setup">
+<h1><a class="toc-backref" href="#id4">3&nbsp;&nbsp;&nbsp;Experimental setup</a></h1>
+<p>In order to reproduce the experiments in similar conditions to those
+of the paper, you'll need five computers with Linux installed. We'll
+call them <em>computer0</em> to <em>computer4</em>. In our setup, those computers
+were:</p>
+<ul class="simple">
+<li><em>computer0</em>: a laptop with a 3.2.0 Linux kernel, an Intel(R)
+Core(TM)2 Duo CPU P9600 2.53GHz processor (two cores) and 8GB of RAM
+memory.</li>
+<li><em>computer1</em> to <em>computer4</em>: identical computers with a 3.2.0 Linux
+kernel, an Intel(R) Core(TM) i7 CPU 860 &#64; 2.80GHz (4 cores with
+hyperthreading) and 8GB of RAM memory.</li>
+</ul>
+<p><em>computer1</em> to <em>computer4</em> are in the same 1 Gbps Ethernet LAN. They
+share the same switch, and no other computer is connected to
+it. <em>computer0</em> is in different 100 Mbps LAN, which connects to the
+other LAN through just one intermediate router.</p>
+<div class="section" id="clock-synchronization">
+<h2><a class="toc-backref" href="#id5">3.1&nbsp;&nbsp;&nbsp;Clock synchronization</a></h2>
+<p>In order to measure event delivery delays with accuracy, the clock of
+all the computers must be synchronized. Install the NTP (Network Time
+Protocol) in all of them, using if possible the same reference
+servers. If possible, all the computers should be synchronized with an
+offset of no more than <em>5ms</em>.</p>
+<p>When using the command <cite>ntpq -p</cite>, the <cite>offset</cite> column displays the
+offset of the local clock with respect to the time server. The offset
+is displayed in <em>ms</em>.</p>
+</div>
+<div class="section" id="users-and-ssh-access">
+<h2><a class="toc-backref" href="#id6">3.2&nbsp;&nbsp;&nbsp;Users and SSH access</a></h2>
+<p>The experiments can be run from a single script executed at
+<em>computer0</em>. This script needs to connect to the other computers
+through SSH in order to run there servers and clients. It is necessary
+for the script to be able to access those computers without the user
+needing to type a password. Therefore, you need to setup an SSH
+public/private key pair that allows password-less access from
+<em>computer0</em> to the other four computers.</p>
+<p>In addition to that, <strong>the scripts expect in all the computers an
+account with the same user name</strong>.</p>
+</div>
+<div class="section" id="configuring-cpu-frequence-scaling">
+<h2><a class="toc-backref" href="#id7">3.3&nbsp;&nbsp;&nbsp;Configuring CPU frequence scaling</a></h2>
+<p>Modern processors allow the operating system to dynamically chose the
+clock frequency at which they operate. In Linux this is usually done
+by <em>cpufreq</em>. Before running the experiments, remember to load the
+<em>performance governor</em> in order to set the processor always to its
+maximum frequency:</p>
+<pre class="literal-block">
+sudo cpufreq-set -r -g performance
+</pre>
+<p>After finishing the experiments, you can set the default governor again:</p>
+<blockquote>
+sudo cpufreq-set -r -g ondemand</blockquote>
+<p>At any moment, you can get information about the current governor with
+this command:</p>
+<pre class="literal-block">
+cpufreq-info
+</pre>
+<p><strong>Note:</strong> the <em>cpufreq</em> commands above are in Debian and Ubuntu
+included in the package <cite>cpufrequtils</cite>. Install it if your system does
+not recognize those commands installed.</p>
+</div>
+</div>
+<div class="section" id="methodology">
+<h1><a class="toc-backref" href="#id8">4&nbsp;&nbsp;&nbsp;Methodology</a></h1>
+<p>In all the experiments, a server provides a stream of events. The
+events come from an event source that runs in the same computer as the
+server and sends the events via HTTP. A number of clients that listen
+to the stream is run from the rest of computers.</p>
+<p>In the experiments we control the following configuration parameters,
+which we vary in order to measure their impact in performance:</p>
+<ul class="simple">
+<li>Event rate: the event source generates events following a Poisson
+process. That is, the time between two consecutive events follows a
+random exponential distribution with the selected event rate. The
+number of events to be sent is chosen such that the average duration
+of this stage is 100s.</li>
+<li>Number of clients: for each run of the experiment there is a fixed
+number of simultaneously connected clients. They are connected from
+the beginning of the run, and until it finishes.</li>
+</ul>
+<p>Each individual experiment consists of three stages:</p>
+<ul class="simple">
+<li>First stage: the server is launched and clients are connected to it.</li>
+<li>Second stage: the event source sends events to the server, and the
+server publishes them on the stream.</li>
+<li>Third stage: logs are gathered from the computers and the server and
+clients are stopped.</li>
+</ul>
+<p>The following performance indicators are measured:</p>
+<ul class="simple">
+<li>Event delivery delay: the amount of time between the instant an
+event is prepared to be sent by the event source and the instant it
+is received by the client. In order to allow a big amount of clients
+in each computer, not all the clients compute delays. At least one
+client per computer computes and logs the delay of every event.  The
+source of events used in the experiments marks the events with a
+special header that includes a sequence number and the timestamp of
+the instant just before the source sends it. The client computes its
+delay as the difference between the time it receives it and that
+timestamp.  In order to measure the delay with accuracy, the clocks
+of the computers must be synchronized. The NTP service can normally
+keep the computers synchronized with deviations of less than 2ms
+with respect to the reference clocks. Since the delays measured in
+our system are usually in the range of tens or hundreds of
+milliseconds, and even seconds in some situations, the accuracy of
+the clocks should not be a problem provided that NTP is used. See
+<a class="reference internal" href="#clock-synchronization">Clock synchronization</a>. In each run, the median delay for all the
+events received by those clients that compute delays, as well as the
+95% confidence interval for that median value.</li>
+<li>CPU consumption by the server: time of CPU (user and system-space)
+consumed by the server since the first event is received and until
+the last one is received (i.e., in the second stage).</li>
+<li>Average data rate of the traffic sent from the server to the
+clients. It is computed as the division of the total amount of data
+sent by the server divided by the time between the first and last
+event. Only application-level traffic is considered. The extra
+traffic the underlying protocols (HTTP, TCP, IP, etc.) introduce is
+not taken into account.</li>
+<li>Compression ratio. The server compresses with ZLIB the majority of
+the data it sends to clients. The compression ratio is computed as
+the ration between the size of the data sent by the server and the
+size of the data before compression.</li>
+</ul>
+<p>Given the limitations in the number of computers available for the
+experiments, we have to run many clients per computer. The script
+<cite>ztreamy.tools.many_clients</cite> that we include in the Ztreamy
+distribution runs an arbitrary number of clients from the same
+process. Each client has a separate connection to the server and
+receives its data through it. In one of the configurable modes of the
+script, only one of the clients actually parses the events. The other
+clients just read the data without processing it. This is done to save
+CPU resources in the computer that runs the script when the number of
+clients is large.</p>
+<p>The source of events transmits the events that it loads from a
+file. For each round of a experiment, it begins with the first event
+of the file, then the second, etc.</p>
+</div>
+<div class="section" id="running-the-experiments">
+<h1><a class="toc-backref" href="#id9">5&nbsp;&nbsp;&nbsp;Running the experiments</a></h1>
+<div class="section" id="setting-up-the-computers">
+<h2><a class="toc-backref" href="#id10">5.1&nbsp;&nbsp;&nbsp;Setting up the computers</a></h2>
+<p>In order to set up the computers for running the experiments, you'll
+need to run the same commands in several computers. You may find an
+SSH multiplexer, such as <a class="reference external" href="http://sourceforge.net/projects/clusterssh/">Cluster SSH</a>, very useful for that:</p>
+<pre class="literal-block">
+sudo apt-get install clusterssh
+</pre>
+<div class="section" id="required-software">
+<h3><a class="toc-backref" href="#id11">5.1.1&nbsp;&nbsp;&nbsp;Required software</a></h3>
+<p>You'll need to have installed in your computers the following required
+packages:</p>
+<ul>
+<li><p class="first">The basic GNU tools for C development (such as <cite>libc6-dev</cite>, <cite>gcc</cite>,
+etc.) In Debian and Ubuntu they can be installed through the package
+<cite>build-essentials</cite>:</p>
+<pre class="literal-block">
+sudo apt-get install build-essential
+</pre>
+</li>
+<li><p class="first"><a class="reference external" href="http://www.oracle.com/technetwork/java/javase/downloads/index.html">Java JDK 7</a>
+(you'll see in some places as JDK 1.7).</p>
+</li>
+<li><p class="first">Python 2.7, its header files and the <em>virtualenv</em> software. In
+Debian/Ubuntu:</p>
+<pre class="literal-block">
+sudo apt-get install python python-dev python-virtualenv
+</pre>
+<p>Ztreamy has not been ported yet to Python 3.</p>
+</li>
+<li><p class="first">BLAS and Lapack, including the development header files
+(<em>libblas-dev</em>, <em>liblapack-dev</em>), and the Fortran compiler
+<em>gfortran</em>. In Debian/Ubuntu:</p>
+<pre class="literal-block">
+sudo apt-get install libblas3 libblas-dev liblapack3 liblapack-dev gfortran
+</pre>
+<p>(in some systems those packages are called <em>libblas3gf</em> and <em>liblapack3gf</em>.)</p>
+</li>
+<li><p class="first"><em>curl</em> and <em>libcurl</em>, including the development header files. In
+Debian/Ubuntu:</p>
+<pre class="literal-block">
+sudo apt-get install curl libcurl3 libcurl4-openssl-dev
+</pre>
+</li>
+<li><p class="first">ZeroMQ, including the development header files. In Debian/Ubuntu the
+packages are <em>libzmq1</em> and <em>libzmq-dev</em>:</p>
+<pre class="literal-block">
+sudo apt-get install libzmq1 libzmq-dev
+</pre>
+</li>
+</ul>
+</div>
+<div class="section" id="installation-of-ntp">
+<h3><a class="toc-backref" href="#id12">5.1.2&nbsp;&nbsp;&nbsp;Installation of NTP</a></h3>
+<p>Probably, NTP is already installed and running in your computers. If
+not, you have to install the NTP service in all the computers. In
+Debian and Ubuntu it can be done with:</p>
+<pre class="literal-block">
+sudo apt-get install ntp
+</pre>
+<p>It may take some time before all the clocks are synchronized. Use
+<cite>ntpq</cite> to check whether it is the case before starting to run the
+experiments.</p>
+</div>
+<div class="section" id="increasing-the-limits-of-open-file-descriptors">
+<h3><a class="toc-backref" href="#id13">5.1.3&nbsp;&nbsp;&nbsp;Increasing the limits of open file descriptors</a></h3>
+<p>Linux imposes a limit to the maximum number of open file descriptors a
+user can have. Since it is probably too small for running our
+experiment, you should increase it in all the computers for the user
+that will run the experiments. Assuming the user is called <em>foo</em>, edit
+the file <em>/etc/security/limits.conf</em> and append a couple of lines with
+the new limit:</p>
+<pre class="literal-block">
+foo              soft    nofile          65536
+foo              hard    nofile          65536
+</pre>
+<p>Replace <em>foo</em> above with the name of the user that will run the
+experiments.</p>
+</div>
+<div class="section" id="deployment-of-our-package">
+<h3><a class="toc-backref" href="#id14">5.1.4&nbsp;&nbsp;&nbsp;Deployment of our package</a></h3>
+<p>Once you have downloaded our <a class="reference external" href="http://www.it.uc3m.es/jaf/ztreamy-dl/experiments/ztreamy-experiments.tar.gz">http://www.it.uc3m.es/jaf/ztreamy-dl/experiments/ztreamy-experiments.tar.gz</a> package,
+decompress it somewhere inside your user account in the <em>five</em>
+computers you are using for the experiments. Install it in the same
+path in all the computers. You are expected to run the scripts from
+the main directory of the package you have just uncompressed.</p>
+<p>Before beginning to run the experiments, you need to do some further
+installations (create a virtual environment for the Python programming
+language, with the additional packages required by Ztreamy) and a
+virtual environment for the Ruby programming language (with Faye and
+its required packages). In order to do that, just run from the main
+directory of our package:</p>
+<pre class="literal-block">
+./setup.sh
+</pre>
+<p>The script takes about 15 minutes to run, because it has to compile
+some of the libraries we use.</p>
+<p>The installation of Ruby may prompt you to do some actions (install
+additional dependencies in your system). If asked, you only need the
+dependencies for Ruby, but not those for JRuby, IronRuby and Opal.
+Follow the instructions provided by the script.</p>
+<p>Once the script is finished, you should configure the environment (see
+the next section). After that, you should be able to begin to run the
+experiments as explained in section <a class="reference internal" href="#running-the-script">Running the script</a>.</p>
+</div>
+<div class="section" id="the-configuration-file">
+<h3><a class="toc-backref" href="#id15">5.1.5&nbsp;&nbsp;&nbsp;The configuration file</a></h3>
+<p>The configuration needed by the scripts that run the experiments, such
+as the hostnames of the computers and the location of the Java JDK, is
+placed in <cite>config.sh</cite>, at the main directory of the package we
+provide. Once edited, remember to copy the file to the other
+computers.</p>
+<p>You have to configure the following variables in this file:</p>
+<ul class="simple">
+<li><cite>JAVA_HOME</cite>: home directory of the Java Development Kit to be
+used for running Dataturbine. For example: <cite>/opt/jdk1.7.0_09/</cite>. Note
+that there should be a <cite>bin</cite> subdirectory inside the directory you
+specify here. We require JDK 7 (you'll see it sometimes as JDK 1.7).</li>
+<li><cite>server</cite>: hostname of the computer in which the server will be
+run. It should be one of <em>computer1</em> - <em>computer4</em>.</li>
+<li><cite>host_manyc2</cite>, <cite>host_manyc3</cite>, <cite>host_manyc4</cite>: hostname of the other
+three computers (<em>computer1</em> to <em>computer4</em>, excluding the one
+declared as server).</li>
+<li><cite>username</cite>: name of the user account to be used in <em>computer1</em> to
+<em>computer4</em> for running the experiments. If you do not set a value for
+this variable, the scripts will assume that it is the same as your
+current user name in the local machine.</li>
+</ul>
+<p>You have to copy the file <cite>config.sh</cite> in the five computers, inside
+the main directory of the package we provide.</p>
+</div>
+<div class="section" id="uninstalling-the-package">
+<h3><a class="toc-backref" href="#id16">5.1.6&nbsp;&nbsp;&nbsp;Uninstalling the package</a></h3>
+<p>If you want to uninstall this things later, the only things that get
+installed outside the directory of our package are:</p>
+<ul class="simple">
+<li>The directory <cite>$HOME/.rvm</cite>, which contains the virtual environment
+for Ruby (remember that this file is hidden and may not appear in
+some directory listings). You can remove the whole directory if you
+don't wish to run the experiments in the future.</li>
+<li>The files <cite>.bashrc</cite>, <cite>.profile</cite>, <cite>.bash_profile</cite>, <cite>zshrc</cite> may have
+been slightly changed by the installation process. The change is
+usually the addition of RVM directories to the system PATH, at the
+end of the files. You can remove those lines if you don't wish to
+run the experiments in the future.</li>
+</ul>
+<p>The rest of the things are installed inside our package. Just remove
+our package if you want to uninstall them.</p>
+</div>
+</div>
+<div class="section" id="running-the-script">
+<h2><a class="toc-backref" href="#id17">5.2&nbsp;&nbsp;&nbsp;Running the script</a></h2>
+<p>Experiments can be run by invoking the <cite>run.py</cite> script from
+<em>computer0</em>. The script receives the parameters of the experiment
+(number of clients, event rate, number of events, etc.), starts the server,
+event source and clients, many of them in the remote computers, collects
+the logs generated by them and stores them inside a directory.</p>
+<p>In order to run the script, open a command line terminal and go to the
+directory from which you want to run the experiments (the one you have
+specified as <cite>main_dir</cite> in <cite>variables.sh</cite>). Run the script from
+there. Make sure that <cite>variables.sh</cite> is in that directory.</p>
+<p>The script can run more than one round of the experiment with the same
+parameters. Since some factors such as the instants at which the
+events are generated, the state of the CPU of the computers, the state
+of the network, etc. are random, repeating several times the
+experiment with the same parameters is useful for reporting the
+confidence intervals for the performance indicators that we measure.
+The number of repetitions to run is specified as a command line
+argument. Optionally, since rounds are numbered, the number for the
+first round to be run can be specified with the <cite>-i</cite> optional
+option. If not specified, the script begins with round 1. The number
+of round is important because the script creates a separate directory
+for each round. For example, assume you have already run rounds 1 to
+7, and that you want to start a new experiment labeled as round 8:</p>
+<pre class="literal-block">
+python scripts/run.py -i 8 ...rest of arguments...
+</pre>
+<p>The tool on which the experiment will run is selected with a command
+line argument. In no argument is specified, the script runs
+Ztreamy. For example, in order to run the experiment on the
+Dataturbine system, use the <cite>-t</cite> option:</p>
+<pre class="literal-block">
+python scripts/run.py -t ...rest of arguments...
+</pre>
+<p>The full list of arguments that select the system to run are:</p>
+<ul class="simple">
+<li>No argument: Ztreamy.</li>
+<li><cite>-u</cite>: Ztreamy with no compression.</li>
+<li><cite>-y</cite>: Ztreamy with replica servers for load balancing.</li>
+<li><cite>-t</cite>: Dataturbine.</li>
+<li><cite>-f</cite>: Faye</li>
+<li><cite>-z</cite>: ZeroMQ</li>
+<li><cite>-l</cite>: LSM with Websockets on top of Tomcat.</li>
+</ul>
+<p>In our experiments, we usually vary one parameter while the other ones
+are fixed. Specifically, we perform some experiments in which the
+number of clients varies, other experiments in which the event rate
+varies and other experiments in which the server buffer window
+varies. The following sections describe how to run each kind of
+experiment.</p>
+<div class="section" id="varying-the-number-of-clients">
+<h3><a class="toc-backref" href="#id18">5.2.1&nbsp;&nbsp;&nbsp;Varying the number of clients</a></h3>
+<p>In order to perform an experiment in which the number of events, the
+event rate and the server buffer window are fixed, while the number of
+clients varies, run the script like in the following example:</p>
+<pre class="literal-block">
+python scripts/run.py 0.25 0.5 400 5 experiment-logs/ztreamy/clients 300 clients
+</pre>
+<p>The meaning of its command line arguments is:</p>
+<ul>
+<li><p class="first">(param. 1) 0.25: average separation between two consecutive
+events. In this case, it is 0.25s (i.e. 4 events/s). It
+characterizes the Poisson process that the source of events follows.</p>
+</li>
+<li><p class="first">(param. 2) 0.5: the size of the server buffer time in seconds.</p>
+</li>
+<li><p class="first">(param. 3) 400: the number of events to send. Note that 400 events
+at a rate of 0.25 mean an average duration of 100s for the
+experiment.</p>
+</li>
+<li><p class="first">(param. 4) 5: number of rounds of the experiment to run. In this
+case, 5 rounds are run. By default, they are numbered 1 to 5. You
+can change the initial number with the <cite>-i</cite> option, as explained
+above.</p>
+</li>
+<li><p class="first">(param. 5) experiment-logs/ztreamy/clients: directory in which the
+data gathered from the experiment will be stored. Inside this
+directory, the script automatically creates a subdirectory named
+after the number of clients of this experiment. It stores the data
+associated to each round of the experiment in a separate
+subdirectory inside it. The name of the inner directory is the
+number of the round. In the example, the results of the first round
+are stored in the subdirectory:</p>
+<pre class="literal-block">
+experiment-logs/ztreamy/clients/300/1
+</pre>
+</li>
+<li><p class="first">(param. 6) 300: number of clients. Clients are automatically divided
+by the script between the local computer and the three remote
+computers that do not run the server.</p>
+</li>
+<li><p class="first">(param. 7) clients: the parameter that varies in this experiment. In
+this case, it is always &quot;clients&quot;.</p>
+</li>
+</ul>
+<p>The command above runs the experiment 5 times for just one fixed
+number of clients. Probably you'll want to run the experiment for
+different numbers of clients:</p>
+<pre class="literal-block">
+for clients in 1000 2000 3000 4000; do python scripts/run.py 0.25 0.5 400 5 experiment-logs/ztreamy/clients $clients clients; done
+</pre>
+<p>This command runs 5 rounds of the experiment with 1000 clients, then
+another 5 rounds with 2000 clients, etc. Notice the dollar sign ($)
+that we have inserted before <cite>clients</cite>, at the end of the script. This
+command requires the use of <cite>bash</cite>, <cite>dash</cite>, <cite>sh</cite> or other Unix shell
+that is compatible with them.</p>
+</div>
+<div class="section" id="varying-the-event-rate">
+<h3><a class="toc-backref" href="#id19">5.2.2&nbsp;&nbsp;&nbsp;Varying the event rate</a></h3>
+<p>In order to vary the event rate while keeping the number of clients
+and server window size constant, run the script like in the following
+example:</p>
+<pre class="literal-block">
+python scripts/run.py 0.25 0.5 100 5 experiment-logs/ztreamy/rate 300 rate
+</pre>
+<p>There are two main changes in the invocation with respect to the
+previous cases. The first one is that the last parameter is
+<cite>rate</cite>. The second one is that the meaning of the third parameter
+changes:</p>
+<ul class="simple">
+<li>(param. 3) 100: the duration of the experiment in seconds. The
+script will automatically compute the required number of events by
+dividing it by the event rate. In the example, 400 events (100 /
+0.25) will be sent.</li>
+</ul>
+<p>In this case, the results are stored in a directory named from the
+event rate.  For example, the first round of the previous command
+stores its results at:</p>
+<pre class="literal-block">
+experiment-logs/ztreamy/rate/0.25/1
+</pre>
+<p>because the event rate is 0.25s.</p>
+</div>
+<div class="section" id="running-many-experiments-with-just-one-command">
+<h3><a class="toc-backref" href="#id20">5.2.3&nbsp;&nbsp;&nbsp;Running many experiments with just one command</a></h3>
+<p>You can use a shell loop to automatically repeat many experiments. For
+example, if you use the BASH shell, you can run:</p>
+<pre class="literal-block">
+for rate in 0.1  0.12  0.15  0.2  0.25  0.5  0.75  1.0  1.5  2.0; \
+    do python scripts/run.py -f $rate 0 100 10 experiment-logs/faye/rate \
+               500 rate; done
+</pre>
+<p>which runs experiments on the Faye server, with 500 clients and an
+average of 100s of events per run. The event rate varies, taking the
+values 0.1, 0.12, 0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.5 and 2.0. For
+each of the 10 event rates the experiment is repeated 10
+times. Therefore, the experiment is run 100 times.</p>
+</div>
+</div>
+</div>
+<div class="section" id="processing-the-data-from-the-experiments">
+<h1><a class="toc-backref" href="#id21">6&nbsp;&nbsp;&nbsp;Processing the data from the experiments</a></h1>
+<p>We provide the scripts that process the files obtained from the
+experiments and generate the final plots that are shown in the
+paper. This section explains how to use them.</p>
+<div class="section" id="understanding-the-data-gathered-in-the-experiments">
+<h2><a class="toc-backref" href="#id22">6.1&nbsp;&nbsp;&nbsp;Understanding the data gathered in the experiments</a></h2>
+<p>Let's suppose you run an experiment in which the parameter that varies
+is the number of clients (1000, 2000, 3000,...). The data from the
+experiment will be organized in directories with a structure like the
+following one:</p>
+<pre class="literal-block">
+experiment-logs/
+  |-- clients
+        |-- 1000
+        |     |-- 1
+        |     |-- 2
+        |     |-- 3
+        |     |-- 4
+        |     |-- 5
+        |
+        |-- 2000
+        |     |-- 1
+        |     |-- 2
+        |     |-- 3
+        |     |-- 4
+        |     |-- 5
+        |
+        |-- 3000
+        |     |-- 1
+        |     |-- 2
+        |     |-- 3
+        |     |-- 4
+        |     |-- 5
+  (...)
+</pre>
+<p>Each low-level directory contains the data gathered from one round of the
+experiment, organized in several text files:</p>
+<ul class="simple">
+<li>metadata.txt: values of the parameters used in this experiment, as well as
+the state of the NTP service in each computer.</li>
+<li>server-*.log: log file dumped by the server. It contains information
+about the amount of application-level data sent to the clients of
+the stream and about the amount of CPU and real time the server
+spent since it received the first event until it sent the last one.</li>
+<li>manyc-*.log: log file dumped by some of the clients. It contains
+information about the amount of application-level data received from
+the server and the delay suffered by each event.</li>
+<li>log.txt: log of the script that runs the experiment. It can provide
+information in case the experiment fails.</li>
+</ul>
+<div class="section" id="the-file-metadata-txt">
+<h3><a class="toc-backref" href="#id23">6.1.1&nbsp;&nbsp;&nbsp;The file metadata.txt</a></h3>
+<p>This is an example of a <cite>metadata.txt</cite> file:</p>
+<pre class="literal-block">
+Server: ztreamy
+Rate: 0.05
+Buffer: 0.4
+Num events: 2000
+Clients: 9000
+Dir: experiment-logs/ztreamy-solo/clients_effect/9000/1
+Server news.gast.it.uc3m.es NTP:
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+*roleX.uc3m.es   130.206.3.166    2 u  653 1024  377    0.346   -1.189   0.645
+Client ariadna NTP:
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+*roleX.uc3m.es   130.206.3.166    2 u  185 1024  377    0.314   -2.011   0.489
+Client itaca NTP:
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+*roleX.uc3m.es   130.206.3.166    2 u 1013 1024  375    0.333   -1.339   2.759
+Client infoflex NTP:
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+*roleX.uc3m.es   130.206.3.166    2 u  489 1024  377    0.246   -1.228   1.682
+Client semnet NTP:
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+*roleX.uc3m.es   130.206.3.166    2 u  503 1024  377    0.289   -0.315   1.779
+</pre>
+<p>The file stores the parameters used in the experiment as well as the state of
+the NTP service in every computer.</p>
+</div>
+<div class="section" id="the-file-server-log">
+<h3><a class="toc-backref" href="#id24">6.1.2&nbsp;&nbsp;&nbsp;The file server-*.log</a></h3>
+<p>This is an example of a <cite>server-*.log</cite> file:</p>
+<pre class="literal-block">
+# Node: d8f59642-3c54-4be5-8659-1350f1d8e7c5
+# Host: news
+#
+# Buffer time (ms): 400.0
+server_traffic_sent 1354034628.97   0
+server_traffic_sent 1354034638.97   34362
+server_traffic_sent 1354034648.99   63647
+server_traffic_sent 1354034658.97   50948
+server_traffic_sent 1354034668.97   50450
+server_traffic_sent 1354034678.97   88201
+server_traffic_sent 1354034688.97   87205
+server_traffic_sent 1354034698.97   126201
+server_traffic_sent 1354034708.97   252056
+server_traffic_sent 1354034718.97   16146479
+server_traffic_sent 1354034728.97   28986000
+server_traffic_sent 1354034738.97   29805000
+server_traffic_sent 1354034748.97   28507000
+server_traffic_sent 1354034758.97   26624000
+server_traffic_sent 1354034768.97   27106000
+server_traffic_sent 1354034778.97   26322000
+server_traffic_sent 1354034788.97   29545000
+server_traffic_sent 1354034798.97   31126000
+server_traffic_sent 1354034808.97   27182000
+server_timing       10.22   102.800895929   1354034715.98
+server_traffic_sent 1354034818.97   26481000
+server_closed       1354034827.37   1000
+server_traffic_sent 1354034827.37   1047000
+server_traffic_sent 1354034827.44   72796
+</pre>
+<p>The file displays the following information gathered by the server:</p>
+<ul class="simple">
+<li><cite>server_traffic_sent</cite>: an entry that shows every 10s the amount of
+bytes sent to the clients in that interval. The first column is a
+timestamp and the second one the amount of bytes.</li>
+<li><cite>server_timing</cite>: in this order, the amount of seconds of CPU
+consumed by the server between the first and last event, the
+duration of that period (seconds also) and the timestamp of the
+beginning of the period.</li>
+<li><cite>server_closed</cite>: the timestamp of the instant in which the server
+begins the shutdown procedure, and the number of clients that were
+connected at that instant.</li>
+</ul>
+<p>For the other systems we do not have the same degree of
+control. Therefore, the log contains just the <cite>server_timing</cite>
+information for them.</p>
+</div>
+<div class="section" id="the-file-manyc-log">
+<h3><a class="toc-backref" href="#id25">6.1.3&nbsp;&nbsp;&nbsp;The file manyc-*.log</a></h3>
+<p>Some of the clients launched by the script generate a log
+file. Therefore, there will be several of these files for each
+experiment.  This is a fragment of an example file:</p>
+<pre class="literal-block">
+# Node: 8b1cad78-0a43-4c57-acc1-a4936d0b39aa
+# Host: ariadna
+#
+data_receive        188     188
+data_receive        0       0
+data_receive        7       0
+data_receive        140     152
+data_receive        54      152
+data_receive        50      152
+data_receive        48      152
+data_receive        50      152
+data_receive        50      152
+data_receive        49      152
+data_receive        48      152
+data_receive        47      152
+data_receive        52      152
+data_receive        139     246
+data_receive        491     957
+manyc_event_finish  1       0.630144119263
+data_receive        176     778
+manyc_event_finish  2       0.487888097763
+data_receive        174     899
+manyc_event_finish  3       0.417834997177
+data_receive        258     1151
+manyc_event_finish  4       0.766107797623
+data_receive        352     2180
+manyc_event_finish  5       0.656394004822
+manyc_event_finish  6       0.55241894722
+data_receive        142     1039
+manyc_event_finish  7       0.39984703064
+data_receive        211     975
+manyc_event_finish  8       0.374735832214
+data_receive        263     2033
+manyc_event_finish  10      0.406519889832
+manyc_event_finish  9       0.426545143127
+</pre>
+<p>The file shows at its beginning the hostname of the computer in which
+the client runs. Then, it shows:</p>
+<ul class="simple">
+<li><cite>data_receive</cite>: the amount of bytes of each message received from
+the server. The first column shows the actual amount of bytes as
+they are received (probably compressed). The second column shows the
+amount of uncompressed data they represent.</li>
+<li><cite>manyc_event_finish</cite>: for each event the client receives, shows its
+sequence number and its delay in seconds. The delay is the amount of
+time between the instant the event source sends the event to the
+server and the instant the client receives it.</li>
+</ul>
+</div>
+</div>
+<div class="section" id="aggregating-the-results-of-the-experiments">
+<h2><a class="toc-backref" href="#id26">6.2&nbsp;&nbsp;&nbsp;Aggregating the results of the experiments</a></h2>
+<p>We provide several scripts that extract the different indicators that
+we need to measure in the experiments. The scripts aggregate the data
+captured from the different rounds of the same combination of
+parameters:</p>
+<ul class="simple">
+<li>Delays: the script <cite>dump_delays.py</cite> analyzes the <cite>manyc-*.log</cite>
+files and computes the median delay suffered by the events (together
+with its 95% confidence interval).</li>
+<li>Server CPU consumption: the script <cite>dump_cpu_data.py</cite> analyzes the
+<cite>server-*.log</cite> files and computes the average server CPU
+consumption in seconds, with 95% confidence intervals.</li>
+<li>Traffic rate: the script <cite>dump_traffic.py</cite> computes the average rate
+(Mbit/s) of the application-level data sent by the server to its
+clients.</li>
+<li>Data compression ratio: the script <cite>dump_compression_ratio.py</cite>
+computes the ratio between the size of the data sent by the server
+to clients and the size of the same data after decompression.</li>
+</ul>
+<p>All the scripts are invoked with similar command line parameters. For
+example:</p>
+<pre class="literal-block">
+python scripts/dump_delays.py experiment-logs/ztreamy/clients clients
+</pre>
+<p>dumps to its standard output the aggregated delays taken from all the
+experiments under the directory <cite>experiment-logs/ztreamy/clients</cite> (at
+any depth). The second parameters tells the script that the parameter
+that varies in those experiments is the number of clients. Therefore,
+the results for each individual number of clients will be shown
+separately:</p>
+<pre class="literal-block">
+1000    0.239   0.236   0.241   0.300   0.296   0.305   0.255   0.254   0.257
+2000    0.239   0.237   0.241   0.313   0.311   0.316   0.270   0.268   0.271
+3000    0.242   0.240   0.245   0.355   0.353   0.358   0.283   0.282   0.285
+4000    0.241   0.239   0.244   0.401   0.398   0.404   0.295   0.294   0.297
+5000    0.254   0.250   0.257   0.470   0.465   0.475   0.311   0.310   0.313
+6000    0.253   0.249   0.257   0.523   0.518   0.529   0.329   0.327   0.330
+7000    0.331   0.325   0.337   0.676   0.668   0.684   0.387   0.385   0.389
+8000    0.394   0.386   0.401   0.813   0.802   0.823   0.454   0.451   0.457
+9000    0.478   0.470   0.487   1.031   1.018   1.044   0.591   0.588   0.594
+10000   0.607   0.594   0.621   1.283   1.265   1.302   0.706   0.703   0.710
+11000   0.570   0.559   0.580   1.380   1.362   1.399   0.778   0.774   0.782
+12000   0.986   0.949   1.023   2.587   2.519   2.656   1.018   1.007   1.029
+</pre>
+<p>The file contains one line for each value of the parameter that varies
+(in this case, the number of clients). This value is shown in the
+first column. The meaning of the rest of the columns is:</p>
+<ul class="simple">
+<li>Column 2: average minimum event delay. For each single event in a
+single round of a single experiment, the minimum delay observed in
+all the <cite>manyc-*.log</cite> files is taken. The average for all the
+events of all the rounds is computed and shown in this column.</li>
+<li>Columns 3 and 4: lower and higher limits of the 95% confidence
+interval of the average minimum event delay.</li>
+<li>Column 5: average maximum event delay. It is computed analogously to
+the minimum delay.</li>
+<li>Columns 6 and 7: lower and higher limits of the 95% confidence
+interval of the average maximum event delay.</li>
+<li>Column 8: median event delay. The script takes all the event delay
+entries of the different clients of the different rounds executed
+with the same parameters, and computes their median. We compute the
+median instead of the average in this case in order to filter out
+possible anomalous values that may occur due to particular
+conditions that may delay some events under certain circumstances.
+Temporary saturation in the network or the CPU of one of the
+computers are examples of such conditions.</li>
+<li>Columns 9 and 10: lower and higher limits of the 95% confidence
+interval of the median event delay.</li>
+</ul>
+<p>This is an example of a file that shows CPU consumption:</p>
+<pre class="literal-block">
+1000    9.982000        9.692210        10.271790       5
+2000    19.294000       18.795429       19.792571       5
+3000    29.570000       28.395987       30.744013       5
+4000    41.090000       40.297715       41.882285       5
+5000    51.158000       49.850846       52.465154       5
+6000    64.550000       63.988705       65.111295       5
+7000    69.344000       66.626435       72.061565       5
+8000    71.364000       69.214511       73.513489       5
+</pre>
+<p>Again, the first column shows the value of the parameter that
+varies. The rest of the columns represent:</p>
+<ul class="simple">
+<li>Column 2: average CPU consumption (in seconds). For all the rounds
+of the experiment in which the parameter that varies has the same
+value, the script computes the average CPU consumption.</li>
+<li>Columns 3 and 4: 95% confidence interval of the average CPU
+consumption.</li>
+<li>Column 5: number of rounds found for that value of the parameter
+that varies.</li>
+</ul>
+<p>The format of the file generated by <cite>dump_traffic.py</cite> is similar: the
+second column is the average traffic rate in Mbit/s. The third and
+fourth columns are the 95% confidence interval for that average.</p>
+<p>In the case of the file generated by <cite>dump_compression_ratio.py</cite>, the
+second column is the average compression ratio, and the third and
+fourth columns are its 95% confidence interval.</p>
+</div>
+<div class="section" id="plotting-the-data">
+<h2><a class="toc-backref" href="#id27">6.3&nbsp;&nbsp;&nbsp;Plotting the data</a></h2>
+<p>The data files produced with the scripts of <a class="reference internal" href="#aggregating-the-results-of-the-experiments">Aggregating the results
+of the experiments</a> is in a format that allows easy plotting from
+many graphical packages. We provide <a class="reference external" href="http://www.gnuplot.info/">gnuplot</a> scripts that create automatically all the
+plots that are shown in the paper.</p>
+<p>In addition, we provide the script <cite>create_plots.sh</cite> that generates
+the data files by using the scripts and runs all the gnuplot scripts.
+Note that, in order to work, the script assumes some standard
+locations and directory names for the logs generated from the
+experiments. Those standard locations are, relative to the main
+directory of the package we provide:</p>
+<pre class="literal-block">
+experiment-logs
+├── dataturbine
+│   ├── clients
+│   └── rate
+├── faye
+│   ├── clients
+│   └── rate
+├── lsm
+│   ├── clients
+│   └── rate
+├── zmq
+│   ├── clients
+│   └── rate
+├── ztreamy
+│   ├── clients
+│   ├── clients-buffer
+│   ├── clients-uncompressed
+│   ├── clients-uncompressed-unbuffered
+│   ├── rate
+│   ├── rate-buffer
+│   ├── rate-uncompressed
+│   └── rate-uncompressed-unbuffered
+└── ztreamy-solo
+    ├── buffering_effect
+    ├── clients_effect
+    ├── clients_effect-large_window
+    ├── clients_effect-low_rate
+    ├── clients_effect-many_clients
+    └── rate_effect
+</pre>
+</div>
+</div>
+<div class="section" id="the-log-files-of-our-experiments">
+<h1><a class="toc-backref" href="#id28">7&nbsp;&nbsp;&nbsp;The log files of our experiments</a></h1>
+<p>In the link below you can obtain all the log files and processed data
+that we gathered in our experiments. The results presented in the
+article have been obtained by processing these files with the
+<cite>create_plots.sh</cite> script.</p>
+<p><a class="reference external" href="http://www.it.uc3m.es/jaf/ztreamy-dl/experiments/experiments-logs.tar.gz">experiments-logs.tar.gz (430 MB)</a></p>
+</div>
+</div>
+</body>
+</html>

@@ -1,5 +1,90 @@
-<html>
-  <body>
-    Test file.
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+
+<!DOCTYPE html
+   PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+   "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd" >
+
+<html xmlns="http://www.w3.org/1999/xhtml" >
+  <head>
+    <title>Ztreamy: A middleware for publishing semantic event streams
+      on the Web</title>
+    <link rel="stylesheet" type="text/css" href="ztreamy.css" />
+  </head>
+  <body >
+
+    <div id="container">
+      <div id="top">
+	<h1>Ztreamy</h1>
+	<p>A middleware for publishing semantic event streams on the Web</p>
+      </div>
+
+      <div id="leftnav">
+	<ul id="menu">
+	  <li class="menu-current">Main page</li>
+	  <li><a href="download/">Download</a></li>
+	  <li><a href="doc/">Documentation</a></li>
+	</ul>
+      </div>
+
+      <div id="content">
+	<h2>Introduction</h2>
+	<p>
+           Ztreamy is a prototype implementation of a framework for
+           publishing streams of semantically-annotated data
+           (e.g. readings from sensores) through on the Web, built on
+           top of the <a href="http://www.tornadoweb.org/">Tornado Web
+           server</a>. The framework provides services that are
+           specific to events described with RDF, although any other
+           kinds of events can be transported as well.  The platform
+           provides scalability through replication: streams can be
+           repeated from other servers. Streams can also be aggregated
+           and filtered.
+	</p>
+
+	<p>
+	  A thorough description and evaluation of Ztreamy has been
+	  published at the Journal of Web
+	  Semantics. Its <a href="http://www.it.uc3m.es/jaf/papers/2013/ztreamy/">preprint
+	  is publicly available for download</a>. If you want to cite
+	  Ztreamy from a research publication or report, please use
+	  the following bibliographic reference:
+	</p>
+
+	<ul>
+	  <li>
+	    Jesus Arias Fisteus, Norberto Fernandez Garcia, Luis
+	    Sanchez Fernandez, Damaris Fuentes-Lorenzo, <i>Ztreamy: a
+	    middleware for publishing semantic streams on the
+	    Web</i>. Journal of Web Semantics (2013).
+	      <a href="http://dx.doi.org/10.1016/j.websem.2013.11.002">doi:10.1016/j.websem.2013.11.002</a>.
+	  </li>
+	</ul>
+
+	<p>
+	  The program is free software, licensed under the terms of
+	  the <a href="http://www.gnu.org/licenses/gpl-3.0.html">GNU
+	  General Public License (GPL) version 3</a> or any later
+	  version. You can access its source code, report bugs and
+	  send pull requests at its <a
+	  href="https://github.com/jfisteus/ztreamy">GitHub page</a>.
+	</p>
+
+	<p>
+	  Read the <a href="doc/quick-start-guide.html">Quick Start
+	  Guide</a> in order to know how to install and run the
+	  software. Then, you can read the guide <a
+	  href="doc/programming.html">Programming applications in
+	  Ztreamy</a> for a basic guide on how to develop your
+	  applications on top of Ztreamy.
+	</p>
+
+      <div id="footer">
+<!--	<img src="icon.png" alt="Eyegrade logo" /> -->
+	  <i>Ztreamy</i>, copyright 2011-2013 <a
+	    href="http://www.it.uc3m.es/jaf/index.html">Jesús Arias
+	    Fisteus</a>, <a
+	    href="http://www.it.uc3m.es/berto/index.html">Norberto Fernández García</a>
+      </div>
+    </div>
   </body>
 </html>

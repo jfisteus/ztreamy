@@ -1,0 +1,736 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.11: http://docutils.sourceforge.net/" />
+<title>Programming applications in Ztreamy</title>
+<meta name="author" content="Jesús Arias Fisteus" />
+<style type="text/css">
+
+/*
+:Authors: Ian Bicking, Michael Foord
+:Contact: fuzzyman@voidspace.org.uk
+:Date: 2005/08/26 
+:Version: 0.1.0
+:Copyright: This stylesheet has been placed in the public domain.
+
+Stylesheet for Docutils.
+Based on ``blue_box.css`` by Ian Bicking
+and ``html4css1.css`` revision 1.46.
+*/
+
+@import url(html4css1.css);
+
+body {
+  font-family: Arial, sans-serif;
+}
+
+em, i {
+  /* Typically serif fonts have much nicer italics */
+  font-family: Times New Roman, Times, serif;
+}
+
+a.target {
+  color: blue;
+}
+
+a.target {
+  color: blue;
+}
+
+a.toc-backref {
+  text-decoration: none;
+  color: black;
+}
+
+a.toc-backref:hover {
+  background-color: inherit;
+}
+
+a:hover {
+  background-color: #cccccc;
+}
+
+div.attention, div.caution, div.danger, div.error, div.hint,
+div.important, div.note, div.tip, div.warning {
+  background-color: #cccccc;
+  padding: 3px;
+  width: 80%;
+}
+
+div.admonition p.admonition-title, div.hint p.admonition-title,
+div.important p.admonition-title, div.note p.admonition-title,
+div.tip p.admonition-title  {
+  text-align: center;
+  background-color: #999999;
+  display: block;
+  margin: 0;
+}
+
+div.attention p.admonition-title, div.caution p.admonition-title,
+div.danger p.admonition-title, div.error p.admonition-title,
+div.warning p.admonition-title {
+  color: #cc0000;
+  font-family: sans-serif;
+  text-align: center;
+  background-color: #999999;
+  display: block;
+  margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: Helvetica, Arial, sans-serif;
+  border: thin solid black;
+  /* This makes the borders rounded on Mozilla, which pleases me */
+  -moz-border-radius: 8px;
+  padding: 4px;
+}
+
+h1 {
+  background-color: #444499;
+  color: #ffffff;
+  border: medium solid black;
+}
+
+h1 a.toc-backref, h2 a.toc-backref { 
+  color: #ffffff;
+}
+
+h2 {
+  background-color: #666666;
+  color: #ffffff;
+  border: medium solid black;
+}
+
+h3, h4, h5, h6 {
+  background-color: #cccccc;
+  color: #000000;
+}
+
+h3 a.toc-backref, h4 a.toc-backref, h5 a.toc-backref, 
+h6 a.toc-backref { 
+  color: #000000;
+}
+
+h1.title {
+  text-align: center;
+  background-color: #444499;
+  color: #eeeeee;
+  border: thick solid black;
+  -moz-border-radius: 20px;
+}
+
+table.footnote {
+  padding-left: 0.5ex;
+}
+
+table.citation {
+  padding-left: 0.5ex
+}
+
+pre.literal-block, pre.doctest-block {
+  border: thin black solid;
+  padding: 5px;
+}
+
+.image img { border-style : solid;
+            border-width : 2px;
+}
+
+h1 tt, h2 tt, h3 tt, h4 tt, h5 tt, h6 tt {
+  font-size: 100%;
+}
+
+code, tt {
+  color: #000066;
+}
+
+</style>
+</head>
+<body>
+<div class="document" id="programming-applications-in-ztreamy">
+<h1 class="title">Programming applications in Ztreamy</h1>
+<table class="docinfo" frame="void" rules="none">
+<col class="docinfo-name" />
+<col class="docinfo-content" />
+<tbody valign="top">
+<tr><th class="docinfo-name">Author:</th>
+<td>Jesús Arias Fisteus</td></tr>
+</tbody>
+</table>
+<div class="contents topic" id="contents">
+<p class="topic-title first">Contents</p>
+<ul class="auto-toc simple">
+<li><a class="reference internal" href="#introduction" id="id1">1&nbsp;&nbsp;&nbsp;Introduction</a><ul class="auto-toc">
+<li><a class="reference internal" href="#asynchronous-programming-vs-synchronous-programming" id="id2">1.1&nbsp;&nbsp;&nbsp;Asynchronous programming vs. synchronous programming</a></li>
+<li><a class="reference internal" href="#running-the-examples-of-this-guide" id="id3">1.2&nbsp;&nbsp;&nbsp;Running the examples of this guide</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#consuming-events" id="id4">2&nbsp;&nbsp;&nbsp;Consuming events</a><ul class="auto-toc">
+<li><a class="reference internal" href="#stream-uris" id="id5">2.1&nbsp;&nbsp;&nbsp;Stream URIs</a></li>
+<li><a class="reference internal" href="#developing-a-consumer-asynchronously" id="id6">2.2&nbsp;&nbsp;&nbsp;Developing a consumer asynchronously</a></li>
+<li><a class="reference internal" href="#developing-a-consumer-synchronously" id="id7">2.3&nbsp;&nbsp;&nbsp;Developing a consumer synchronously</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#publishing-events" id="id8">3&nbsp;&nbsp;&nbsp;Publishing events</a><ul class="auto-toc">
+<li><a class="reference internal" href="#publishing-events-from-the-stream-server" id="id9">3.1&nbsp;&nbsp;&nbsp;Publishing events from the stream server</a></li>
+<li><a class="reference internal" href="#publishing-events-through-a-remote-stream-server-asynchronously" id="id10">3.2&nbsp;&nbsp;&nbsp;Publishing events through a remote stream server asynchronously</a></li>
+<li><a class="reference internal" href="#publishing-events-through-a-remote-stream-server-synchronously" id="id11">3.3&nbsp;&nbsp;&nbsp;Publishing events through a remote stream server synchronously</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#event-objects" id="id12">4&nbsp;&nbsp;&nbsp;Event objects</a><ul class="auto-toc">
+<li><a class="reference internal" href="#creating-event-objects" id="id13">4.1&nbsp;&nbsp;&nbsp;Creating event objects</a></li>
+<li><a class="reference internal" href="#accessing-event-objects" id="id14">4.2&nbsp;&nbsp;&nbsp;Accessing event objects</a></li>
+<li><a class="reference internal" href="#rdf-events" id="id15">4.3&nbsp;&nbsp;&nbsp;RDF events</a></li>
+<li><a class="reference internal" href="#creating-custom-event-classes" id="id16">4.4&nbsp;&nbsp;&nbsp;Creating custom event classes</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#selecting-specific-events-filtering" id="id17">5&nbsp;&nbsp;&nbsp;Selecting specific events (filtering)</a><ul class="auto-toc">
+<li><a class="reference internal" href="#implementing-a-custom-filter-class" id="id18">5.1&nbsp;&nbsp;&nbsp;Implementing a custom filter class</a></li>
+<li><a class="reference internal" href="#filtering-events-in-a-client" id="id19">5.2&nbsp;&nbsp;&nbsp;Filtering events in a client</a></li>
+<li><a class="reference internal" href="#filtering-events-in-a-relay" id="id20">5.3&nbsp;&nbsp;&nbsp;Filtering events in a relay</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="section" id="introduction">
+<h1><a class="toc-backref" href="#id1">1&nbsp;&nbsp;&nbsp;Introduction</a></h1>
+<p>This document describes how you can develop applications that consume
+events, produce events (sensors) or act as streaming servers. Servers
+must necessarily use the Python libraries we provide as part of
+Ztreamy. Consumers and producers can be programmed in any programming
+language. They just need to communicate with the streaming server with
+HTTP. Nevertheless, we also provide a library that helps programming
+those kinds of applications in Python.</p>
+<div class="section" id="asynchronous-programming-vs-synchronous-programming">
+<h2><a class="toc-backref" href="#id2">1.1&nbsp;&nbsp;&nbsp;Asynchronous programming vs. synchronous programming</a></h2>
+<p>Ztreamy is built on top of the <a class="reference external" href="http://www.tornadoweb.org/">Tornado Web Server</a>. Tornado's architecture is based on an
+event loop they call <a class="reference external" href="http://www.tornadoweb.org/documentation/ioloop.html">the IOLoop</a>. The IOLoop is
+in control of the process. Input/output operations (e.g. for sending
+and receiving data through sockets) are non-blocking: they return
+immediately instead of waiting for the operation to complete (new data
+to arrive or the data to be sent to be effectively dispatched). They
+register callback functions that the system calls when the operation
+completes.</p>
+</div>
+<div class="section" id="running-the-examples-of-this-guide">
+<h2><a class="toc-backref" href="#id3">1.2&nbsp;&nbsp;&nbsp;Running the examples of this guide</a></h2>
+<p>The examples of this guide are distributed inside the <cite>examples</cite>
+directory of the source code of Ztreamy. Assuming you have <a class="reference external" href="quick-start-guide.html">installed
+Ztreamy</a>, you can run them from a console.</p>
+<p>For running consumers, you need to have the example server running:</p>
+<pre class="literal-block">
+$ python server.py
+</pre>
+<p>Then, in another console, run the client you want to try:</p>
+<pre class="literal-block">
+$ python client_async.py
+</pre>
+<p>If you want to try the event producer, you need to run the server and
+a client as shown above, and then, in another console:</p>
+<pre class="literal-block">
+$ python publisher_async.py
+</pre>
+</div>
+</div>
+<div class="section" id="consuming-events">
+<h1><a class="toc-backref" href="#id4">2&nbsp;&nbsp;&nbsp;Consuming events</a></h1>
+<p>If your application needs to consume events, you have to decide
+whether to program your application asynchronously (on top of
+Tornado's IOLoop) or synchronously. The key functions of the
+asynchronous library are non-blocking. On the contrary, all the
+operations of the synchronous library are blocking. Asynchronous
+consumers are developed by using the <cite>ztreamy.client.Client</cite> class,
+whereas synchronous consumers use the
+<cite>ztreamy.client.SynchronousClient</cite>.</p>
+<div class="section" id="stream-uris">
+<h2><a class="toc-backref" href="#id5">2.1&nbsp;&nbsp;&nbsp;Stream URIs</a></h2>
+<p>Streams are identified by HTTP URIs. Because the same stream server
+can serve more than one stream, a stream has an associated path. For
+example, the following stream has the path <cite>/stream1</cite> at a stream
+server installed at port 9000 of <cite>example.com</cite>:</p>
+<pre class="literal-block">
+http://example.com:9000/stream1
+</pre>
+<p>When clients want to connect to a stream, the need to specify also an
+access mode, which can be one of the following:</p>
+<ul class="simple">
+<li>Long-lived requests: a single HTTP request is issued when the client
+connects. The server sends data as new events are available, but it
+does not finish the response.</li>
+<li>Long-polling requests: every time the client wants more data, it
+issues a new HTTP request. The server returns the events that are
+new since the previous request of the client and finishes the
+request. If there are no new events, the server keeps the request on
+hold until at least one event is available.</li>
+</ul>
+<p>The access mode is communicated to the server by appending to the path
+of the URI one of the following components:</p>
+<ul class="simple">
+<li><cite>/compressed</cite>: long-lived requests with ZLIB compression.</li>
+<li><cite>/stream</cite>: long-lived requests with no compression.</li>
+<li><cite>/long-polling</cite>: long-polling requests with no compression.</li>
+</ul>
+</div>
+<div class="section" id="developing-a-consumer-asynchronously">
+<h2><a class="toc-backref" href="#id6">2.2&nbsp;&nbsp;&nbsp;Developing a consumer asynchronously</a></h2>
+<p>The following program connects to two streams and prints the events
+that come from them:</p>
+<blockquote>
+<pre class="literal-block">
+from __future__ import print_function
+
+from ztreamy import Client
+
+def event_received(event):
+    print(str(event))
+    print()
+
+def error(message, http_error=None):
+    if http_error is not None:
+        print('[Error] ' + message + ': ' + str(http_error))
+    else:
+        print('[Error] ' + message)
+
+streams = [
+    'http://localhost:9000/stream1/compressed',
+    'http://localhost:9000/stream2/compressed',
+    ]
+
+client = Client(streams, event_callback=event_received, error_callback=error)
+try:
+    # Start receiving events and block on the IOLoop
+    client.start(loop=True)
+except KeyboardInterrupt:
+    # Ctrl-c finishes the program
+    pass
+finally:
+    client.stop()
+
+</pre>
+</blockquote>
+<p>Using the client requires three main steps:</p>
+<ol class="arabic simple">
+<li>Creating a <cite>Client</cite> object. It receives a list of stream URIs as
+parameter. If you only want to connect to one stream, you can
+provide directly the string with the URI instead of a list. In
+addition, you should provide a callback function, that will be
+called by Ztreamy for each event received from any of the streams
+the client is connected to. Optionally, you can also provide a
+callback function to receive error notifications.</li>
+<li>Starting the client with its <cite>start</cite> method. The library starts the
+process of connecting to the stream servers at this point.</li>
+<li>Stopping the client at the end with its <cite>stop</cite> method. This method
+closes the connection to the stream servers and liberates the
+resources used by the client.</li>
+</ol>
+<p>The callback function for received events is called by the library
+whenever an event arrives. It receives the event (an instance of
+<cite>ztreamy.Event</cite> or of one of its subclasses) as a parameter.</p>
+<p>Note that the URIs of the streams must specify a long-lived requests
+access mode: the stream name in the path must be followed either by
+<cite>/compressed</cite> or by <cite>/stream</cite>. The difference between the two of them
+is that the first one uses ZLIB compression. Your program does not
+need to be aware about compression, because <cite>ztreamy</cite> decompresses the
+data internally. Connecting to the compressed stream should normally
+be the preferred option, due to the amount if traffic it saves.</p>
+</div>
+<div class="section" id="developing-a-consumer-synchronously">
+<h2><a class="toc-backref" href="#id7">2.3&nbsp;&nbsp;&nbsp;Developing a consumer synchronously</a></h2>
+<p>The following program connects to a stream with the synchronous API
+and prints the events that come from it:</p>
+<blockquote>
+<pre class="literal-block">
+from __future__ import print_function
+
+from ztreamy import SynchronousClient
+
+stream = 'http://localhost:9000/stream1/long-polling'
+
+client = SynchronousClient(stream)
+try:
+    while not client.stream_finished:
+        events = client.receive_events()
+        for event in events:
+            print(str(event))
+except KeyboardInterrupt:
+    # Ctrl-c finishes the program
+    pass
+
+</pre>
+</blockquote>
+<p>There are two main steps:</p>
+<ol class="arabic simple">
+<li>Creating the <cite>SynchronousClient</cite> object. It receives a string with
+the URI of the stream.</li>
+<li>Invoking repeatedly its method <cite>receive_events</cite>. It sends an HTTP
+request to the server in order to get all the new events that
+appeared after the previous request. The method returns immediately
+if there are new events. If not, the method blocks until there are
+new events or the server closes the connection.</li>
+</ol>
+<p>Note that the URI of the stream must instruct the server to use the
+long polling requests mode: the stream name in the path must be
+followed by <cite>/long-polling</cite>, like in the example.</p>
+</div>
+</div>
+<div class="section" id="publishing-events">
+<h1><a class="toc-backref" href="#id8">3&nbsp;&nbsp;&nbsp;Publishing events</a></h1>
+<p>You can publish events from the stream server itself, or from a remote
+client that sends the events to the stream server through HTTP. The
+former is useful when you want the producer of the events to act as a
+server for its own events. The latter is useful for situations in
+which sensors (or event producers of any kind) are scattered in the
+network and separate from the stream server that serves the events
+they produce.</p>
+<p>When publishing events through a remote stream server, the producer of
+the events needs to know the URI of the stream the events are to be
+published to. The special path component <cite>/publish</cite> must be appended to
+the URI of the stream. For example:</p>
+<pre class="literal-block">
+http://example.com:9000/stream1/publish
+</pre>
+<p>The <cite>EventPublisher</cite> and <cite>SynchronousEventPublisher</cite> append
+automatically <cite>/publish</cite> to the URI they receive if it does not
+contain it.</p>
+<div class="section" id="publishing-events-from-the-stream-server">
+<h2><a class="toc-backref" href="#id9">3.1&nbsp;&nbsp;&nbsp;Publishing events from the stream server</a></h2>
+<p>The following example sets up a stream server that serves two streams,
+and publishes periodical events on them:</p>
+<blockquote>
+<pre class="literal-block">
+import time
+import random
+
+import ztreamy
+import tornado.ioloop
+
+# Create a server with two streams
+server = ztreamy.StreamServer(9000)
+
+# Create the streams; stream1 allows remote producers to publish through HTTP
+stream1 = ztreamy.Stream('/stream1', allow_publish=True)
+stream2 = ztreamy.Stream('/stream2')
+server.add_stream(stream1)
+server.add_stream(stream2)
+
+# Create two publisher objects
+publisher1 = ztreamy.LocalEventPublisher(stream1)
+publisher2 = ztreamy.LocalEventPublisher(stream2)
+source_id = ztreamy.random_id()
+application_ids = ['ztreamy-example-a', 'ztreamy-example-b']
+
+# Publish events periodically
+def publish_hi():
+    print 'Publishing &quot;hi&quot;'
+    app_id = random.choice(application_ids)
+    event = ztreamy.Event(source_id, 'text/plain', 'Hi', application_id=app_id)
+    publisher1.publish(event)
+
+def publish_there():
+    print 'Publishing &quot;there&quot;'
+    app_id = random.choice(application_ids)
+    event = ztreamy.Event(source_id, 'text/plain', 'there!',
+                          application_id=app_id)
+    publisher2.publish(event)
+
+tornado.ioloop.PeriodicCallback(publish_hi, 10000).start()
+time.sleep(5)
+tornado.ioloop.PeriodicCallback(publish_there, 10000).start()
+
+try:
+    print 'Starting the server'
+    server.start(loop=True)
+except KeyboardInterrupt:
+    # Allow ctrl-c to close the server
+    pass
+finally:
+    server.stop()
+
+</pre>
+</blockquote>
+<p>The key aspects to take into account in the previous example are that:</p>
+<ul class="simple">
+<li>You must program asynchronously, because the server is asynchronous.</li>
+<li>You have to use a <cite>ztreamy.LocalEventPublisher</cite> object for
+publishing events in a stream. Events are published with its
+<cite>publish</cite> method or its <cite>publish_events</cite> method. The difference
+between them is just that <cite>publish</cite> receives a single event object,
+whereas <cite>publish_events</cite> receives a list of events.</li>
+</ul>
+</div>
+<div class="section" id="publishing-events-through-a-remote-stream-server-asynchronously">
+<h2><a class="toc-backref" href="#id10">3.2&nbsp;&nbsp;&nbsp;Publishing events through a remote stream server asynchronously</a></h2>
+<p>The following example publishes periodic events using the asynchronous
+API:</p>
+<blockquote>
+<pre class="literal-block">
+import ztreamy
+import tornado.ioloop
+
+# Create a publisher object
+stream = 'http://localhost:9000/stream1'
+publisher = ztreamy.EventPublisher(stream)
+source_id = ztreamy.random_id()
+
+# Publish events periodically
+def publish():
+    print 'Publishing'
+    event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
+    publisher.publish(event)
+
+tornado.ioloop.PeriodicCallback(publish, 10000).start()
+
+try:
+    # Block on the ioloop
+    tornado.ioloop.IOLoop.instance().start()
+except KeyboardInterrupt:
+    # Allow ctrl-c to finish the program
+    pass
+finally:
+    publisher.close()
+
+</pre>
+</blockquote>
+<p>The program creates an <cite>EventPublisher</cite> object and publishes a new
+event every 10 seconds, by using its <cite>publish</cite> method. Note that the
+program needs to block on Tornado's <em>ioloop</em> at the end, in order to
+work. Because of that, the timer of <em>ioloop</em> is used for scheduling
+the creation of events.</p>
+</div>
+<div class="section" id="publishing-events-through-a-remote-stream-server-synchronously">
+<h2><a class="toc-backref" href="#id11">3.3&nbsp;&nbsp;&nbsp;Publishing events through a remote stream server synchronously</a></h2>
+<p>The following example publishes periodic events using the synchronous
+API:</p>
+<blockquote>
+<pre class="literal-block">
+import time
+
+import ztreamy
+
+# Create a publisher object
+stream = 'http://localhost:9000/stream1'
+publisher = ztreamy.SynchronousEventPublisher(stream)
+source_id = ztreamy.random_id()
+
+try:
+    while True:
+        time.sleep(10)
+        event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
+        publisher.publish(event)
+except KeyboardInterrupt:
+    # Allow ctrl-c to finish the program
+    pass
+finally:
+    publisher.close()
+
+</pre>
+</blockquote>
+<p>The main difference with the previous example is that now the program
+does not block on the <em>ioloop</em>, but uses sleep to control the rate at
+which the events are published.</p>
+</div>
+</div>
+<div class="section" id="event-objects">
+<h1><a class="toc-backref" href="#id12">4&nbsp;&nbsp;&nbsp;Event objects</a></h1>
+<p>Ztreamy serializes events as a series of headers and a body. A header
+is similar to an HTTP header. It contains a name and a value. The body
+contains the main data of the event. There is no assumption on the
+kind of data that the body stores. This is an example serialization of
+an event:</p>
+<pre class="literal-block">
+Event-Id: 1100254f-f4ba-49aa-8c47-605e3110169e
+Source-Id: 83a4c888-c395-4bb7-a635-c5b864d6bd06
+Syntax: text/n3
+Application-Id: identi.ca dataset
+Timestamp: 2012-10-25T13:31:24+02:00
+Body-Length: 843
+
+&#64;prefix dc: &lt;http://purl.org/dc/elements/1.1/&gt; .
+&#64;prefix foaf: &lt;http://xmlns.com/foaf/0.1/&gt; .
+&#64;prefix geo: &lt;http://www.w3.org/2003/01/geo/wgs84_pos#&gt; .
+&#64;prefix webtlab: &lt;http://webtlab.it.uc3m.es/ns/&gt; .
+
+&lt;http://identi.ca/notice/97535534&gt; dc:creator &quot;http://identi.ca/user/94360&quot;;
+    dc:date &quot;2012-10-25T11:28:51+00:00&quot;;
+    webtlab:content &quot;Completed registrations for #wmbangalore !Wikimedia
+                     DevCamp Banglalore: 2430 applications, 130 invitations
+                     sent http://is.gd/FtXMhT&quot;;
+    webtlab:conversation &quot;http://identi.ca/conversation/96703048&quot;;
+    webtlab:hashtag &quot;wmbangalore&quot;;
+    webtlab:location [ a geo:Place;
+            geo:lat &quot;13.018&quot;,
+            geo:long &quot;77.568&quot; ] .
+
+&quot;http://identi.ca/user/94360&quot; foaf:based_near [ a geo:Place;
+            geo:lat &quot;52.392&quot;;
+            geo:long &quot;4.899&quot; ];
+    foaf:name &quot;S....... M......&quot; .
+</pre>
+<p>Ztreamy provides an API for representing events as objects, and for
+serializing and deserializing them. The <cite>Event</cite> class is the base
+class for all the events. Classes for specific types of events, such
+as <cite>RDFEvent</cite>, which is used events whose body is RDF, subclass
+<cite>Event</cite>.</p>
+<div class="section" id="creating-event-objects">
+<h2><a class="toc-backref" href="#id13">4.1&nbsp;&nbsp;&nbsp;Creating event objects</a></h2>
+<p>You can create an event directly using the <cite>Event</cite> class or using one
+of its subclass. This is an example of a generic event:</p>
+<pre class="literal-block">
+import ztreamy
+source_id = ztreamy.random_id()
+event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
+</pre>
+<p>If there is an appropriate class for representing a type of event,
+events should be created with the constructor of that class (see the
+example for RDF events below).</p>
+</div>
+<div class="section" id="accessing-event-objects">
+<h2><a class="toc-backref" href="#id14">4.2&nbsp;&nbsp;&nbsp;Accessing event objects</a></h2>
+<p>In order to access the contents of an event object, you can use its
+attributes: <cite>event_id</cite>, <cite>source_id</cite>, <cite>syntax</cite>, <cite>application_id</cite>,
+<cite>aggregator id</cite>, <cite>event_type</cite>, <cite>timestamp</cite>, <cite>extra_headers</cite> (a
+dictionary with the application-specific headers) and <cite>body</cite>.</p>
+<p>All the attributes above can also be accessed through the dictionary
+that the method <cite>as_dictionay</cite> returns:</p>
+<pre class="literal-block">
+dictionary = event.as_dictionary()
+print dictionary['Source-Id']
+</pre>
+<p>In addition, you can obtain a textual representation of its body with
+the method <cite>serialize_body</cite>:</p>
+<pre class="literal-block">
+print event.serialize_body()
+</pre>
+</div>
+<div class="section" id="rdf-events">
+<h2><a class="toc-backref" href="#id15">4.3&nbsp;&nbsp;&nbsp;RDF events</a></h2>
+<p>Ztreamy uses internally the <a class="reference external" href="https://github.com/RDFLib">rdflib library</a> to work with RDF data.  The events whose
+body is represented as RDF are represented as objects of the
+<cite>RDFEvent</cite> class. This is an example of an RDF event, in which an RDF
+graph is used for the body of the event:</p>
+<pre class="literal-block">
+import ztreamy
+from rdflib import Graph, Namespace, Literal
+source_id = ztreamy.random_id()
+graph = Graph()
+ns_example = Namespace('http://example.com/ns/')
+graph.add((ns_example['dog'], ns_example['eats'], Literal('10')))
+event = ztreamy.RDFEvent(source_id, 'text/n3', graph)
+</pre>
+<p><cite>RDFEvent</cite> objects return the body of the event also as an <em>rdflib</em>
+<cite>Graph</cite> object.</p>
+</div>
+<div class="section" id="creating-custom-event-classes">
+<h2><a class="toc-backref" href="#id16">4.4&nbsp;&nbsp;&nbsp;Creating custom event classes</a></h2>
+<p>In order to create a custom event type, you must create a class that
+extends from <cite>Event</cite>. It should have a constructor and the code for
+serializing and deserializing the body of the events. The constructor
+must receive the parameters <cite>source_id, syntax, body, **kwargs</cite> and
+call the constructor of its superclass.</p>
+<p>Then, you need to registrer in the system the MIME types it
+handles. This way, when the platform finds an event of one of those
+types, it automatically creates the event using the custom class.</p>
+<p>As an example, this is the source code of the implementation of
+<cite>RDFEvent</cite> in ztreamy:</p>
+<pre class="literal-block">
+.. include:: ../ztreamy/rdfevents.py
+   :literal:
+</pre>
+</div>
+</div>
+<div class="section" id="selecting-specific-events-filtering">
+<h1><a class="toc-backref" href="#id17">5&nbsp;&nbsp;&nbsp;Selecting specific events (filtering)</a></h1>
+<p>The <cite>ztreamy.filters</cite> module provides a base class for filtering
+events, called <cite>Filter</cite>, and several subclasses that implement some
+built-in filter. If you need to select just a subset of the events,
+you can use one of those built-in filters or program your own filter
+by subclassing the <cite>Filter</cite> class.</p>
+<p>The built-in filters currently available in Ztreamy are:</p>
+<ul class="simple">
+<li><cite>SourceFilter</cite>: selects the events that match one of the given
+source identifiers.</li>
+<li><cite>ApplicationFilter</cite>: selects the events that match one of the given
+application identifiers.</li>
+<li><cite>VocabularyFilter</cite>: selects the RDF events that contain URIs for
+which one of the given URI prefixes match.</li>
+<li><cite>SimpleTripleFilter</cite>: select the RDF events whose bodies contain
+triples that match the given triple pattern, given by subject,
+predicate and object. Not all the three components need to be
+specified.</li>
+<li><cite>SPARQLFilter</cite>: selects the RDF events that match a given SPARQL ASK
+query.</li>
+<li><cite>TripleFilter</cite>: selects events containing certain triple patterns,
+including boolean expressions that combine these patterns. This
+filter uses internally the <cite>SPARQLFilter</cite>, but receives the patterns
+with a different syntax.</li>
+</ul>
+<div class="section" id="implementing-a-custom-filter-class">
+<h2><a class="toc-backref" href="#id18">5.1&nbsp;&nbsp;&nbsp;Implementing a custom filter class</a></h2>
+<p>For implementing a custom filter class, just create a class that
+extends <cite>Filter</cite> and implements the method <cite>filter_event(self,
+event)</cite>. Remember to ask in the constructor of your class for a
+callback function, and invoke the constructor of <cite>Filter</cite> with that
+callback.</p>
+<p>As an example, look how the built-in filters are programmed. For
+example, this is the implementation of <cite>SourceFilter</cite>:</p>
+<pre class="literal-block">
+class SourceFilter(Filter):
+    def __init__(self, callback, source_id=None, source_ids=[]):
+        &quot;&quot;&quot;Creates a filter for source ids.
+
+        'source_id' must be only one id, whereas 'source_ids' must be
+        a list of ids. If both are present, 'source_id' is appended to
+        the list of ids.
+
+        &quot;&quot;&quot;
+        super(SourceFilter, self).__init__(callback)
+        self.source_ids = set()
+        if source_id is not None:
+            self.source_ids.add(source_id)
+        for source in source_ids:
+            self.source_ids.add(source)
+
+    def filter_event(self, event):
+        if event.source_id in self.source_ids:
+            self.callback(event)
+</pre>
+</div>
+<div class="section" id="filtering-events-in-a-client">
+<h2><a class="toc-backref" href="#id19">5.2&nbsp;&nbsp;&nbsp;Filtering events in a client</a></h2>
+<p>Filter objects can act as event handlers. You can filter events when
+using a client object by passing an instance of the filter in the
+place of the event callback. This is an example:</p>
+<pre class="literal-block">
+filter_ = ApplicationFilter(callback, application_id='ztreamy-example-a')
+client = Client(streams, event_callback=filter_, error_callback=error)
+</pre>
+<p>In the example, the filter receives the callback function and some
+filter-specific configuration parameters (in this case, the
+application id to filter). Then, it creates the client and passes the
+filter object as an event callback.</p>
+<p>This is a complete example that you can find in the examples directory
+under the name of <cite>consumer_filter.py</cite>:</p>
+<pre class="literal-block">
+.. include:: ../examples/publisher_async.py
+   :literal:
+</pre>
+<p>In order to try it, run the example server of <a class="reference internal" href="#publishing-events-from-the-stream-server">Publishing events from
+the stream server</a> and, in another terminal, run the consumer above.
+You can compare the output of this consumer with the one described at
+<a class="reference internal" href="#developing-a-consumer-asynchronously">Developing a consumer asynchronously</a>. which does not apply filters.</p>
+</div>
+<div class="section" id="filtering-events-in-a-relay">
+<h2><a class="toc-backref" href="#id20">5.3&nbsp;&nbsp;&nbsp;Filtering events in a relay</a></h2>
+<p>You can also apply filters in the <cite>RelayStream</cite> class, which
+implements a stream that relays the events of other streams. Pass a
+filter object with the keyword parameter <cite>filter_</cite> to the constructor
+of <cite>RelayStream</cite>. Only the events that match the filter will be
+relayed. Note that <cite>RelayStream</cite> will overwrite the callback of the
+filter with its own internal code.</p>
+</div>
+</div>
+</div>
+</body>
+</html>
