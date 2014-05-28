@@ -140,3 +140,9 @@ pre.code {
     border-left: auto;
     border-right: auto;
 }
+
+.news {
+    border-radius: 20px;
+    background-color: rgb(255, 209, 143);
+    border-style: solid;
+}
