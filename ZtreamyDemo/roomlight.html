@@ -1,0 +1,84 @@
+<html>
+  <head>
+     <title>Light sensor dashboard</title>
+     <link rel="stylesheet" type="text/css" href="rickshaw.min.css" />
+     <link rel="stylesheet" type="text/css" href="style.css" />
+     <link rel="stylesheet" type="text/css" href="bootstrap.min.css" />
+
+     <script type="text/javascript" src="jquery-1.11.0.min.js"></script>
+     <script type="text/javascript" src="d3.min.js" charset="utf-8"></script>
+     <script type="text/javascript" src="d3.layout.min.js" charset="utf-8"></script>
+     <script type="text/javascript" src="rickshaw.min.js" charset="utf-8"></script>
+     <script type="text/javascript" src="roomlight.js"></script>
+     <script type="text/javascript" src="ztreamy.js"></script>
+     <script type="text/javascript">	
+
+        $(document).ready(function() {
+
+	  // Init the data structures and constants
+	  var _totalEvents = 0;
+	  var _init = new Date();	
+	  var _measurements = {};
+	  var _lightSensorGraph = initLightSensorsGraph();
+	  // var _server = "http://localhost:9001/sensors/long-polling";
+          var _server = "http://infoflex.gast.it.uc3m.es:9001/sensors/long-polling";
+
+
+	  // Update the structures when new events arrive	
+	  ztreamy.connect(_server, function(event) {
+		measure = -1;
+	        sourceId = event["Source-Id"];		
+		if (_measurements[sourceId] === undefined) {
+		    _measurements[sourceId] = new Array(); 
+		}
+		body = event["Body"];
+		body.forEach(function(item) {
+		    measure = item["http://webtlab.it.uc3m.es/measure"][0]["@value"];
+	        });
+		
+		_totalEvents += 1;
+
+		// Update the measurements
+    	        if (_measurements[sourceId].length == _SECONDS) {
+		    _measurements[sourceId].shift();
+		}
+		_measurements[sourceId].push(measure);
+
+		// Show the information
+		$("#init").text(_init);
+		$("#server").html("<a target=\"_blank\" href=\"" + _server + "\">" + _server + "</a>");
+		$("#tevents").text(_totalEvents);
+		plotLightSensorsGraph(sourceId, _measurements[sourceId], _lightSensorGraph);
+	  });
+
+	  ztreamy.run();
+
+        });
+     </script>
+   </head>
+   <body>
+	<h2 class="centered">Light sensor dashboard</h2>
+	<h3 class="centered">Powered by <a 
+href="http://www.ztreamy.org">Ztreamy</a></h3>
+	<div id="logo">
+	  <a href="http://webtlab.it.uc3m.es/index.html">
+		<img src="http://webtlab.it.uc3m.es/images/logo.png" alt="WebTLab Logo"/>
+	  </a>
+	</div>
+	<div class="stats centered">Receiving data from: <span id="server"></span></div>
+	<div class="stats centered">Receiving data since: <span id="init"></span></div>
+	<div class="stats centered">Total events processed: <span id="tevents"></span></div>
+
+        <div class="container">
+          <div id="sensors_graph">
+	    <div id="sensors_title" class="title">Light measurements (last 60s)</div>
+   	    <div id="editions_chart_container">		
+		<div id="editions_y_axis"></div>
+		<div id="editions_chart"></div>
+		<div id="editions_x_axis"></div>
+	    </div>
+          </div>
+	</div>
+
+   </body>
+</html>

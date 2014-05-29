@@ -1,0 +1,75 @@
+.off {
+  display: none;
+}
+
+.centered {
+  text-align: center;
+}
+
+.title {
+  font-size: 20pt;
+  color: steelblue;
+  margin: 10px;
+}
+
+.stats {
+  font-size: 12pt;
+}
+
+#wait {
+  font-weight: bolder;
+  color: red;
+}
+
+#logo {
+  position: absolute;
+  top: 1%;
+  right: 2%;
+}
+
+#sensors_graph {
+  position: absolute;
+  top: 30%;
+  left: 35%;
+  width: 50%;
+}
+
+#editions_graph {
+  position: absolute;
+  top: 30%;
+  left: 5%;
+  width: 45%;
+}
+
+#populars_graph {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  width: 50%;
+}
+
+#editions_chart_container {
+  position: absolute;
+  display: inline-block;
+}
+
+#populars_chart_container {
+  display: inline-block;
+}
+
+#editions_y_axis {
+  position: absolute;
+  top:0;
+  left: -35px;
+}
+
+#populars_chart_container .bar {
+  height: 1.5em;
+  font: 10px sans-serif;
+  background-color: steelblue;
+  text-align: right;
+  padding: 3px;
+  margin: 1px;
+  color: white;
+}
+
