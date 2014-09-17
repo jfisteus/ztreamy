@@ -18,6 +18,7 @@
 """Representation and  manipulation of events.
 
 """
+import logging
 import time
 import json
 
@@ -63,6 +64,7 @@ class Deserializer(object):
         self._data = ''
         self.previous_len = 0
         self._event_reset()
+        self.warning_lf_eol_reported = False
 
     def _event_reset(self):
         """Method to be called internally after an event is read."""
@@ -122,8 +124,14 @@ class Deserializer(object):
                 self._data = self._data[pos:]
                 return None
             part = self._data[pos:end]
+            # End-of-line delimiter is CRLF; LF is accepted but deprecated
+            if (not self.warning_lf_eol_reported
+                and (not part or part[-1] != '\r')):
+                self.warning_lf_eol_reported = True
+                logging.warning('LF end-of-line received, but CRLF expected. '
+                                'LF EOLs are deprecated.')
             pos = end + 1
-            if part == '':
+            if not part or part == '\r':
                 self._header_complete = True
                 break
             comps = part.split(':')
@@ -370,7 +378,7 @@ class Event(object):
         data.append('Body-Length: ' + str(len(serialized_body)))
         data.append('')
         data.append(serialized_body)
-        return '\n'.join(data)
+        return '\r\n'.join(data)
 
 
 class Command(Event):
