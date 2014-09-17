@@ -276,6 +276,15 @@ an event::
                 geo:long "4.899" ];
         foaf:name "S....... M......" .
 
+The serialization of an event object consists of a series of headers,
+an empty line and a body. Analogously to HTTP, the end-of-line
+delimiter for the header lines and the empty line must be the two-byte
+sequence CRLF.  However, Ztreamy imposes no restrictions regarding
+end-of-line delimiters in the body of the event, which should adhere
+the specifications for the specific data-type (e.g. for N3, RDF/XML
+and JSON-LD both LF and CRLF delimiters are allowed by their
+corresponding specifications.)
+
 Ztreamy provides an API for representing events as objects, and for
 serializing and deserializing them. The `Event` class is the base
 class for all the events. Classes for specific types of events, such
