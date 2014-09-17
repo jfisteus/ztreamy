@@ -3,7 +3,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta name="generator" content="Docutils 0.11: http://docutils.sourceforge.net/" />
+<meta name="generator" content="Docutils 0.12: http://docutils.sourceforge.net/" />
 <title>Programming applications in Ztreamy</title>
 <meta name="author" content="Jesús Arias Fisteus" />
 <style type="text/css">
@@ -568,6 +568,14 @@ Body-Length: 843
             geo:long &quot;4.899&quot; ];
     foaf:name &quot;S....... M......&quot; .
 </pre>
+<p>The serialization of an event object consists of a series of headers,
+an empty line and a body. Analogously to HTTP, the end-of-line
+delimiter for the header lines and the empty line must be the two-byte
+sequence CRLF.  However, Ztreamy imposes no restrictions regarding
+end-of-line delimiters in the body of the event, which should adhere
+the specifications for the specific data-type (e.g. for N3, RDF/XML
+and JSON-LD both LF and CRLF delimiters are allowed by their
+corresponding specifications.)</p>
 <p>Ztreamy provides an API for representing events as objects, and for
 serializing and deserializing them. The <cite>Event</cite> class is the base
 class for all the events. Classes for specific types of events, such
