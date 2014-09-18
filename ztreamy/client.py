@@ -600,6 +600,7 @@ def read_cmd_options():
 def main():
     def handle_event(event):
         sys.stdout.write(str(event))
+        sys.stdout.flush()
     def handle_error(message, http_error=None):
         if http_error is not None:
             logging.error(message + ': ' + str(http_error))
