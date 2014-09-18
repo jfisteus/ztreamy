@@ -1,0 +1,10 @@
+setuptools
+tornado
+rdflib
+rdfextras
+rdflib-jsonld
+tweepy
+pycurl
+pyparsing==1.5.7
+httplib2
+simplejson

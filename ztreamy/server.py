@@ -45,11 +45,10 @@ from datetime import timedelta
 
 import ztreamy
 from ztreamy.client import Client
-from ztreamy import events
-from ztreamy import ZtreamyException
-from ztreamy import logger
+from ztreamy import events, ZtreamyException, logger
 
 param_max_events_sync = 20
+json_media_type = 'application/json'
 
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
@@ -464,7 +463,7 @@ class RelayStream(Stream):
 
 class _Client(object):
     def __init__(self, handler, callback, streaming=False, compress=False,
-                 priority=False):
+                 priority=False, json=False):
         assert streaming or not compress
         self.handler = handler
         self.callback = callback
@@ -479,6 +478,7 @@ class _Client(object):
             self.compression_synced = False
             self.compressor = zlib.compressobj()
         self.local = False
+        self.json = json
 
     def send(self, data):
         if self.compress and not self.compression_synced:
@@ -550,6 +550,7 @@ class _EventDispatcher(object):
         self.compressed_streaming_clients = []
         self.unsynced_compressed_streaming_clients = []
         self.one_time_clients = []
+        self.one_time_json_clients = []
         self.local_clients = []
         self._compressor = zlib.compressobj()
         self._num_events_since_sync = 0
@@ -574,13 +575,16 @@ class _EventDispatcher(object):
             # Send the available events after the last seen event
             evs, none_lost = self.recent_events.newer_than(last_event_seen)
             if len(evs) > 0:
-                client.send(ztreamy.serialize_events(evs))
+                client.send(self._serialize_events(evs, json=client.json))
                 if not client.streaming:
                     client.close()
         if client.local:
             self.local_clients.append(client)
         elif not client.streaming and not client.closed:
-            self.one_time_clients.append(client)
+            if not client.json:
+                self.one_time_clients.append(client)
+            else:
+                self.one_time_json_clients.append(client)
 
     def deregister_client(self, client):
         if client.streaming:
@@ -607,15 +611,18 @@ class _EventDispatcher(object):
 
     def dispatch_priority(self, evs):
         if len(self.priority_clients) > 0 and len(evs) > 0:
-            serialized = ztreamy.serialize_events(evs)
+            serialized = self._serialize_events(evs)
             for client in self.priority_clients:
                 self._send(serialized, client)
 
     def dispatch(self, evs):
-        num_clients = (len(self.streaming_clients) + len(self.one_time_clients)
-                       + len(self.unsynced_compressed_streaming_clients)
-                       + len(self.compressed_streaming_clients)
-                       + len(self.local_clients))
+        num_normal_clients = (len(self.streaming_clients)
+                              + len(self.one_time_clients)
+                              + len(self.unsynced_compressed_streaming_clients)
+                              + len(self.compressed_streaming_clients)
+                              + len(self.local_clients))
+        num_json_clients = len(self.one_time_json_clients)
+        num_clients = num_normal_clients + num_json_clients
         logging.info('Sending %r events to %r clients', len(evs),
                      num_clients)
         self.recent_events.append_events(evs)
@@ -652,25 +659,32 @@ class _EventDispatcher(object):
             logging.info('Compressed clients: %d synced; %d unsynced'%\
                              (len(self.compressed_streaming_clients),
                               len(self.unsynced_compressed_streaming_clients)))
-            serialized = ztreamy.serialize_events(evs)
-            for client in self.streaming_clients:
-                self._send(serialized, client)
-            for client in self.unsynced_compressed_streaming_clients:
-                self._send(serialized, client)
-            for client in self.local_clients:
-                if not client.closed:
-                    client._send_events(evs)
-            for client in self.one_time_clients:
-                self._send(serialized, client)
-                client.close()
-            if len(self.compressed_streaming_clients) > 0:
-                compressed_data = (self._compressor.compress(serialized)
+            if num_normal_clients > 0:
+                serialized = self._serialize_events(evs)
+                for client in self.streaming_clients:
+                    self._send(serialized, client)
+                for client in self.unsynced_compressed_streaming_clients:
+                    self._send(serialized, client)
+                for client in self.local_clients:
+                    if not client.closed:
+                        client._send_events(evs)
+                for client in self.one_time_clients:
+                    self._send(serialized, client)
+                    client.close()
+                if len(self.compressed_streaming_clients) > 0:
+                    compressed_data = (self._compressor.compress(serialized)
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
-                for client in self.compressed_streaming_clients:
-                    self._send(compressed_data, client)
+                    for client in self.compressed_streaming_clients:
+                        self._send(compressed_data, client)
+            if num_json_clients > 0:
+                serialized = self._serialize_events(evs, json=True)
+                for client in self.one_time_json_clients:
+                    self._send(serialized, client)
+                    client.close()
             for e in evs:
                 logger.logger.event_dispatched(e)
         self.one_time_clients = []
+        self.one_time_json_clients = []
         self._num_events_since_sync += len(evs)
 
     def close(self):
@@ -704,6 +718,12 @@ class _EventDispatcher(object):
                 self.sent_bytes += len(data)
         except:
             logging.error("Error in client callback", exc_info=True)
+
+    def _serialize_events(self, evs, json=False):
+        if not json:
+            return ztreamy.serialize_events(evs)
+        else:
+            return ztreamy.serialize_events_json(evs)
 
 
 class _MainHandler(tornado.web.RequestHandler):
@@ -739,11 +759,11 @@ class _EventPublishHandler(tornado.web.RequestHandler):
         self.finish()
 
     def post(self):
-        if self.request.headers['Content-Type'] != ztreamy.mimetype_event:
+        if self.request.headers['Content-Type'] != ztreamy.event_media_type:
             raise tornado.web.HTTPError(400, 'Bad content type')
         deserializer = events.Deserializer()
         try:
-            evs = deserializer.deserialize(self.request.body, parse_body=False,
+            evs = deserializer.deserialize(self.request.body, parse_body=True,
                                            complete=True)
         except Exception as ex:
             traceback.print_exc()
@@ -777,10 +797,11 @@ class _EventStreamHandler(tornado.web.RequestHandler):
                               compress=self.compress, priority=self.priority)
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
+        self.set_header('Content-Type', ztreamy.stream_media_type)
+        # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
+        self.set_header('Access-Control-Allow-Origin', '*')
         if self.compress:
-            command = events.create_command(self.stream.source_id,
-                                            'Set-Compression')
-            self._on_new_data(str(command))
+            self.set_header('Content-Encoding', 'deflate')
 
     def _on_new_data(self, data):
         if self.request.connection.stream.closed():
@@ -802,7 +823,17 @@ class _ShortLivedHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def get(self):
         last_event_seen = self.get_argument('last-seen', default=None)
-        self.client = _Client(self, self._on_new_data, streaming=False)
+        json = False
+        if ('Accept' in self.request.headers
+            and json_media_type in self.request.headers['Accept']):
+                json = True
+        if not json:
+            self.set_header('Content-Type', ztreamy.stream_media_type)
+        else:
+            self.set_header('Content-Type', json_media_type)
+        self.set_header('Access-Control-Allow-Origin', '*')
+        self.client = _Client(self, self._on_new_data, streaming=False,
+                              json=json)
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
 

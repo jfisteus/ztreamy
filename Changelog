@@ -1,3 +1,25 @@
+2014-09-18  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.2.
+
+	* Compression is now communicated through
+	the HTTP Content-Encoding header.
+
+	* HTTP responses include now a Content-Type header.
+
+	* Cross-origin requests for JavaScript allowed now
+	through the CORS Access-Control-Allow-Origin header.
+
+	* Changed the Ztreamy media types.
+
+	* JSON-LD serialization for better JavaScript support.
+
+	* Adopt the CRLF line delimiter in the serialization of events.
+
+	* Java example of how to publish events.
+
+	* Other minor changes.
+
 2013-10-31  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.1.5.

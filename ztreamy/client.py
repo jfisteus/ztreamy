@@ -35,7 +35,6 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.curl_httpclient import CurlAsyncHTTPClient
 import tornado.options
 import logging
-import zlib
 import sys
 import urllib2
 import httplib
@@ -43,7 +42,7 @@ import datetime
 import random
 
 import ztreamy
-from ztreamy import Deserializer, Command, Filter, mimetype_event
+from ztreamy import Deserializer, Command, Filter
 from ztreamy import logger
 from ztreamy import split_url
 
@@ -249,7 +248,6 @@ class AsyncStreamingClient(object):
         self.separate_events = separate_events
         self._closed = False
         self._looping = False
-        self._compressed = False
         self._deserializer = Deserializer()
         self.last_event = None
         self.reconnect = reconnect
@@ -358,28 +356,16 @@ class AsyncStreamingClient(object):
         if len(evs) > 0:
             self.last_event = evs[-1].event_id
 
-    def _reset_compression(self):
-        self._compressed = True
-        self._decompressor = zlib.decompressobj()
-
     def _deserialize(self, data, parse_body=True):
         evs = []
         event = None
         compressed_len = len(data)
-        if self._compressed:
-            data = self._decompressor.decompress(data)
         logger.logger.data_received(compressed_len, len(data))
         self._deserializer.append_data(data)
         event = self._deserializer.deserialize_next(parse_body=parse_body)
         while event is not None:
             if isinstance(event, Command):
-                if event.command == 'Set-Compression':
-                    self._reset_compression()
-                    pos = self._deserializer.data_consumed()
-                    self._deserializer.reset()
-                    evs.extend(self._deserialize(data[pos:], parse_body))
-                    return evs
-                elif event.command == 'Event-Source-Started':
+                if event.command == 'Event-Source-Started':
                     if self.source_start_callback:
                         self.source_start_callback()
                     evs.append(event)
@@ -450,7 +436,7 @@ class EventPublisher(object):
         else:
             self.server_url = server_url + '/publish'
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
-        self.headers = {'Content-Type': mimetype_event}
+        self.headers = {'Content-Type': ztreamy.event_media_type}
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
 
     def publish(self, event, callback=None):
@@ -510,7 +496,7 @@ class SynchronousEventPublisher(object):
     Uses a synchronous HTTP client.
 
     """
-    _headers = {'Content-Type': mimetype_event}
+    _headers = {'Content-Type': ztreamy.event_media_type}
 
     def __init__(self, server_url):
         """Creates a new 'SynchronousEventPublisher' object.
@@ -536,13 +522,11 @@ class SynchronousEventPublisher(object):
         """
         self.publish_events([event])
 
-    def publish_events(self, events, callback=None):
+    def publish_events(self, events):
         """Publishes a list of events.
 
-        The events in the list 'events' are sent to the server in a
-        new HTTP request. If a 'callback' is given, it will be called
-        when the response is received from the server. The callback
-        receives a tornado.httpclient.HTTPResponse parameter.
+        The events in the list 'events' are sent to the server in a new
+        HTTP request.
 
         """
         body = ztreamy.serialize_events(events)
@@ -611,9 +595,9 @@ def read_cmd_options():
     return options
 
 def main():
-    import time
     def handle_event(event):
         sys.stdout.write(str(event))
+        sys.stdout.flush()
     def handle_error(message, http_error=None):
         if http_error is not None:
             logging.error(message + ': ' + str(http_error))
@@ -629,6 +613,7 @@ def main():
                     event_callback=handle_event,
 #                    event_callback=filter.filter_event,
                     error_callback=handle_error)
+#    import time
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     node_id = ztreamy.random_id()
     if tornado.options.options.eventlog:

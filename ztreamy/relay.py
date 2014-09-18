@@ -43,7 +43,6 @@ def read_cmd_options():
     return options
 
 def main():
-    import time
     options = read_cmd_options()
     def stop_server():
         server.stop()
@@ -63,6 +62,7 @@ def main():
     server.add_stream(stream)
 
     # Uncomment to test RelayStream.stop():
+#    import time
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
 
     if tornado.options.options.eventlog:

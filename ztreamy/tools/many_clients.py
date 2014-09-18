@@ -29,7 +29,7 @@ from ztreamy import logger
 from ztreamy import events
 
 class BogusDeserializer(object):
-    tokens = ['X-Float-Timestamp:', 'Event-Source-Finished', 'Set-Compression']
+    tokens = ['X-Float-Timestamp:', 'Event-Source-Finished']
 
     def __init__(self):
         """Creates a new `Deserializer` object."""
@@ -54,10 +54,6 @@ class BogusDeserializer(object):
         if ev is not None:
             evs.append(ev)
             return evs
-        ev = self._match_token(2, data, 0)
-        if ev is not None:
-            evs.append(ev)
-            return evs
         pos = data.find('\n')
         while pos != -1:
             self.parse_state = [0, 0, 0]
@@ -65,10 +61,6 @@ class BogusDeserializer(object):
             if ev is not None:
                 evs.append(ev)
             ev = self._match_token(1, data, pos + 1)
-            if ev is not None:
-                evs.append(ev)
-                return evs
-            ev = self._match_token(2, data, pos + 1)
             if ev is not None:
                 evs.append(ev)
                 return evs
@@ -105,10 +97,6 @@ class BogusDeserializer(object):
             self.consumed_data = pos
             return events.Command('', 'ztreamy-command',
                                   'Event-Source-Finished')
-        elif token == 2 and self.parse_state[2] == -2:
-            self.reset()
-            self.consumed_data = pos
-            return events.Command('', 'ztreamy-command', 'Set-Compression')
         return None
 
 
@@ -129,6 +117,7 @@ class BogusClient(client.AsyncStreamingClient):
         self.no_parse = no_parse
         if no_parse:
             self._stream_callback = None
+            self._reset_compression = self._reset_compression_no_parse
         else:
             self._deserializer = BogusDeserializer()
         self.finished = False
@@ -147,13 +136,7 @@ class BogusClient(client.AsyncStreamingClient):
         logger.logger.data_received(compressed_len, len(data))
         evs = self._deserializer.deserialize(data)
         if len(evs) > 0 and isinstance(evs[-1], events.Command):
-            if evs[-1].command == 'Set-Compression':
-                self._reset_compression()
-                pos = self._deserializer.consumed_data
-                self._deserializer.reset()
-                del evs[-1]
-                evs.extend(self._deserialize(data[pos:]))
-            elif evs[-1].command == 'Event-Source-Finished':
+            if evs[-1].command == 'Event-Source-Finished':
                 pos = self._deserializer.consumed_data
                 self._deserializer.reset()
                 self.finished = True
@@ -163,6 +146,9 @@ class BogusClient(client.AsyncStreamingClient):
                     self.finish_callback()
                 self.stop()
         return evs
+
+    def _reset_compression_no_parse(self):
+        pass
 
 
 class _Stats(object):
