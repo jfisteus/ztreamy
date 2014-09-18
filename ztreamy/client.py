@@ -248,7 +248,6 @@ class AsyncStreamingClient(object):
         self.separate_events = separate_events
         self._closed = False
         self._looping = False
-        self._compressed = False
         self._deserializer = Deserializer()
         self.last_event = None
         self.reconnect = reconnect
@@ -361,8 +360,6 @@ class AsyncStreamingClient(object):
         evs = []
         event = None
         compressed_len = len(data)
-        if self._compressed:
-            data = self._decompressor.decompress(data)
         logger.logger.data_received(compressed_len, len(data))
         self._deserializer.append_data(data)
         event = self._deserializer.deserialize_next(parse_body=parse_body)
