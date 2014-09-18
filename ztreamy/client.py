@@ -42,7 +42,7 @@ import datetime
 import random
 
 import ztreamy
-from ztreamy import Deserializer, Command, Filter, mimetype_event
+from ztreamy import Deserializer, Command, Filter
 from ztreamy import logger
 from ztreamy import split_url
 
@@ -436,7 +436,7 @@ class EventPublisher(object):
         else:
             self.server_url = server_url + '/publish'
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
-        self.headers = {'Content-Type': mimetype_event}
+        self.headers = {'Content-Type': ztreamy.event_media_type}
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
 
     def publish(self, event, callback=None):
@@ -496,7 +496,7 @@ class SynchronousEventPublisher(object):
     Uses a synchronous HTTP client.
 
     """
-    _headers = {'Content-Type': mimetype_event}
+    _headers = {'Content-Type': ztreamy.event_media_type}
 
     def __init__(self, server_url):
         """Creates a new 'SynchronousEventPublisher' object.

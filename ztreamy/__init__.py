@@ -24,7 +24,8 @@ import simplejson as json
 
 import ztreamy.utils.rfc3339
 
-mimetype_event = 'application/x-ztreamy-event'
+stream_media_type = 'application/ztreamy-stream'
+event_media_type = 'application/ztreamy-event'
 
 
 class ZtreamyException(Exception):

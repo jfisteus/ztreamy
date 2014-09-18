@@ -14,7 +14,7 @@ public class Publisher {
     public int publish(Event[] events) throws IOException {
         HttpURLConnection con = (HttpURLConnection) serverURL.openConnection();
         con.setRequestMethod("POST");
-        con.setRequestProperty("Content-Type", "application/x-ztreamy-event");
+        con.setRequestProperty("Content-Type", "application/ztreamy-event");
         con.setDoOutput(true);
         OutputStream out = con.getOutputStream();
         for (Event event: events) {

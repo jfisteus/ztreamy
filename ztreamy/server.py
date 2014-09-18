@@ -45,12 +45,9 @@ from datetime import timedelta
 
 import ztreamy
 from ztreamy.client import Client
-from ztreamy import events
-from ztreamy import ZtreamyException
-from ztreamy import logger
+from ztreamy import events, ZtreamyException, logger
 
 param_max_events_sync = 20
-stream_media_type = 'application/ztreamy-stream'
 json_media_type = 'application/json'
 
 # Uncomment to do memory profiling
@@ -762,7 +759,7 @@ class _EventPublishHandler(tornado.web.RequestHandler):
         self.finish()
 
     def post(self):
-        if self.request.headers['Content-Type'] != ztreamy.mimetype_event:
+        if self.request.headers['Content-Type'] != ztreamy.event_media_type:
             raise tornado.web.HTTPError(400, 'Bad content type')
         deserializer = events.Deserializer()
         try:
@@ -800,7 +797,7 @@ class _EventStreamHandler(tornado.web.RequestHandler):
                               compress=self.compress, priority=self.priority)
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen)
-        self.set_header('Content-Type', stream_media_type)
+        self.set_header('Content-Type', ztreamy.stream_media_type)
         # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
         self.set_header('Access-Control-Allow-Origin', '*')
         if self.compress:
@@ -831,7 +828,7 @@ class _ShortLivedHandler(tornado.web.RequestHandler):
             and json_media_type in self.request.headers['Accept']):
                 json = True
         if not json:
-            self.set_header('Content-Type', stream_media_type)
+            self.set_header('Content-Type', ztreamy.stream_media_type)
         else:
             self.set_header('Content-Type', json_media_type)
         self.set_header('Access-Control-Allow-Origin', '*')
