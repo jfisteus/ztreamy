@@ -26,31 +26,24 @@
       <div id="content">
 
         <div class="news">
-          Ztreamy is being presented with a demo and poster
-          at <a href="http://2014.eswc-conferences.org/">ESWC
-          2014</a>. You can access the materials of the demo:
-          <ul>
-            <a href="ZtreamyDemo/roomlight.html">Light
-            sensor demo</a>: a JavaScript program embedded in a web
-            page connects to a Ztreamy server and gets readings from a
-            couple of light sensors every two seconds.
-          </ul>
-          <ul>
-            <a href="ZtreamyDemo/wikiedits.html">Wikipedia
-            editions demo</a>: a JavaScript program embedded in a web
-            page connects to a Ztreamy server and gets a list of
-            articles in the English Wikipedia that have been just
-            edited. It shows the number of changes and a ranking of
-            the most changed pages in the last hour. The information
-            is updated every 30 seconds.
-          </ul>
-          <ul>
-            The paper of the
-            demo: <a href="http://2014.eswc-conferences.org/sites/default/files/eswc2014pd_submission_16.pdf">Jesus
-            Arias Fisteus, Norberto Fernandez Garcia, Luis Sanchez
-            Fernandez and Damaris Fuentes-Lorenzo. <i>Publication of
-            RDF streams with Ztreamy</i></a>.
-          </ul>
+          <p>
+            Ztreamy 0.2 has been released on 2014-09-18
+            (<a href="download/">download</a>). This version includes
+            some fixes and facilitates the development of JavaScript
+            clients by streaming events with JSON-LD syntax when the
+            client requests that media type in the Accept HTTP header
+            and by using CORS for facilitating cross-site JavaScript
+            requests.
+          </p>
+          <p>
+            Some fixes to the protocol (nicer media types for Ztreamy
+            events and streams, mandatory CRLF line delimiters,
+            compression signaled with the standard Content-Encoding
+            HTTP header) make it incompatible with the previous
+            versions of Ztreamy.  Once these changes have been
+            introduced, the protocol is planned to be stable for the
+            next versions.
+          </p>
         </div>
 
 
