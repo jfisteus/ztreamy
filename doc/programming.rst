@@ -108,8 +108,8 @@ Developing a consumer asynchronously
 The following program connects to two streams and prints the events
 that come from them:
 
-    .. include:: ../examples/consumer_async.py
-       :literal:
+.. include:: ../examples/python/consumer_async.py
+   :literal:
 
 Using the client requires three main steps:
 
@@ -147,8 +147,8 @@ Developing a consumer synchronously
 The following program connects to a stream with the synchronous API
 and prints the events that come from it:
 
-    .. include:: ../examples/consumer_sync.py
-       :literal:
+.. include:: ../examples/python/consumer_sync.py
+   :literal:
 
 There are two main steps:
 
@@ -195,8 +195,8 @@ Publishing events from the stream server
 The following example sets up a stream server that serves two streams,
 and publishes periodical events on them:
 
-    .. include:: ../examples/server.py
-       :literal:
+.. include:: ../examples/python/server.py
+   :literal:
 
 The key aspects to take into account in the previous example are that:
 
@@ -215,8 +215,8 @@ Publishing events through a remote stream server asynchronously
 The following example publishes periodic events using the asynchronous
 API:
 
-    .. include:: ../examples/publisher_async.py
-       :literal:
+.. include:: ../examples/python/publisher_async.py
+   :literal:
 
 The program creates an `EventPublisher` object and publishes a new
 event every 10 seconds, by using its `publish` method. Note that the
@@ -231,8 +231,8 @@ Publishing events through a remote stream server synchronously
 The following example publishes periodic events using the synchronous
 API:
 
-    .. include:: ../examples/publisher_sync.py
-       :literal:
+.. include:: ../examples/python/publisher_sync.py
+   :literal:
 
 The main difference with the previous example is that now the program
 does not block on the *ioloop*, but uses sleep to control the rate at
@@ -362,10 +362,10 @@ handles. This way, when the platform finds an event of one of those
 types, it automatically creates the event using the custom class.
 
 As an example, this is the source code of the implementation of
-`RDFEvent` in ztreamy::
+`RDFEvent` in ztreamy:
 
-    .. include:: ../ztreamy/rdfevents.py
-       :literal:
+.. include:: ../examples/python/publisher_async.py
+   :literal:
 
 
 Selecting specific events (filtering)
@@ -451,10 +451,10 @@ application id to filter). Then, it creates the client and passes the
 filter object as an event callback.
 
 This is a complete example that you can find in the examples directory
-under the name of `consumer_filter.py`::
+under the name of `consumer_filter.py`:
 
-    .. include:: ../examples/publisher_async.py
-       :literal:
+.. include:: ../examples/python/publisher_async.py
+   :literal:
 
 In order to try it, run the example server of `Publishing events from
 the stream server`_ and, in another terminal, run the consumer above.
