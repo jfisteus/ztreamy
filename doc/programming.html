@@ -277,7 +277,6 @@ of the URI one of the following components:</p>
 <h2><a class="toc-backref" href="#id6">2.2&nbsp;&nbsp;&nbsp;Developing a consumer asynchronously</a></h2>
 <p>The following program connects to two streams and prints the events
 that come from them:</p>
-<blockquote>
 <pre class="literal-block">
 from __future__ import print_function
 
@@ -309,7 +308,6 @@ finally:
     client.stop()
 
 </pre>
-</blockquote>
 <p>Using the client requires three main steps:</p>
 <ol class="arabic simple">
 <li>Creating a <cite>Client</cite> object. It receives a list of stream URIs as
@@ -340,7 +338,6 @@ be the preferred option, due to the amount if traffic it saves.</p>
 <h2><a class="toc-backref" href="#id7">2.3&nbsp;&nbsp;&nbsp;Developing a consumer synchronously</a></h2>
 <p>The following program connects to a stream with the synchronous API
 and prints the events that come from it:</p>
-<blockquote>
 <pre class="literal-block">
 from __future__ import print_function
 
@@ -359,7 +356,6 @@ except KeyboardInterrupt:
     pass
 
 </pre>
-</blockquote>
 <p>There are two main steps:</p>
 <ol class="arabic simple">
 <li>Creating the <cite>SynchronousClient</cite> object. It receives a string with
@@ -398,7 +394,6 @@ contain it.</p>
 <h2><a class="toc-backref" href="#id9">3.1&nbsp;&nbsp;&nbsp;Publishing events from the stream server</a></h2>
 <p>The following example sets up a stream server that serves two streams,
 and publishes periodical events on them:</p>
-<blockquote>
 <pre class="literal-block">
 import time
 import random
@@ -449,7 +444,6 @@ finally:
     server.stop()
 
 </pre>
-</blockquote>
 <p>The key aspects to take into account in the previous example are that:</p>
 <ul class="simple">
 <li>You must program asynchronously, because the server is asynchronous.</li>
@@ -464,7 +458,6 @@ whereas <cite>publish_events</cite> receives a list of events.</li>
 <h2><a class="toc-backref" href="#id10">3.2&nbsp;&nbsp;&nbsp;Publishing events through a remote stream server asynchronously</a></h2>
 <p>The following example publishes periodic events using the asynchronous
 API:</p>
-<blockquote>
 <pre class="literal-block">
 import ztreamy
 import tornado.ioloop
@@ -492,7 +485,6 @@ finally:
     publisher.close()
 
 </pre>
-</blockquote>
 <p>The program creates an <cite>EventPublisher</cite> object and publishes a new
 event every 10 seconds, by using its <cite>publish</cite> method. Note that the
 program needs to block on Tornado's <em>ioloop</em> at the end, in order to
@@ -503,7 +495,6 @@ the creation of events.</p>
 <h2><a class="toc-backref" href="#id11">3.3&nbsp;&nbsp;&nbsp;Publishing events through a remote stream server synchronously</a></h2>
 <p>The following example publishes periodic events using the synchronous
 API:</p>
-<blockquote>
 <pre class="literal-block">
 import time
 
@@ -526,7 +517,6 @@ finally:
     publisher.close()
 
 </pre>
-</blockquote>
 <p>The main difference with the previous example is that now the program
 does not block on the <em>ioloop</em>, but uses sleep to control the rate at
 which the events are published.</p>
@@ -643,8 +633,31 @@ types, it automatically creates the event using the custom class.</p>
 <p>As an example, this is the source code of the implementation of
 <cite>RDFEvent</cite> in ztreamy:</p>
 <pre class="literal-block">
-.. include:: ../ztreamy/rdfevents.py
-   :literal:
+import ztreamy
+import tornado.ioloop
+
+# Create a publisher object
+stream = 'http://localhost:9000/stream1'
+publisher = ztreamy.EventPublisher(stream)
+source_id = ztreamy.random_id()
+
+# Publish events periodically
+def publish():
+    print 'Publishing'
+    event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
+    publisher.publish(event)
+
+tornado.ioloop.PeriodicCallback(publish, 10000).start()
+
+try:
+    # Block on the ioloop
+    tornado.ioloop.IOLoop.instance().start()
+except KeyboardInterrupt:
+    # Allow ctrl-c to finish the program
+    pass
+finally:
+    publisher.close()
+
 </pre>
 </div>
 </div>
@@ -721,8 +734,31 @@ filter object as an event callback.</p>
 <p>This is a complete example that you can find in the examples directory
 under the name of <cite>consumer_filter.py</cite>:</p>
 <pre class="literal-block">
-.. include:: ../examples/publisher_async.py
-   :literal:
+import ztreamy
+import tornado.ioloop
+
+# Create a publisher object
+stream = 'http://localhost:9000/stream1'
+publisher = ztreamy.EventPublisher(stream)
+source_id = ztreamy.random_id()
+
+# Publish events periodically
+def publish():
+    print 'Publishing'
+    event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
+    publisher.publish(event)
+
+tornado.ioloop.PeriodicCallback(publish, 10000).start()
+
+try:
+    # Block on the ioloop
+    tornado.ioloop.IOLoop.instance().start()
+except KeyboardInterrupt:
+    # Allow ctrl-c to finish the program
+    pass
+finally:
+    publisher.close()
+
 </pre>
 <p>In order to try it, run the example server of <a class="reference internal" href="#publishing-events-from-the-stream-server">Publishing events from
 the stream server</a> and, in another terminal, run the consumer above.
