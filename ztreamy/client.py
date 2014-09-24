@@ -334,8 +334,9 @@ class AsyncStreamingClient(object):
                     self.error_callback('Error in HTTP request',
                                         http_error=response.error)
                 finish = True
-        elif len(response.body) > 0:
-            self._process_received_data(response.body)
+        else:
+            if len(response.body) > 0:
+                self._process_received_data(response.body)
             finish = True
         if finish:
             logging.info('Finishing client')
