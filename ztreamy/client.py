@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2012 Jesus Arias Fisteus
+# Copyright (C) 2011-2014 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -51,6 +51,28 @@ data_count = 0
 
 #AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
 AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
+
+def configure_max_clients(max_clients):
+    """Sets the maximum number of simultaneous clients.
+
+    Tornado's AsyncHTTPClient implementations may impose a
+    configurable maximum number of simultaneous fecth() operations
+    that can be performed on the same IOLoop. This number limits
+    the number of simultaneous streaming and long-polling clients.
+
+    The current default for this value in CurlAsyncHTTPClient is 10.
+    Applications that need clients for more than 10 simultaneous
+    streams must configure a bigger limit by calling this function.
+
+    Be aware that this number may have significant consequences
+    in the amount of RAM memory used by Tornado, even when there
+    are no active clients. Don't set a value much higher than the
+    actual number of simultaneous streaming clients you need.
+
+    """
+    AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
+                              max_clients=max_clients)
+
 
 class Client(object):
     """Asynchronous client for multiple stream sources.
