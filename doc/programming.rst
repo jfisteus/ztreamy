@@ -138,7 +138,7 @@ access mode: the stream name in the path must be followed either by
 is that the first one uses ZLIB compression. Your program does not
 need to be aware about compression, because `ztreamy` decompresses the
 data internally. Connecting to the compressed stream should normally
-be the preferred option, due to the amount if traffic it saves.
+be the preferred option, due to the amount of traffic it saves.
 
 
 Developing a consumer synchronously
