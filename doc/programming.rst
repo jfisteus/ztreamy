@@ -140,6 +140,21 @@ need to be aware about compression, because `ztreamy` decompresses the
 data internally. Connecting to the compressed stream should normally
 be the preferred option, due to the amount of traffic it saves.
 
+Be aware that the HTTP client library of Tornado
+internally limits the maximum number of simultaneously active HTTP requests
+on the same IOLoop.
+The default in Tornado (with the CURL client, which is the one Ztreamy uses)
+is currently set to 10.
+If you need to subscribe to more than 10 simultaneous streams,
+you'll need to increase that maximum value.
+This can be done with a simple function call,
+as shown in the following example,
+which raises the maximum to 200 simultaneous requests::
+
+    import ztreamy.client
+
+    ztreamy.client.configure_max_clients(200)
+
 
 Developing a consumer synchronously
 ...................................
