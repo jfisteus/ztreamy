@@ -3,7 +3,7 @@ tornado
 rdflib
 rdfextras
 rdflib-jsonld
-tweepy
+tweepy==2.3.0
 pycurl
 pyparsing==1.5.7
 httplib2
