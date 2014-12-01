@@ -1,3 +1,10 @@
+2014-12-01  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.2.1.
+
+	* Depend on version 2.3.0 of tweepy because the latest
+	  version seems to be uninstallable.
+
 2014-09-18  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.2.
