@@ -42,6 +42,7 @@ import zlib
 import traceback
 import time
 from datetime import timedelta
+import re
 
 import ztreamy
 from ztreamy.client import Client
@@ -159,9 +160,9 @@ class StreamServer(tornado.web.Application):
                 'stream': stream,
                 'dispatcher': stream.dispatcher,
             }
-            compressed_kwargs = {'compress': True}
+            compressed_kwargs = {'force_compression': True}
             compressed_kwargs.update(handler_kwargs)
-            priority_kwargs = {'compress': False, 'priority': True}
+            priority_kwargs = {'force_compression': False, 'priority': True}
             priority_kwargs.update(handler_kwargs)
             handlers.extend([
                 ## tornado.web.URLSpec(r"/", _MainHandler),
@@ -206,18 +207,23 @@ class Stream(object):
     '/': not implemented yet. Intended for human readable
         information about the stream.
 
-    '/stream': uncompressed stream with long-lived response.  The
+    '/stream': stream with long-lived response. The
         response is not closed by the server, and events are sent to
         the client as they are available. A client library able to
         notify the user as new chunks of data are received is needed
         in order to follow this stream.
+        Compression depends on the Accept-Encoding header sent by
+        the client. The 'deflate' choice should be specified
+        there with higher priority than 'identity'.
 
     '/compressed': zlib-compressed stream with long-lived response.
-        Similar to how the previous path works with the only
-        difference of compression.
+        Similar to how the previous path works.
+        The difference is that 'deflate' compression is always
+        used regardless the Accept-Encoding header.
 
     '/priority': uncompressed stream with lower delays intended for
         clients with priority, typically relay servers.
+        The Accept-Encoding header is ignored.
 
     '/next': available events are sent to the client uncompressed.
         The request is closed immediately. The client can specify the
@@ -725,16 +731,99 @@ class _EventDispatcher(object):
         else:
             return ztreamy.serialize_events_json(evs)
 
+class _GenericHandler(tornado.web.RequestHandler):
+    _q_re = re.compile(r'^\s*(\w+)\s*;\s*q=(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$')
+    _attribute_re = re.compile(r'^\s*(\w+)\s*')
 
-class _MainHandler(tornado.web.RequestHandler):
+    def __init__(self, application, request, **kwargs):
+        super(_GenericHandler, self).__init__(application, request, **kwargs)
+
+    def _select_encoding(self, acceptable_encodings):
+        """Selects an appropriate encoding for the HTTP response.
+
+        It receives the list of encodings the server accepts
+        for this request, analyzes the Accept-Encoding header
+        of the request and finds the best match.
+
+        Returns None if no suitable encoding is found.
+
+        """
+        if not acceptable_encodings:
+            raise ValueError('Empty acceptable encodings list')
+        encodings = self._accept_values('Accept-Encoding')
+        if not encodings:
+            encodings = ['identity']
+        for encoding in encodings:
+            if encoding in acceptable_encodings:
+                selected = encoding
+                break
+            elif encoding == '*':
+                selected = acceptable_encodings[0]
+                break
+        else:
+            # No suitable encoding found
+            selected = None
+        return selected
+
+    def _accept_values(self, header_name):
+        """Returns the list of the items of a comma-separated header value.
+
+        Quality values are processed according to HTTP content negotiation.
+
+        """
+        return _GenericHandler._accept_values_internal( \
+                                    self.request.headers.get_list(header_name))
+
+    @staticmethod
+    def _accept_values_internal(header_value_list):
+        """Returns the list of the items of a comma-separated header value.
+
+        Quality values are processed according to HTTP content negotiation.
+
+        """
+        values = []
+        for value_list in header_value_list:
+            values.extend([value.strip() for value in value_list.split(',')])
+        q_values = []
+        for i, value in enumerate(values):
+            attribute, quality = _GenericHandler._read_q_value(value)
+            q_values.append((-quality, i, attribute))
+        return [v[2] for v in sorted(q_values)]
+
+    @staticmethod
+    def _read_q_value(value):
+        correct = False
+        if ';' in value:
+            r = _GenericHandler._q_re.search(value)
+            if r:
+                attribute = r.group(1)
+                try:
+                    quality = float(r.group(2))
+                    correct = True
+                except ValueError:
+                    # correct remains False
+                    pass
+        else:
+            r = _GenericHandler._attribute_re.search(value)
+            if r:
+                attribute = r.group(1)
+                quality = 1.0
+                correct = True
+        if  correct:
+            return attribute, quality
+        else:
+            raise tornado.web.HTTPError(400, 'Bad Request')
+
+
+class _MainHandler(_GenericHandler):
     def get(self):
         raise tornado.web.HTTPError(404)
 
 
-class _EventPublishHandler(tornado.web.RequestHandler):
+class _EventPublishHandler(_GenericHandler):
     def __init__(self, application, request, stream=None,
                  stop_when_source_finishes=False):
-        tornado.web.RequestHandler.__init__(self, application, request)
+        super(_EventPublishHandler, self).__init__(application, request)
         self.stream = stream
         self.stop_when_source_finishes = stop_when_source_finishes
 
@@ -781,27 +870,38 @@ class _EventPublishHandler(tornado.web.RequestHandler):
         self.finish()
 
 
-class _EventStreamHandler(tornado.web.RequestHandler):
+class _EventStreamHandler(_GenericHandler):
     def __init__(self, application, request, stream=None,
-                 dispatcher=None, compress=False, priority=False):
-        tornado.web.RequestHandler.__init__(self, application, request)
+                 dispatcher=None, force_compression=False, priority=False):
+        super(_EventStreamHandler, self).__init__(application, request)
         self.dispatcher = dispatcher
-        self.compress = compress
+        self.force_compression = force_compression
         self.stream = stream
         self.priority = priority
 
     @tornado.web.asynchronous
     def get(self):
         last_event_seen = self.get_argument('last-seen', default=None)
-        self.client = _Client(self, self._on_new_data, streaming=True,
-                              compress=self.compress, priority=self.priority)
-        self.dispatcher.register_client(self.client,
-                                        last_event_seen=last_event_seen)
-        self.set_header('Content-Type', ztreamy.stream_media_type)
-        # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
-        self.set_header('Access-Control-Allow-Origin', '*')
-        if self.compress:
-            self.set_header('Content-Encoding', 'deflate')
+        if not self.priority:
+            if self.force_compression:
+                encoding = 'deflate'
+            else:
+                encoding = self._select_encoding(['deflate', 'identity'])
+        else:
+            encoding = 'identity'
+        if encoding is not None:
+            compress = True if encoding == 'deflate' else False
+            self.client = _Client(self, self._on_new_data, streaming=True,
+                                  compress=compress, priority=self.priority)
+            self.dispatcher.register_client(self.client,
+                                            last_event_seen=last_event_seen)
+            self.set_header('Content-Type', ztreamy.stream_media_type)
+            # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
+            self.set_header('Access-Control-Allow-Origin', '*')
+            if compress:
+                self.set_header('Content-Encoding', 'deflate')
+        else:
+            raise tornado.web.HTTPError(406, 'Not Acceptable')
 
     def _on_new_data(self, data):
         if self.request.connection.stream.closed():
@@ -814,9 +914,9 @@ class _EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.deregister_client(self.client)
 
 
-class _ShortLivedHandler(tornado.web.RequestHandler):
+class _ShortLivedHandler(_GenericHandler):
     def __init__(self, application, request, dispatcher=None, stream=None):
-        tornado.web.RequestHandler.__init__(self, application, request)
+        super(_ShortLivedHandler, self).__init__(application, request)
         self.dispatcher = dispatcher
         # the 'stream' argument is ignored (not necessary)
 

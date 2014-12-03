@@ -86,7 +86,8 @@ class Client(object):
     def __init__(self, streams, event_callback, error_callback=None,
                  connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
-                 ioloop=None, parse_event_body=True, separate_events=True):
+                 ioloop=None, parse_event_body=True, separate_events=True,
+                 disable_compression=False):
         """Creates a new client for one or more stream URLs.
 
         'streams' is a list of streams to connect to. Each stream can
@@ -119,7 +120,8 @@ class Client(object):
                          source_finish_callback=source_finish_callback,
                          connection_close_callback=self._client_close_callback,
                          parse_event_body=parse_event_body,
-                         separate_events=separate_events))
+                         separate_events=separate_events,
+                         disable_compression=disable_compression))
             else:
                 self.clients.append(LocalClient(stream,
                                             event_callback=event_callback,
@@ -242,7 +244,7 @@ class AsyncStreamingClient(object):
                  connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True,
-                 reconnect=True):
+                 reconnect=True, disable_compression=False):
         """Creates a new client for a given stream URL.
 
         The client connects to the stream URL given by 'url'.  For
@@ -273,6 +275,7 @@ class AsyncStreamingClient(object):
         self._deserializer = Deserializer()
         self.last_event = None
         self.reconnect = reconnect
+        self.disable_compression = disable_compression
         self.connection_attempts = 0
 #        self.data_history = []
 
@@ -318,7 +321,12 @@ class AsyncStreamingClient(object):
             url = self.url
         else:
             url = self.url + '?last-seen=' + self.last_event
+        if not self.disable_compression:
+            headers = {'Accept-Encoding': 'deflate;q=1, identity;q=0.5'}
+        else:
+            headers = {'Accept-Encoding': 'identity'}
         req = HTTPRequest(url, streaming_callback=self._stream_callback,
+                          headers=headers,
                           request_timeout=0, connect_timeout=0)
         http_client.fetch(req, self._request_callback)
         self.connection_attempts += 1
@@ -609,6 +617,9 @@ def read_cmd_options():
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
                            type=bool)
+    tornado.options.define('deflate', default=True,
+                           help='Accept compressed data with deflate',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 1:
@@ -632,10 +643,12 @@ def main():
 #    import ztreamy.filters
 #    filter = ztreamy.filters.SimpleTripleFilter(handle_event,
 #                                        predicate='http://example.com/temp')
+    disable_compression = not tornado.options.options.deflate
     client = Client(options.stream_urls,
                     event_callback=handle_event,
 #                    event_callback=filter.filter_event,
-                    error_callback=handle_error)
+                    error_callback=handle_error,
+                    disable_compression=disable_compression)
 #    import time
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     node_id = ztreamy.random_id()
