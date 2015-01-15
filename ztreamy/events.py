@@ -457,6 +457,34 @@ class TestEvent(Event):
 Event.register_syntax('ztreamy-test', TestEvent, always_parse=True)
 
 
+class JSONEvent(Event):
+    """Event consisting of a JSON object."""
+
+    supported_syntaxes = ['application/json']
+
+    def __init__(self, source_id, syntax, body, **kwargs):
+        if not syntax in JSONEvent.supported_syntaxes:
+            raise ZtreamyException('Usupported syntax in JSONEvent',
+                                   'programming')
+        super(JSONEvent, self).__init__(source_id, syntax, None, **kwargs)
+        if isinstance(body, basestring):
+            self.body = self._parse_body(body)
+        else:
+            self.body = body
+
+    def serialize_body(self):
+        return json.dumps(self.body)
+
+    def body_as_json(self):
+        return self.body
+
+    def _parse_body(self, body):
+        return json.loads(body)
+
+for syntax in JSONEvent.supported_syntaxes:
+    Event.register_syntax(syntax, JSONEvent)
+
+
 def create_command(source_id, command):
     return Command(source_id, 'ztreamy-command', command)
 
