@@ -20,7 +20,7 @@
 import uuid
 import time
 from urlparse import urlparse
-import simplejson as json
+import json
 
 import ztreamy.utils.rfc3339
 

@@ -19,8 +19,8 @@
 
 """
 
-from rdflib.graph import Graph
-import simplejson as json
+import rdflib
+import json
 
 import ztreamy.events as events
 from ztreamy import ZtreamyException
@@ -44,7 +44,7 @@ class RDFEvent(events.Event):
             raise ZtreamyException('Usupported syntax in RDFEvent',
                                    'programming')
         super(RDFEvent, self).__init__(source_id, syntax, None, **kwargs)
-        if isinstance(body, Graph):
+        if isinstance(body, rdflib.Graph):
             self.body = body
         else:
             self.body = self._parse_body(body)
@@ -70,7 +70,7 @@ class RDFEvent(events.Event):
             raise ZtreamyException('Unsupported syntax', 'event_syntax')
 
     def _parse_body_rdflib(self, body, syntax):
-        g = Graph()
+        g = rdflib.Graph()
         g.parse(data=body, format=syntax)
         return g
 
