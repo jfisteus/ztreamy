@@ -240,7 +240,9 @@ class Stream(object):
 
     """
     def __init__(self, path, allow_publish=False, buffering_time=None,
-                 source_id=None, num_recent_events=2048, ioloop=None):
+                 source_id=None, num_recent_events=2048,
+                 event_adapter=None,
+                 parse_event_body=True, ioloop=None):
         """Creates a stream object.
 
         The stream will be served with the specified 'path' prefix,
@@ -278,7 +280,9 @@ class Stream(object):
         self.allow_publish = allow_publish
         self.dispatcher = _EventDispatcher()
         self.buffering_time = buffering_time
+        self.event_adapter = event_adapter
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
+        self.parse_event_body = parse_event_body
         self._event_buffer = []
         if buffering_time:
             self.buffer_dump_sched = \
@@ -323,13 +327,9 @@ class Stream(object):
 
         """
 #        logger.logger.event_published(event)
-        self.dispatcher.dispatch_priority([event])
-        if self.buffering_time is None:
-            self.dispatcher.dispatch([event])
-        else:
-            self._event_buffer.append(event)
+        self.dispatch_events([event])
 
-    def dispatch_events(self, events):
+    def dispatch_events(self, evs):
         """Publishes a list of events in this stream.
 
         The events may not be sent immediately to normal clients if
@@ -339,11 +339,13 @@ class Stream(object):
         """
 #        for e in events:
 #            logger.logger.event_published(e)
-        self.dispatcher.dispatch_priority(events)
+        if self.event_adapter:
+            evs = self.event_adapter(evs)
+        self.dispatcher.dispatch_priority(evs)
         if self.buffering_time is None:
-            self.dispatcher.dispatch(events)
+            self.dispatcher.dispatch(evs)
         else:
-            self._event_buffer.extend(events)
+            self._event_buffer.extend(evs)
 
     def create_local_client(self, callback, separate_events=True):
         """Creates a local client for this stream.
@@ -395,7 +397,10 @@ class RelayStream(Stream):
 
     """
     def __init__(self, path, streams, allow_publish=False, filter_=None,
-                 buffering_time=None, ioloop=None,
+                 parse_event_body=False,
+                 buffering_time=None,
+                 event_adapter=None,
+                 ioloop=None,
                  stop_when_source_finishes=False):
         """Creates a new relay stream.
 
@@ -406,6 +411,10 @@ class RelayStream(Stream):
         may be specified in 'filter_' in order to select which events
         are relayed (see the 'filters' module for more information).
 
+        An 'event_adapter' is a function that receives a list of
+        events, adapts them and returns a list of adapted events,
+        which are the ones that will be relayed.
+
         The rest of the parameters are as described in the constructor
         of the Stream class.
 
@@ -413,6 +422,7 @@ class RelayStream(Stream):
         super(RelayStream, self).__init__(path,
                                           allow_publish=allow_publish,
                                           buffering_time=buffering_time,
+                                          event_adapter=event_adapter,
                                           ioloop=ioloop)
         if filter_ is not None:
             filter_.callback = self._relay_events
@@ -425,7 +435,8 @@ class RelayStream(Stream):
 #                        connection_close_callback=self._handle_source_finish,
                         source_start_callback=self._start_timing,
                         source_finish_callback=self._handle_source_finish,
-                        parse_event_body=False, separate_events=False,
+                        parse_event_body=parse_event_body,
+                        separate_events=False,
                         ioloop=ioloop)
 
     def start(self):
@@ -852,8 +863,10 @@ class _EventPublishHandler(_GenericHandler):
             raise tornado.web.HTTPError(400, 'Bad content type')
         deserializer = events.Deserializer()
         try:
-            evs = deserializer.deserialize(self.request.body, parse_body=True,
-                                           complete=True)
+            evs = deserializer.deserialize( \
+                                    self.request.body,
+                                    parse_body=self.stream.parse_event_body,
+                                    complete=True)
         except Exception as ex:
             traceback.print_exc()
             raise tornado.web.HTTPError(400, str(ex))
