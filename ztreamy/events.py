@@ -465,7 +465,6 @@ class Command(Event):
 
     """
     valid_commands = [
-        'Set-Compression',
         'Test-Connection',
         'Event-Source-Started',
         'Event-Source-Finished',
