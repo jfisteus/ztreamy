@@ -22,16 +22,17 @@
 import rdflib
 import json
 
+import ztreamy
 import ztreamy.events as events
 from ztreamy import ZtreamyException
 
 class RDFEvent(events.Event):
     """Event consisting of an RDF body.
 
-    Right now, only the Notation3 serialization is allowed.
+    Right now, only the Notation3 and JSON-LD serializations are allowed.
 
     """
-    supported_syntaxes = ['text/n3', 'application/ld+json']
+    supported_syntaxes = ['text/n3', ztreamy.json_ld_media_type]
 
     def __init__(self, source_id, syntax, body, **kwargs):
         """Creates a new event.
@@ -56,6 +57,9 @@ class RDFEvent(events.Event):
             return self.body.serialize(format='json-ld')
         else:
             raise ZtreamyException('Bad RDFEvent syntax', 'event_serialize')
+
+    def syntax_as_json(self):
+        return ztreamy.json_ld_media_type
 
     def body_as_json(self):
         json_obj = json.loads(self.body.serialize(format='json-ld'))

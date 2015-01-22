@@ -453,7 +453,11 @@ class EventPublisher(object):
     itself. The ioloop must be run by the calling code.
 
     """
-    def __init__(self, server_url, io_loop=None):
+
+    _headers = {'Content-Type': ztreamy.event_media_type}
+
+    def __init__(self, server_url, io_loop=None,
+                 serialization_type=ztreamy.SERIALIZATION_ZTREAMY):
         """Creates a new 'EventPublisher' object.
 
         Events are sent in separate HTTP requests to the server given
@@ -467,8 +471,11 @@ class EventPublisher(object):
         else:
             self.server_url = server_url + '/publish'
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
-        self.headers = {'Content-Type': ztreamy.event_media_type}
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
+        self.serialization_type = serialization_type
+        self.headers = dict(EventPublisher._headers)
+        if serialization_type == ztreamy.SERIALIZATION_JSON:
+            self.headers['Content-Type'] = ztreamy.json_media_type
 
     def publish(self, event, callback=None):
         """Publishes a new event.
@@ -491,7 +498,8 @@ class EventPublisher(object):
         receives a tornado.httpclient.HTTPResponse parameter.
 
         """
-        body = ztreamy.serialize_events(events)
+        body = ztreamy.serialize_events(events,
+                                        serialization=self.serialization_type)
         self._send_request(body, callback=callback)
 
     def close(self):
@@ -529,7 +537,8 @@ class SynchronousEventPublisher(object):
     """
     _headers = {'Content-Type': ztreamy.event_media_type}
 
-    def __init__(self, server_url):
+    def __init__(self, server_url,
+                 serialization_type=ztreamy.SERIALIZATION_ZTREAMY):
         """Creates a new 'SynchronousEventPublisher' object.
 
         Events are sent in separate HTTP requests to the server given
@@ -543,6 +552,10 @@ class SynchronousEventPublisher(object):
                 self.path = self.path + 'publish'
             else:
                 self.path = self.path + '/publish'
+        self.serialization_type = serialization_type
+        self.headers = dict(SynchronousEventPublisher._headers)
+        if serialization_type == ztreamy.SERIALIZATION_JSON:
+            self.headers['Content-Type'] = ztreamy.json_media_type
 
     def publish(self, event):
         """Publishes a new event.
@@ -560,10 +573,10 @@ class SynchronousEventPublisher(object):
         HTTP request.
 
         """
-        body = ztreamy.serialize_events(events)
+        body = ztreamy.serialize_events(events,
+                                        serialization=self.serialization_type)
         conn = httplib.HTTPConnection(self.hostname, self.port)
-        conn.request('POST', self.path, body,
-                     SynchronousEventPublisher._headers)
+        conn.request('POST', self.path, body, self.headers)
         response = conn.getresponse()
         if response.status == 200:
             return True

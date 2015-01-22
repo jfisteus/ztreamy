@@ -49,7 +49,6 @@ from ztreamy.client import Client
 from ztreamy import events, ZtreamyException, logger
 
 param_max_events_sync = 20
-json_media_type = 'application/json'
 
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
@@ -655,16 +654,18 @@ class _EventDispatcher(object):
                     self.ioloop.stop()
                 # Use the following line for the experiments
                 ## if False:
-                elif ((num_clients > 0
-                      or len(self.priority_clients) > 0)
+                elif ((num_clients
+                       or len(self.priority_clients))
                       and self._periods_since_last_event > 20):
                     logging.info('Sending Test-Connection event')
                     evs = [events.Command('', 'ztreamy-command',
                                           'Test-Connection')]
-                    self._periods_since_last_event = 0
                     self.dispatch_priority(evs)
+                    test_connection = True
                 else:
                     return
+            else:
+                test_connection = False
         else:
             raise ZtreamyException('Bad event type', 'send_event')
         self._periods_since_last_event = 0
@@ -682,26 +683,27 @@ class _EventDispatcher(object):
                     self._send(serialized, client)
                 for client in self.unsynced_compressed_streaming_clients:
                     self._send(serialized, client)
-                for client in self.local_clients:
-                    if not client.closed:
-                        client._send_events(evs)
-                for client in self.one_time_clients:
-                    self._send(serialized, client)
-                    client.close()
+                if not test_connection:
+                    for client in self.local_clients:
+                        if not client.closed:
+                            client._send_events(evs)
+                    for client in self.one_time_clients:
+                        self._send(serialized, client)
+                        client.close()
+                    self.one_time_clients = []
                 if len(self.compressed_streaming_clients) > 0:
                     compressed_data = (self._compressor.compress(serialized)
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
                     for client in self.compressed_streaming_clients:
                         self._send(compressed_data, client)
-            if num_json_clients > 0:
+            if not test_connection and num_json_clients > 0:
                 serialized = self._serialize_events(evs, json=True)
                 for client in self.one_time_json_clients:
                     self._send(serialized, client)
                     client.close()
+                self.one_time_json_clients = []
             for e in evs:
                 logger.logger.event_dispatched(e)
-        self.one_time_clients = []
-        self.one_time_json_clients = []
         self._num_events_since_sync += len(evs)
 
     def close(self):
@@ -737,10 +739,12 @@ class _EventDispatcher(object):
             logging.error("Error in client callback", exc_info=True)
 
     def _serialize_events(self, evs, json=False):
-        if not json:
-            return ztreamy.serialize_events(evs)
+        if json:
+            serialization = ztreamy.SERIALIZATION_JSON
         else:
-            return ztreamy.serialize_events_json(evs)
+            serialization = ztreamy.SERIALIZATION_ZTREAMY
+        return ztreamy.serialize_events(evs, serialization=serialization)
+
 
 class _GenericHandler(tornado.web.RequestHandler):
     _q_re = re.compile(r'^\s*(\w+)\s*;\s*q=(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$')
@@ -859,14 +863,18 @@ class _EventPublishHandler(_GenericHandler):
         self.finish()
 
     def post(self):
-        if self.request.headers['Content-Type'] != ztreamy.event_media_type:
+        if self.request.headers['Content-Type'] == ztreamy.event_media_type:
+            deserializer = events.Deserializer()
+            parse_body = self.stream.parse_event_body
+        elif self.request.headers['Content-Type'] == ztreamy.json_media_type:
+            deserializer = events.JSONDeserializer()
+            parse_body = True
+        else:
             raise tornado.web.HTTPError(400, 'Bad content type')
-        deserializer = events.Deserializer()
         try:
-            evs = deserializer.deserialize( \
-                                    self.request.body,
-                                    parse_body=self.stream.parse_event_body,
-                                    complete=True)
+            evs = deserializer.deserialize(self.request.body,
+                                           parse_body=parse_body,
+                                           complete=True)
         except Exception as ex:
             traceback.print_exc()
             raise tornado.web.HTTPError(400, str(ex))
@@ -938,12 +946,12 @@ class _ShortLivedHandler(_GenericHandler):
         last_event_seen = self.get_argument('last-seen', default=None)
         json = False
         if ('Accept' in self.request.headers
-            and json_media_type in self.request.headers['Accept']):
+            and ztreamy.json_media_type in self.request.headers['Accept']):
                 json = True
         if not json:
             self.set_header('Content-Type', ztreamy.stream_media_type)
         else:
-            self.set_header('Content-Type', json_media_type)
+            self.set_header('Content-Type', ztreamy.json_media_type)
         self.set_header('Access-Control-Allow-Origin', '*')
         self.client = _Client(self, self._on_new_data, streaming=False,
                               json=json)
