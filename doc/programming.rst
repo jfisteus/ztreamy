@@ -95,9 +95,11 @@ access mode, which can be one of the following:
 The access mode is communicated to the server by appending to the path
 of the URI one of the following components:
 
-- `/compressed`: long-lived requests with ZLIB compression.
+- `/compressed`: long-lived requests with *deflate* compression (ZLib).
 
-- `/stream`: long-lived requests with no compression.
+- `/stream`: long-lived requests with optional compression.
+  Set the *Accept-Encoding* header to *deflate* in order to
+  receive the data with *deflate* compression (ZLib).
 
 - `/long-polling`: long-polling requests with no compression.
 
@@ -298,7 +300,7 @@ sequence CRLF.  However, Ztreamy imposes no restrictions regarding
 end-of-line delimiters in the body of the event, which should adhere
 the specifications for the specific data-type (e.g. for N3, RDF/XML
 and JSON-LD both LF and CRLF delimiters are allowed by their
-corresponding specifications.)
+specifications.)
 
 Ztreamy provides an API for representing events as objects, and for
 serializing and deserializing them. The `Event` class is the base
@@ -381,6 +383,95 @@ As an example, this is the source code of the implementation of
 
 .. include:: ../examples/python/publisher_async.py
    :literal:
+
+
+JSON serialization of events
+............................
+
+Since version 0.3, events can optionally be encoded
+as JSON objects.
+This is quite convenient, for example,
+for sending or receiving JSON-formatted events
+from a JavaScript client running within a web browser.
+
+The body can be represented as JSON or any other textual format.
+All the event headers are top-level properties
+in the JSON object.
+However, the *Body-Length* header is not necessary,
+because the body is properly delimited
+by the JSON syntax.
+For example, this is a JSON-serilized event
+in which the event body is also a JSON object::
+
+    {
+        "Event-Id": "124e409a-6157-48a6-b2f1-32b838584dc2",
+        "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+        "Timestamp": "2015-02-04T18:44:36+01:00",
+        "Syntax": "application/json",
+        "Body": {
+            "speed": "40.5",
+            "location": "Madrid"
+        }
+    }
+
+The following example shows an RDF body with JSON-LD syntax
+(the event body is cropped for clarity)::
+
+    {
+        "Event-Id": "3f2fbe91-0850-4fe1-914a-79b577db200f",
+        "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+        "Timestamp": "2015-02-04T18:57:47+01:00",
+        "Syntax": "application/ld+json",
+        "Body": [{"http://www.w3.org/2003/01/geo/wgs84_pos#long": (...)
+    }
+
+For any body syntax different to JSON or JSON-LD,
+the body is specified just as a string.
+For example, a *text/plain* body would be represented as::
+
+    {
+        "Event-Id": "9b80f271-f3dc-4968-922b-12e1a6c60464"
+        "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+        "Timestamp": "2015-02-04T19:09:12+01:00",
+        "Syntax": "text/plain",
+        "Body": "Call me at 5pm"
+    }
+
+You can also serialize several events together.
+In order to do that,
+encapsulate each event as an object within a JSON array::
+
+    [
+        {
+            "Event-Id": "3f2fbe91-0850-4fe1-914a-79b577db200f",
+            "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+            "Timestamp": "2015-02-04T18:57:47+01:00",
+            "Syntax": "application/ld+json",
+            "Body": [{"http://www.w3.org/2003/01/geo/wgs84_pos#long": (...)
+        },
+        {
+            "Event-Id": "9b80f271-f3dc-4968-922b-12e1a6c60464"
+            "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+            "Timestamp": "2015-02-04T19:09:12+01:00",
+            "Syntax": "text/plain",
+            "Body": "Call me at 5pm"
+        }
+    ]
+
+
+When you send a JSON object to a Ztreamy server,
+the *Content-Type* header of the HTTP request
+must be set to *application/json*.
+
+When you consume events from a stream,
+you can request events to be serialized with JSON
+only in long-polling requests.
+For long-lived requests,
+the Ztreamy event serialization format is the only one
+permitted right now.
+In order to get JSON events
+in for long-polling request,
+set the *Accept* header to *application/json*.
 
 
 Selecting specific events (filtering)

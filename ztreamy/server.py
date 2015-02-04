@@ -224,7 +224,7 @@ class Stream(object):
         clients with priority, typically relay servers.
         The Accept-Encoding header is ignored.
 
-    '/next': available events are sent to the client uncompressed.
+    '/long-polling': available events are sent to the client uncompressed.
         The request is closed immediately. The client can specify the
         latest event it has received in order to get the events that
         follow it.
