@@ -548,7 +548,7 @@ class JSONEvent(Event):
             self.body = body
 
     def serialize_body(self):
-        return json.dumps(self.body)
+        return json.dumps(self.body) + '\r\n\r\n'
 
     def body_as_json(self):
         return self.body
