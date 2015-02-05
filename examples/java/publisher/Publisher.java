@@ -8,32 +8,45 @@ public class Publisher {
 
     private URL serverURL;
     private String logFileName;
+    private Serializer serializer;
 
     public Publisher(URL serverURL) {
-        this(serverURL, null);
+        this(serverURL, null, new ZtreamySerializer());
+    }
+
+    public Publisher(URL serverURL, Serializer serializer) {
+        this(serverURL, null, serializer);
     }
 
     public Publisher(URL serverURL, String logFileName) {
+        this(serverURL, logFileName, new ZtreamySerializer());
+    }
+
+    public Publisher(URL serverURL, String logFileName, Serializer serializer) {
         this.serverURL = serverURL;
         this.logFileName = logFileName;
+        this.serializer = serializer;
     }
 
     public int publish(Event[] events) throws IOException {
         HttpURLConnection con = (HttpURLConnection) serverURL.openConnection();
         con.setRequestMethod("POST");
-        con.setRequestProperty("Content-Type", "application/ztreamy-event");
+        con.setRequestProperty("Content-Type", serializer.contentType());
         con.setDoOutput(true);
         OutputStream out = con.getOutputStream();
         OutputStream log = null;
         if (logFileName != null) {
             log = new FileOutputStream(logFileName, true);
         }
-        for (Event event: events) {
-            byte[] data = event.serialize();
-            out.write(data);
-            if (logFileName != null) {
-                log.write(data);
-            }
+        byte[] data;
+        if (events.length == 1) {
+            data = serializer.serialize(events[0]);
+        } else {
+            data = serializer.serialize(events);
+        }
+        out.write(data);
+        if (logFileName != null) {
+            log.write(data);
         }
         out.close();
         if (logFileName != null) {
@@ -54,10 +67,11 @@ public class Publisher {
             System.exit(1);
         }
         Publisher publisher;
+        Serializer serializer = new JSONSerializer();
         if (args.length == 2) {
-            publisher = new Publisher(new URL(args[0]));
+            publisher = new Publisher(new URL(args[0]), serializer);
         } else {
-            publisher = new Publisher(new URL(args[0]), args[2]);
+            publisher = new Publisher(new URL(args[0]), args[2], serializer);
         }
         int numEvents = Integer.parseInt(args[1]);
         String sourceId = Event.createUUID();
