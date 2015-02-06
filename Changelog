@@ -1,3 +1,26 @@
+2015-02-06  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.3.
+
+	* Improved Java publisher example.
+
+	* Improved JSON support, including sending data as JSON to
+	the stream.
+
+	* Bugfixes and other minor changes.
+
+	* Configurable number of Tornado HTTP clients, which are
+	by default limited to 10 by Tornado.
+
+	* Improved compression support: optional gzip compression
+	for long-polling clients and asking for deflate compression
+	in the main long-lived stream through the Accept-Encoding header.
+
+	* Remove support for Python 2.6.
+
+	* Add support for server-side event adapters, which are able
+	to transform events before publishing them in the stream.
+
 2014-12-01  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.2.1.
