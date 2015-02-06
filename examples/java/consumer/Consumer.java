@@ -37,7 +37,7 @@ public class Consumer {
         throws IOException, InterruptedException {
         if (args.length != 1) {
             System.err.println("Error: one command-line parameter expected");
-            System.err.println("java Publisher <stream URI>");
+            System.err.println("java Consumer <stream URI>");
             System.exit(1);
         }
         Consumer consumer = new Consumer(new URL(args[0]));
