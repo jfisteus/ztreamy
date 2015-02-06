@@ -1,6 +1,6 @@
 ztreamy: a framework for publishing semantic events on the Web
 
-http://www.it.uc3m.es/jaf/ztreamy/
+http://www.ztreamy.org/
 
 ztreamy is a prototype implementation of a framework for publishing
 streams of events through on the Web, built on top of the Tornado Web

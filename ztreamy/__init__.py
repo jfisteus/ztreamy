@@ -20,12 +20,17 @@
 import uuid
 import time
 from urlparse import urlparse
-import simplejson as json
+import json
 
 import ztreamy.utils.rfc3339
 
 stream_media_type = 'application/ztreamy-stream'
 event_media_type = 'application/ztreamy-event'
+json_media_type = 'application/json'
+json_ld_media_type = 'application/ld+json'
+
+SERIALIZATION_ZTREAMY = 1
+SERIALIZATION_JSON = 2
 
 
 class ZtreamyException(Exception):
@@ -85,7 +90,7 @@ def rfc3339_as_time(timestamp):
                                     + _date_format))
     return t
 
-def serialize_events(events, serialization='ztreamy'):
+def serialize_events(events, serialization=SERIALIZATION_ZTREAMY):
     """Returns a string with the serialization of the events.
 
     'events' is a list of events. 'serrialization' is a string with
@@ -93,9 +98,9 @@ def serialize_events(events, serialization='ztreamy'):
     'json' are supported. The default value is 'ztreamy'.
 
     """
-    if serialization == 'ztreamy':
+    if serialization == SERIALIZATION_ZTREAMY:
         formatter_func = lambda event: event._serialize
-    elif serialization == 'json':
+    elif serialization == SERIALIZATION_JSON:
         return serialize_events_json(events)
     else:
         raise ZtreamyException('Unknown serialization format', 'send_event')
@@ -126,7 +131,7 @@ def split_url(url):
 # Imports of the main classes of the API provided by the framework,
 # in order to make them available in the "ztreamy" namespace.
 #
-from events import Deserializer, Event, Command
+from events import Deserializer, JSONDeserializer, Event, Command, JSONEvent
 from rdfevents import RDFEvent
 from filters import (Filter, SourceFilter, ApplicationFilter,
                      SimpleTripleFilter, VocabularyFilter,

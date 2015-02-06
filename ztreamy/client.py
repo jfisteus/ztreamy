@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2012 Jesus Arias Fisteus
+# Copyright (C) 2011-2014 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,6 +52,28 @@ data_count = 0
 #AsyncHTTPClient.configure("tornado.simple_httpclient.SimpleAsyncHTTPClient")
 AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
+def configure_max_clients(max_clients):
+    """Sets the maximum number of simultaneous clients.
+
+    Tornado's AsyncHTTPClient implementations may impose a
+    configurable maximum number of simultaneous fecth() operations
+    that can be performed on the same IOLoop. This number limits
+    the number of simultaneous streaming and long-polling clients.
+
+    The current default for this value in CurlAsyncHTTPClient is 10.
+    Applications that need clients for more than 10 simultaneous
+    streams must configure a bigger limit by calling this function.
+
+    Be aware that this number may have significant consequences
+    in the amount of RAM memory used by Tornado, even when there
+    are no active clients. Don't set a value much higher than the
+    actual number of simultaneous streaming clients you need.
+
+    """
+    AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
+                              max_clients=max_clients)
+
+
 class Client(object):
     """Asynchronous client for multiple stream sources.
 
@@ -64,7 +86,8 @@ class Client(object):
     def __init__(self, streams, event_callback, error_callback=None,
                  connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
-                 ioloop=None, parse_event_body=True, separate_events=True):
+                 ioloop=None, parse_event_body=True, separate_events=True,
+                 disable_compression=False):
         """Creates a new client for one or more stream URLs.
 
         'streams' is a list of streams to connect to. Each stream can
@@ -97,7 +120,8 @@ class Client(object):
                          source_finish_callback=source_finish_callback,
                          connection_close_callback=self._client_close_callback,
                          parse_event_body=parse_event_body,
-                         separate_events=separate_events))
+                         separate_events=separate_events,
+                         disable_compression=disable_compression))
             else:
                 self.clients.append(LocalClient(stream,
                                             event_callback=event_callback,
@@ -220,7 +244,7 @@ class AsyncStreamingClient(object):
                  connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
                  ioloop=None, parse_event_body=True, separate_events=True,
-                 reconnect=True):
+                 reconnect=True, disable_compression=False):
         """Creates a new client for a given stream URL.
 
         The client connects to the stream URL given by 'url'.  For
@@ -251,6 +275,7 @@ class AsyncStreamingClient(object):
         self._deserializer = Deserializer()
         self.last_event = None
         self.reconnect = reconnect
+        self.disable_compression = disable_compression
         self.connection_attempts = 0
 #        self.data_history = []
 
@@ -296,7 +321,12 @@ class AsyncStreamingClient(object):
             url = self.url
         else:
             url = self.url + '?last-seen=' + self.last_event
+        if not self.disable_compression:
+            headers = {'Accept-Encoding': 'deflate;q=1, identity;q=0.5'}
+        else:
+            headers = {'Accept-Encoding': 'identity'}
         req = HTTPRequest(url, streaming_callback=self._stream_callback,
+                          headers=headers,
                           request_timeout=0, connect_timeout=0)
         http_client.fetch(req, self._request_callback)
         self.connection_attempts += 1
@@ -334,8 +364,9 @@ class AsyncStreamingClient(object):
                     self.error_callback('Error in HTTP request',
                                         http_error=response.error)
                 finish = True
-        elif len(response.body) > 0:
-            self._process_received_data(response.body)
+        else:
+            if len(response.body) > 0:
+                self._process_received_data(response.body)
             finish = True
         if finish:
             logging.info('Finishing client')
@@ -422,7 +453,11 @@ class EventPublisher(object):
     itself. The ioloop must be run by the calling code.
 
     """
-    def __init__(self, server_url, io_loop=None):
+
+    _headers = {'Content-Type': ztreamy.event_media_type}
+
+    def __init__(self, server_url, io_loop=None,
+                 serialization_type=ztreamy.SERIALIZATION_ZTREAMY):
         """Creates a new 'EventPublisher' object.
 
         Events are sent in separate HTTP requests to the server given
@@ -436,8 +471,11 @@ class EventPublisher(object):
         else:
             self.server_url = server_url + '/publish'
         self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
-        self.headers = {'Content-Type': ztreamy.event_media_type}
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
+        self.serialization_type = serialization_type
+        self.headers = dict(EventPublisher._headers)
+        if serialization_type == ztreamy.SERIALIZATION_JSON:
+            self.headers['Content-Type'] = ztreamy.json_media_type
 
     def publish(self, event, callback=None):
         """Publishes a new event.
@@ -460,7 +498,8 @@ class EventPublisher(object):
         receives a tornado.httpclient.HTTPResponse parameter.
 
         """
-        body = ztreamy.serialize_events(events)
+        body = ztreamy.serialize_events(events,
+                                        serialization=self.serialization_type)
         self._send_request(body, callback=callback)
 
     def close(self):
@@ -498,7 +537,8 @@ class SynchronousEventPublisher(object):
     """
     _headers = {'Content-Type': ztreamy.event_media_type}
 
-    def __init__(self, server_url):
+    def __init__(self, server_url,
+                 serialization_type=ztreamy.SERIALIZATION_ZTREAMY):
         """Creates a new 'SynchronousEventPublisher' object.
 
         Events are sent in separate HTTP requests to the server given
@@ -512,6 +552,10 @@ class SynchronousEventPublisher(object):
                 self.path = self.path + 'publish'
             else:
                 self.path = self.path + '/publish'
+        self.serialization_type = serialization_type
+        self.headers = dict(SynchronousEventPublisher._headers)
+        if serialization_type == ztreamy.SERIALIZATION_JSON:
+            self.headers['Content-Type'] = ztreamy.json_media_type
 
     def publish(self, event):
         """Publishes a new event.
@@ -529,10 +573,10 @@ class SynchronousEventPublisher(object):
         HTTP request.
 
         """
-        body = ztreamy.serialize_events(events)
+        body = ztreamy.serialize_events(events,
+                                        serialization=self.serialization_type)
         conn = httplib.HTTPConnection(self.hostname, self.port)
-        conn.request('POST', self.path, body,
-                     SynchronousEventPublisher._headers)
+        conn.request('POST', self.path, body, self.headers)
         response = conn.getresponse()
         if response.status == 200:
             return True
@@ -586,6 +630,9 @@ def read_cmd_options():
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
                            type=bool)
+    tornado.options.define('deflate', default=True,
+                           help='Accept compressed data with deflate',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 1:
@@ -609,10 +656,12 @@ def main():
 #    import ztreamy.filters
 #    filter = ztreamy.filters.SimpleTripleFilter(handle_event,
 #                                        predicate='http://example.com/temp')
+    disable_compression = not tornado.options.options.deflate
     client = Client(options.stream_urls,
                     event_callback=handle_event,
 #                    event_callback=filter.filter_event,
-                    error_callback=handle_error)
+                    error_callback=handle_error,
+                    disable_compression=disable_compression)
 #    import time
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
     node_id = ztreamy.random_id()

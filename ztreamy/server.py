@@ -42,13 +42,13 @@ import zlib
 import traceback
 import time
 from datetime import timedelta
+import re
 
 import ztreamy
 from ztreamy.client import Client
 from ztreamy import events, ZtreamyException, logger
 
 param_max_events_sync = 20
-json_media_type = 'application/json'
 
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
@@ -159,9 +159,9 @@ class StreamServer(tornado.web.Application):
                 'stream': stream,
                 'dispatcher': stream.dispatcher,
             }
-            compressed_kwargs = {'compress': True}
+            compressed_kwargs = {'force_compression': True}
             compressed_kwargs.update(handler_kwargs)
-            priority_kwargs = {'compress': False, 'priority': True}
+            priority_kwargs = {'force_compression': False, 'priority': True}
             priority_kwargs.update(handler_kwargs)
             handlers.extend([
                 ## tornado.web.URLSpec(r"/", _MainHandler),
@@ -206,20 +206,25 @@ class Stream(object):
     '/': not implemented yet. Intended for human readable
         information about the stream.
 
-    '/stream': uncompressed stream with long-lived response.  The
+    '/stream': stream with long-lived response. The
         response is not closed by the server, and events are sent to
         the client as they are available. A client library able to
         notify the user as new chunks of data are received is needed
         in order to follow this stream.
+        Compression depends on the Accept-Encoding header sent by
+        the client. The 'deflate' choice should be specified
+        there with higher priority than 'identity'.
 
     '/compressed': zlib-compressed stream with long-lived response.
-        Similar to how the previous path works with the only
-        difference of compression.
+        Similar to how the previous path works.
+        The difference is that 'deflate' compression is always
+        used regardless the Accept-Encoding header.
 
     '/priority': uncompressed stream with lower delays intended for
         clients with priority, typically relay servers.
+        The Accept-Encoding header is ignored.
 
-    '/next': available events are sent to the client uncompressed.
+    '/long-polling': available events are sent to the client uncompressed.
         The request is closed immediately. The client can specify the
         latest event it has received in order to get the events that
         follow it.
@@ -234,7 +239,9 @@ class Stream(object):
 
     """
     def __init__(self, path, allow_publish=False, buffering_time=None,
-                 source_id=None, num_recent_events=2048, ioloop=None):
+                 source_id=None, num_recent_events=2048,
+                 event_adapter=None,
+                 parse_event_body=True, ioloop=None):
         """Creates a stream object.
 
         The stream will be served with the specified 'path' prefix,
@@ -272,7 +279,9 @@ class Stream(object):
         self.allow_publish = allow_publish
         self.dispatcher = _EventDispatcher()
         self.buffering_time = buffering_time
+        self.event_adapter = event_adapter
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
+        self.parse_event_body = parse_event_body
         self._event_buffer = []
         if buffering_time:
             self.buffer_dump_sched = \
@@ -317,13 +326,9 @@ class Stream(object):
 
         """
 #        logger.logger.event_published(event)
-        self.dispatcher.dispatch_priority([event])
-        if self.buffering_time is None:
-            self.dispatcher.dispatch([event])
-        else:
-            self._event_buffer.append(event)
+        self.dispatch_events([event])
 
-    def dispatch_events(self, events):
+    def dispatch_events(self, evs):
         """Publishes a list of events in this stream.
 
         The events may not be sent immediately to normal clients if
@@ -333,11 +338,13 @@ class Stream(object):
         """
 #        for e in events:
 #            logger.logger.event_published(e)
-        self.dispatcher.dispatch_priority(events)
+        if self.event_adapter:
+            evs = self.event_adapter(evs)
+        self.dispatcher.dispatch_priority(evs)
         if self.buffering_time is None:
-            self.dispatcher.dispatch(events)
+            self.dispatcher.dispatch(evs)
         else:
-            self._event_buffer.extend(events)
+            self._event_buffer.extend(evs)
 
     def create_local_client(self, callback, separate_events=True):
         """Creates a local client for this stream.
@@ -389,7 +396,10 @@ class RelayStream(Stream):
 
     """
     def __init__(self, path, streams, allow_publish=False, filter_=None,
-                 buffering_time=None, ioloop=None,
+                 parse_event_body=False,
+                 buffering_time=None,
+                 event_adapter=None,
+                 ioloop=None,
                  stop_when_source_finishes=False):
         """Creates a new relay stream.
 
@@ -400,6 +410,10 @@ class RelayStream(Stream):
         may be specified in 'filter_' in order to select which events
         are relayed (see the 'filters' module for more information).
 
+        An 'event_adapter' is a function that receives a list of
+        events, adapts them and returns a list of adapted events,
+        which are the ones that will be relayed.
+
         The rest of the parameters are as described in the constructor
         of the Stream class.
 
@@ -407,6 +421,7 @@ class RelayStream(Stream):
         super(RelayStream, self).__init__(path,
                                           allow_publish=allow_publish,
                                           buffering_time=buffering_time,
+                                          event_adapter=event_adapter,
                                           ioloop=ioloop)
         if filter_ is not None:
             filter_.callback = self._relay_events
@@ -419,7 +434,8 @@ class RelayStream(Stream):
 #                        connection_close_callback=self._handle_source_finish,
                         source_start_callback=self._start_timing,
                         source_finish_callback=self._handle_source_finish,
-                        parse_event_body=False, separate_events=False,
+                        parse_event_body=parse_event_body,
+                        separate_events=False,
                         ioloop=ioloop)
 
     def start(self):
@@ -638,16 +654,18 @@ class _EventDispatcher(object):
                     self.ioloop.stop()
                 # Use the following line for the experiments
                 ## if False:
-                elif ((num_clients > 0
-                      or len(self.priority_clients) > 0)
+                elif ((num_clients
+                       or len(self.priority_clients))
                       and self._periods_since_last_event > 20):
                     logging.info('Sending Test-Connection event')
                     evs = [events.Command('', 'ztreamy-command',
                                           'Test-Connection')]
-                    self._periods_since_last_event = 0
                     self.dispatch_priority(evs)
+                    test_connection = True
                 else:
                     return
+            else:
+                test_connection = False
         else:
             raise ZtreamyException('Bad event type', 'send_event')
         self._periods_since_last_event = 0
@@ -665,26 +683,27 @@ class _EventDispatcher(object):
                     self._send(serialized, client)
                 for client in self.unsynced_compressed_streaming_clients:
                     self._send(serialized, client)
-                for client in self.local_clients:
-                    if not client.closed:
-                        client._send_events(evs)
-                for client in self.one_time_clients:
-                    self._send(serialized, client)
-                    client.close()
+                if not test_connection:
+                    for client in self.local_clients:
+                        if not client.closed:
+                            client._send_events(evs)
+                    for client in self.one_time_clients:
+                        self._send(serialized, client)
+                        client.close()
+                    self.one_time_clients = []
                 if len(self.compressed_streaming_clients) > 0:
                     compressed_data = (self._compressor.compress(serialized)
                                    + self._compressor.flush(zlib.Z_SYNC_FLUSH))
                     for client in self.compressed_streaming_clients:
                         self._send(compressed_data, client)
-            if num_json_clients > 0:
+            if not test_connection and num_json_clients > 0:
                 serialized = self._serialize_events(evs, json=True)
                 for client in self.one_time_json_clients:
                     self._send(serialized, client)
                     client.close()
+                self.one_time_json_clients = []
             for e in evs:
                 logger.logger.event_dispatched(e)
-        self.one_time_clients = []
-        self.one_time_json_clients = []
         self._num_events_since_sync += len(evs)
 
     def close(self):
@@ -720,21 +739,106 @@ class _EventDispatcher(object):
             logging.error("Error in client callback", exc_info=True)
 
     def _serialize_events(self, evs, json=False):
-        if not json:
-            return ztreamy.serialize_events(evs)
+        if json:
+            serialization = ztreamy.SERIALIZATION_JSON
         else:
-            return ztreamy.serialize_events_json(evs)
+            serialization = ztreamy.SERIALIZATION_ZTREAMY
+        return ztreamy.serialize_events(evs, serialization=serialization)
 
 
-class _MainHandler(tornado.web.RequestHandler):
+class _GenericHandler(tornado.web.RequestHandler):
+    _q_re = re.compile(r'^\s*(\w+)\s*;\s*q=(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$')
+    _attribute_re = re.compile(r'^\s*(\w+)\s*')
+
+    def __init__(self, application, request, **kwargs):
+        super(_GenericHandler, self).__init__(application, request, **kwargs)
+
+    def _select_encoding(self, acceptable_encodings):
+        """Selects an appropriate encoding for the HTTP response.
+
+        It receives the list of encodings the server accepts
+        for this request, analyzes the Accept-Encoding header
+        of the request and finds the best match.
+
+        Returns None if no suitable encoding is found.
+
+        """
+        if not acceptable_encodings:
+            raise ValueError('Empty acceptable encodings list')
+        encodings = self._accept_values('Accept-Encoding')
+        if not encodings:
+            encodings = ['identity']
+        for encoding in encodings:
+            if encoding in acceptable_encodings:
+                selected = encoding
+                break
+            elif encoding == '*':
+                selected = acceptable_encodings[0]
+                break
+        else:
+            # No suitable encoding found
+            selected = None
+        return selected
+
+    def _accept_values(self, header_name):
+        """Returns the list of the items of a comma-separated header value.
+
+        Quality values are processed according to HTTP content negotiation.
+
+        """
+        return _GenericHandler._accept_values_internal( \
+                                    self.request.headers.get_list(header_name))
+
+    @staticmethod
+    def _accept_values_internal(header_value_list):
+        """Returns the list of the items of a comma-separated header value.
+
+        Quality values are processed according to HTTP content negotiation.
+
+        """
+        values = []
+        for value_list in header_value_list:
+            values.extend([value.strip() for value in value_list.split(',')])
+        q_values = []
+        for i, value in enumerate(values):
+            attribute, quality = _GenericHandler._read_q_value(value)
+            q_values.append((-quality, i, attribute))
+        return [v[2] for v in sorted(q_values)]
+
+    @staticmethod
+    def _read_q_value(value):
+        correct = False
+        if ';' in value:
+            r = _GenericHandler._q_re.search(value)
+            if r:
+                attribute = r.group(1)
+                try:
+                    quality = float(r.group(2))
+                    correct = True
+                except ValueError:
+                    # correct remains False
+                    pass
+        else:
+            r = _GenericHandler._attribute_re.search(value)
+            if r:
+                attribute = r.group(1)
+                quality = 1.0
+                correct = True
+        if  correct:
+            return attribute, quality
+        else:
+            raise tornado.web.HTTPError(400, 'Bad Request')
+
+
+class _MainHandler(_GenericHandler):
     def get(self):
         raise tornado.web.HTTPError(404)
 
 
-class _EventPublishHandler(tornado.web.RequestHandler):
+class _EventPublishHandler(_GenericHandler):
     def __init__(self, application, request, stream=None,
                  stop_when_source_finishes=False):
-        tornado.web.RequestHandler.__init__(self, application, request)
+        super(_EventPublishHandler, self).__init__(application, request)
         self.stream = stream
         self.stop_when_source_finishes = stop_when_source_finishes
 
@@ -759,11 +863,17 @@ class _EventPublishHandler(tornado.web.RequestHandler):
         self.finish()
 
     def post(self):
-        if self.request.headers['Content-Type'] != ztreamy.event_media_type:
+        if self.request.headers['Content-Type'] == ztreamy.event_media_type:
+            deserializer = events.Deserializer()
+            parse_body = self.stream.parse_event_body
+        elif self.request.headers['Content-Type'] == ztreamy.json_media_type:
+            deserializer = events.JSONDeserializer()
+            parse_body = True
+        else:
             raise tornado.web.HTTPError(400, 'Bad content type')
-        deserializer = events.Deserializer()
         try:
-            evs = deserializer.deserialize(self.request.body, parse_body=True,
+            evs = deserializer.deserialize(self.request.body,
+                                           parse_body=parse_body,
                                            complete=True)
         except Exception as ex:
             traceback.print_exc()
@@ -781,27 +891,38 @@ class _EventPublishHandler(tornado.web.RequestHandler):
         self.finish()
 
 
-class _EventStreamHandler(tornado.web.RequestHandler):
+class _EventStreamHandler(_GenericHandler):
     def __init__(self, application, request, stream=None,
-                 dispatcher=None, compress=False, priority=False):
-        tornado.web.RequestHandler.__init__(self, application, request)
+                 dispatcher=None, force_compression=False, priority=False):
+        super(_EventStreamHandler, self).__init__(application, request)
         self.dispatcher = dispatcher
-        self.compress = compress
+        self.force_compression = force_compression
         self.stream = stream
         self.priority = priority
 
     @tornado.web.asynchronous
     def get(self):
         last_event_seen = self.get_argument('last-seen', default=None)
-        self.client = _Client(self, self._on_new_data, streaming=True,
-                              compress=self.compress, priority=self.priority)
-        self.dispatcher.register_client(self.client,
-                                        last_event_seen=last_event_seen)
-        self.set_header('Content-Type', ztreamy.stream_media_type)
-        # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
-        self.set_header('Access-Control-Allow-Origin', '*')
-        if self.compress:
-            self.set_header('Content-Encoding', 'deflate')
+        if not self.priority:
+            if self.force_compression:
+                encoding = 'deflate'
+            else:
+                encoding = self._select_encoding(['deflate', 'identity'])
+        else:
+            encoding = 'identity'
+        if encoding is not None:
+            compress = True if encoding == 'deflate' else False
+            self.client = _Client(self, self._on_new_data, streaming=True,
+                                  compress=compress, priority=self.priority)
+            self.dispatcher.register_client(self.client,
+                                            last_event_seen=last_event_seen)
+            self.set_header('Content-Type', ztreamy.stream_media_type)
+            # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
+            self.set_header('Access-Control-Allow-Origin', '*')
+            if compress:
+                self.set_header('Content-Encoding', 'deflate')
+        else:
+            raise tornado.web.HTTPError(406, 'Not Acceptable')
 
     def _on_new_data(self, data):
         if self.request.connection.stream.closed():
@@ -814,9 +935,9 @@ class _EventStreamHandler(tornado.web.RequestHandler):
         self.dispatcher.deregister_client(self.client)
 
 
-class _ShortLivedHandler(tornado.web.RequestHandler):
+class _ShortLivedHandler(_GenericHandler):
     def __init__(self, application, request, dispatcher=None, stream=None):
-        tornado.web.RequestHandler.__init__(self, application, request)
+        super(_ShortLivedHandler, self).__init__(application, request)
         self.dispatcher = dispatcher
         # the 'stream' argument is ignored (not necessary)
 
@@ -825,12 +946,12 @@ class _ShortLivedHandler(tornado.web.RequestHandler):
         last_event_seen = self.get_argument('last-seen', default=None)
         json = False
         if ('Accept' in self.request.headers
-            and json_media_type in self.request.headers['Accept']):
+            and ztreamy.json_media_type in self.request.headers['Accept']):
                 json = True
         if not json:
             self.set_header('Content-Type', ztreamy.stream_media_type)
         else:
-            self.set_header('Content-Type', json_media_type)
+            self.set_header('Content-Type', ztreamy.json_media_type)
         self.set_header('Access-Control-Allow-Origin', '*')
         self.client = _Client(self, self._on_new_data, streaming=False,
                               json=json)

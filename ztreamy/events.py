@@ -196,6 +196,50 @@ class Deserializer(object):
                                    'event_deserialize')
 
 
+class JSONDeserializer(object):
+    def __init__(self):
+        pass
+
+    def deserialize(self, data, parse_body=True, complete=True):
+        if not parse_body:
+            raise ValueError('parse_body must be True in JSONDeserializer')
+        if not complete:
+            raise ValueError('data must be complete in JSONDeserializer')
+        objects = json.loads(data)
+        if not isinstance(objects, list):
+            objects = [objects]
+        return [JSONDeserializer._dict_to_event(e) for e in objects]
+
+    @staticmethod
+    def _dict_to_event(d):
+        if (not 'Event-Id' in d
+            or not 'Source-Id' in d
+            or not 'Syntax' in d):
+            raise ZtreamyException('Missing headers in event',
+                                   'event_deserialize')
+        if not 'Body' in d:
+            raise ZtreamyException('Missing body in event',
+                                   'event_deserialize')
+        if ('Aggregator-Ids' in d
+            and not isinstance(d['Aggregator-Ids'], list)):
+            raise ZtreamyException('Incorrect Aggregator-Id data',
+                                   'event_deserialize')
+        extra_headers = {}
+        for header in d:
+            if not header in Event.headers and header != 'Body':
+                extra_headers[header] = d[header]
+        event = Event.create(d['Source-Id'],
+                             d['Syntax'],
+                             d['Body'],
+                             event_id=d['Event-Id'],
+                             application_id=d.get('Application-Id'),
+                             aggregator_id=d.get('Aggregator-Ids', []),
+                             event_type=d.get('Event-Type'),
+                             timestamp=d.get('Timestamp'),
+                             extra_headers=extra_headers)
+        return event
+
+
 class Event(object):
     """Generic event in the system.
 
@@ -206,7 +250,7 @@ class Event(object):
 
     _subclasses = {}
     _always_parse = []
-    headers = [
+    headers = (
         'Event-Id',
         'Source-Id',
         'Syntax',
@@ -214,8 +258,15 @@ class Event(object):
         'Aggregator-Ids',
         'Event-Type',
         'Timestamp',
-        'Body-Length'
-        ]
+        'Body-Length',
+        )
+    _string_properties = (
+        'event_id',
+        'source_id',
+        'syntax',
+        'event_type',
+        'timestamp',
+    )
 
     @staticmethod
     def register_syntax(syntax, subclass, always_parse=False):
@@ -266,21 +317,41 @@ class Event(object):
         self.body = body
         if aggregator_id is None:
             aggregator_id = []
+        elif type(aggregator_id) is not list:
+            self.aggregator_id = [str(aggregator_id)]
         else:
-            if type(aggregator_id) is not list:
-                self.aggregator_id = [str(aggregator_id)]
-            else:
-                self.aggregator_id = [str(e) for e in aggregator_id]
+            self.aggregator_id = [str(e) for e in aggregator_id]
         self.event_type = event_type
         self.timestamp = timestamp or ztreamy.get_timestamp()
         self.application_id = application_id
+        self.extra_headers = {}
         if extra_headers is not None:
-            self.extra_headers = extra_headers
-        else:
-            self.extra_headers = {}
+            # Do this in order to ensure type checking
+            for header, value in extra_headers.iteritems():
+                self.set_extra_header(header, value)
+
+    def __setattr__(self, name, value):
+        """Check the values of some event properties."""
+        if (name in Event._string_properties
+            and value is not None
+            and not isinstance(value, basestring)):
+            raise ValueError('String value expected for property ' + name)
+        elif name == 'aggregator_id':
+            if not isinstance(value, list):
+                raise ValueError('List value expected for property ' + name)
+            else:
+                for item in value:
+                    if not isinstance(item, basestring):
+                        raise ValueError('Aggregator ids must be strings')
+        super(Event, self).__setattr__(name, value)
 
     def set_extra_header(self, header, value):
         """Adds an extra header to the event."""
+        if (not isinstance(header, basestring)
+            or not isinstance(value, basestring)):
+            raise ValueError('String name/value expected for extra header')
+        if header in Event.headers or header == 'Body':
+            raise ValueError('Reserved extra heder name: ' + header)
         self.extra_headers[header] = value
 
     def append_aggregator_id(self, aggregator_id):
@@ -341,10 +412,12 @@ class Event(object):
             data[header] = value
         if json:
             body = self.body_as_json()
+            syntax = self.syntax_as_json()
         else:
             body = None
+            syntax = self.syntax
+        data['Syntax'] = str(syntax)
         if body is None:
-            data['Syntax'] = str(self.syntax)
             data['Body'] = self.serialize_body()
         else:
             data['Body'] = body
@@ -352,6 +425,9 @@ class Event(object):
 
     def as_json(self):
         return self.as_dictionary(json=True)
+
+    def syntax_as_json(self):
+        return self.syntax
 
     def body_as_json(self):
         return None
@@ -389,7 +465,6 @@ class Command(Event):
 
     """
     valid_commands = [
-        'Set-Compression',
         'Test-Connection',
         'Event-Source-Started',
         'Event-Source-Finished',
@@ -455,6 +530,34 @@ class TestEvent(Event):
         pass
 
 Event.register_syntax('ztreamy-test', TestEvent, always_parse=True)
+
+
+class JSONEvent(Event):
+    """Event consisting of a JSON object."""
+
+    supported_syntaxes = [ztreamy.json_media_type]
+
+    def __init__(self, source_id, syntax, body, **kwargs):
+        if not syntax in JSONEvent.supported_syntaxes:
+            raise ZtreamyException('Usupported syntax in JSONEvent',
+                                   'programming')
+        super(JSONEvent, self).__init__(source_id, syntax, None, **kwargs)
+        if isinstance(body, basestring):
+            self.body = self._parse_body(body)
+        else:
+            self.body = body
+
+    def serialize_body(self):
+        return json.dumps(self.body) + '\r\n\r\n'
+
+    def body_as_json(self):
+        return self.body
+
+    def _parse_body(self, body):
+        return json.loads(body)
+
+for syntax in JSONEvent.supported_syntaxes:
+    Event.register_syntax(syntax, JSONEvent)
 
 
 def create_command(source_id, command):

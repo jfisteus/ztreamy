@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2012 Jesus Arias Fisteus
+# Copyright (C) 2011-2014 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,8 +20,6 @@ import logging
 import time
 import datetime
 import random
-
-from tornado.httpclient import AsyncHTTPClient
 
 import ztreamy
 from ztreamy import client
@@ -130,10 +128,7 @@ class BogusClient(client.AsyncStreamingClient):
 
     def _deserialize(self, data):
         evs = []
-        compressed_len = len(data)
-        if self._compressed:
-            data = self._decompressor.decompress(data)
-        logger.logger.data_received(compressed_len, len(data))
+        logger.logger.data_received(len(data), len(data))
         evs = self._deserializer.deserialize(data)
         if len(evs) > 0 and isinstance(evs[-1], events.Command):
             if evs[-1].command == 'Event-Source-Finished':
@@ -278,10 +273,10 @@ def read_cmd_options():
     return options
 
 def main():
-    def close_callback(client):
+    def close_callback(cli):
         reconnecting = False
-        clients.remove(client)
-        if tornado.options.options.reconnect and not client.finished:
+        clients.remove(cli)
+        if tornado.options.options.reconnect and not cli.finished:
             if times_reconnected[0] >= max_reconnections:
                 print 'Active clients:', len(clients), '/', options.num_clients
                 num_disconnected_clients[0] += 1
@@ -291,11 +286,11 @@ def main():
                 print 'preparing reconnection', entity_id
                 reconnecting = True
                 times_reconnected[0] += 1
-                if client.no_parse:
+                if cli.no_parse:
                     _invoke_later(connect_new_client_no_parsing)
                 else:
                     _invoke_later(connect_new_client_parsing)
-        elif not client.finished:
+        elif not cli.finished:
             num_disconnected_clients[0] += 1
             print 'A client got disconnected with reconnect disabled.', \
                   entity_id
@@ -320,9 +315,9 @@ def main():
         print "Created parsing client for reconnection", entity_id
 
     def finish_callback():
-        for client in clients:
-            client.finished = True
-            client.stop(notify_connection_close=False)
+        for cli in clients:
+            cli.finished = True
+            cli.stop(notify_connection_close=False)
         del clients[:]
         tornado.ioloop.IOLoop.instance().stop()
 
@@ -335,8 +330,7 @@ def main():
     max_reconnections = 3 * options.num_clients
     if max_reconnections < 100:
         max_reconnections = 100
-    AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
-                              max_clients=options.num_clients)
+    client.configure_max_clients(options.num_clients)
     clients = []
     if not no_parse:
         stats = _Stats(options.num_clients)

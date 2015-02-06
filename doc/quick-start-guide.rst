@@ -39,11 +39,12 @@ your Linux distribution. For example, in Debian and Ubuntu::
 
     sudo apt-get install python-virtualenv
 
-Ztreamy requires the *libcurl* library and its development files to be
+Ztreamy requires the Python header files
+and the *libcurl* with its header files to be
 installed in your system. In Debian and Ubuntu they are packaged as
-`libcurl3` and `libcurl-dev`::
+`python-dev`, `libcurl3` and `libcurl4-openssl-dev` respectively::
 
-    sudo apt-get install curl libcurl3 libcurl4-openssl-dev
+    sudo apt-get install python-dev curl libcurl3 libcurl4-openssl-dev
 
 Now, somewhere in your user account, create the *virtualenv* directory
 in which Ztreamy will be installed. For example, if you call the
@@ -62,13 +63,13 @@ file `ztreamy-<version>.tar.gz` (where `<version>` represents the
 version number of the release of Ztreamy) from the `downloads page of
 Ztreamy <http://www.it.uc3m.es/jaf/ztreamy/download/>`_. Then, install
 it with `easy_install`. For example, if you downloaded
-`ztreamy-0.1.1.tar.gz` you would install it with::
+`ztreamy-0.3.0.tar.gz` you would install it with::
 
-    easy_install ztreamy-0.1.1.tar.gz
+    pip install ztreamy-0.3.0.tar.gz
 
-The `easy_install` command will install Ztreamy inside the virtual
-environment. In addition, it will also download and install all the
-other python packages required by Ztreamy.
+The `pip` command will install Ztreamy inside the virtual environment.
+In addition, it will also download and install
+all the other python packages required by Ztreamy.
 
 
 Trying the installation for the first time

@@ -95,9 +95,11 @@ access mode, which can be one of the following:
 The access mode is communicated to the server by appending to the path
 of the URI one of the following components:
 
-- `/compressed`: long-lived requests with ZLIB compression.
+- `/compressed`: long-lived requests with *deflate* compression (ZLib).
 
-- `/stream`: long-lived requests with no compression.
+- `/stream`: long-lived requests with optional compression.
+  Set the *Accept-Encoding* header to *deflate* in order to
+  receive the data with *deflate* compression (ZLib).
 
 - `/long-polling`: long-polling requests with no compression.
 
@@ -108,8 +110,8 @@ Developing a consumer asynchronously
 The following program connects to two streams and prints the events
 that come from them:
 
-    .. include:: ../examples/consumer_async.py
-       :literal:
+.. include:: ../examples/python/consumer_async.py
+   :literal:
 
 Using the client requires three main steps:
 
@@ -138,7 +140,22 @@ access mode: the stream name in the path must be followed either by
 is that the first one uses ZLIB compression. Your program does not
 need to be aware about compression, because `ztreamy` decompresses the
 data internally. Connecting to the compressed stream should normally
-be the preferred option, due to the amount if traffic it saves.
+be the preferred option, due to the amount of traffic it saves.
+
+Be aware that the HTTP client library of Tornado
+internally limits the maximum number of simultaneously active HTTP requests
+on the same IOLoop.
+The default in Tornado (with the CURL client, which is the one Ztreamy uses)
+is currently set to 10.
+If you need to subscribe to more than 10 simultaneous streams,
+you'll need to increase that maximum value.
+This can be done with a simple function call,
+as shown in the following example,
+which raises the maximum to 200 simultaneous requests::
+
+    import ztreamy.client
+
+    ztreamy.client.configure_max_clients(200)
 
 
 Developing a consumer synchronously
@@ -147,8 +164,8 @@ Developing a consumer synchronously
 The following program connects to a stream with the synchronous API
 and prints the events that come from it:
 
-    .. include:: ../examples/consumer_sync.py
-       :literal:
+.. include:: ../examples/python/consumer_sync.py
+   :literal:
 
 There are two main steps:
 
@@ -195,8 +212,8 @@ Publishing events from the stream server
 The following example sets up a stream server that serves two streams,
 and publishes periodical events on them:
 
-    .. include:: ../examples/server.py
-       :literal:
+.. include:: ../examples/python/server.py
+   :literal:
 
 The key aspects to take into account in the previous example are that:
 
@@ -215,8 +232,8 @@ Publishing events through a remote stream server asynchronously
 The following example publishes periodic events using the asynchronous
 API:
 
-    .. include:: ../examples/publisher_async.py
-       :literal:
+.. include:: ../examples/python/publisher_async.py
+   :literal:
 
 The program creates an `EventPublisher` object and publishes a new
 event every 10 seconds, by using its `publish` method. Note that the
@@ -231,8 +248,8 @@ Publishing events through a remote stream server synchronously
 The following example publishes periodic events using the synchronous
 API:
 
-    .. include:: ../examples/publisher_sync.py
-       :literal:
+.. include:: ../examples/python/publisher_sync.py
+   :literal:
 
 The main difference with the previous example is that now the program
 does not block on the *ioloop*, but uses sleep to control the rate at
@@ -283,7 +300,7 @@ sequence CRLF.  However, Ztreamy imposes no restrictions regarding
 end-of-line delimiters in the body of the event, which should adhere
 the specifications for the specific data-type (e.g. for N3, RDF/XML
 and JSON-LD both LF and CRLF delimiters are allowed by their
-corresponding specifications.)
+specifications.)
 
 Ztreamy provides an API for representing events as objects, and for
 serializing and deserializing them. The `Event` class is the base
@@ -362,10 +379,99 @@ handles. This way, when the platform finds an event of one of those
 types, it automatically creates the event using the custom class.
 
 As an example, this is the source code of the implementation of
-`RDFEvent` in ztreamy::
+`RDFEvent` in ztreamy:
 
-    .. include:: ../ztreamy/rdfevents.py
-       :literal:
+.. include:: ../examples/python/publisher_async.py
+   :literal:
+
+
+JSON serialization of events
+............................
+
+Since version 0.3, events can optionally be encoded
+as JSON objects.
+This is quite convenient, for example,
+for sending or receiving JSON-formatted events
+from a JavaScript client running within a web browser.
+
+The body can be represented as JSON or any other textual format.
+All the event headers are top-level properties
+in the JSON object.
+However, the *Body-Length* header is not necessary,
+because the body is properly delimited
+by the JSON syntax.
+For example, this is a JSON-serilized event
+in which the event body is also a JSON object::
+
+    {
+        "Event-Id": "124e409a-6157-48a6-b2f1-32b838584dc2",
+        "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+        "Timestamp": "2015-02-04T18:44:36+01:00",
+        "Syntax": "application/json",
+        "Body": {
+            "speed": "40.5",
+            "location": "Madrid"
+        }
+    }
+
+The following example shows an RDF body with JSON-LD syntax
+(the event body is cropped for clarity)::
+
+    {
+        "Event-Id": "3f2fbe91-0850-4fe1-914a-79b577db200f",
+        "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+        "Timestamp": "2015-02-04T18:57:47+01:00",
+        "Syntax": "application/ld+json",
+        "Body": [{"http://www.w3.org/2003/01/geo/wgs84_pos#long": (...)
+    }
+
+For any body syntax different to JSON or JSON-LD,
+the body is specified just as a string.
+For example, a *text/plain* body would be represented as::
+
+    {
+        "Event-Id": "9b80f271-f3dc-4968-922b-12e1a6c60464"
+        "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+        "Timestamp": "2015-02-04T19:09:12+01:00",
+        "Syntax": "text/plain",
+        "Body": "Call me at 5pm"
+    }
+
+You can also serialize several events together.
+In order to do that,
+encapsulate each event as an object within a JSON array::
+
+    [
+        {
+            "Event-Id": "3f2fbe91-0850-4fe1-914a-79b577db200f",
+            "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+            "Timestamp": "2015-02-04T18:57:47+01:00",
+            "Syntax": "application/ld+json",
+            "Body": [{"http://www.w3.org/2003/01/geo/wgs84_pos#long": (...)
+        },
+        {
+            "Event-Id": "9b80f271-f3dc-4968-922b-12e1a6c60464"
+            "Source-Id": "83a4c888-c395-4bb7-a635-c5b864d6bd06",
+            "Timestamp": "2015-02-04T19:09:12+01:00",
+            "Syntax": "text/plain",
+            "Body": "Call me at 5pm"
+        }
+    ]
+
+
+When you send a JSON object to a Ztreamy server,
+the *Content-Type* header of the HTTP request
+must be set to *application/json*.
+
+When you consume events from a stream,
+you can request events to be serialized with JSON
+only in long-polling requests.
+For long-lived requests,
+the Ztreamy event serialization format is the only one
+permitted right now.
+In order to get JSON events
+in for long-polling request,
+set the *Accept* header to *application/json*.
 
 
 Selecting specific events (filtering)
@@ -451,10 +557,10 @@ application id to filter). Then, it creates the client and passes the
 filter object as an event callback.
 
 This is a complete example that you can find in the examples directory
-under the name of `consumer_filter.py`::
+under the name of `consumer_filter.py`:
 
-    .. include:: ../examples/publisher_async.py
-       :literal:
+.. include:: ../examples/python/publisher_async.py
+   :literal:
 
 In order to try it, run the example server of `Publishing events from
 the stream server`_ and, in another terminal, run the consumer above.
