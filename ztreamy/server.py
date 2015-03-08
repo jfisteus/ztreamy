@@ -587,7 +587,7 @@ class _EventDispatcher(object):
                 self.streaming_clients.append(client)
             logging.info('Streaming client registered; stream: %i; comp: %i'\
                              %(client.streaming, client.compress))
-        if last_event_seen != None:
+        if last_event_seen:
             # Send the available events after the last seen event
             evs, none_lost = self.recent_events.newer_than(last_event_seen)
             if len(evs) > 0:
