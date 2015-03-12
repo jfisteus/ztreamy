@@ -15,6 +15,8 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
+
 from optparse import OptionParser
 
 def compression_ratio(filename):
@@ -45,7 +47,7 @@ def read_cmd_options():
 def main():
     options = read_cmd_options()
     data = compression_ratio(options.filename)
-    print '\n'.join(['%d\t%.6f'%(t, r) for t, r in data])
+    print('\n'.join(['%d\t%.6f'%(t, r) for t, r in data]))
 
 if __name__ == '__main__':
     main()

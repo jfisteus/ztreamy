@@ -15,6 +15,8 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
+
 import os
 import sys
 from setuptools import setup
@@ -23,7 +25,7 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 if sys.version_info[0] != 2 or sys.version_info[1] not in [7]:
-    print 'ztreamy needs Python 2.7'
+    print('ztreamy needs Python 2.7')
     sys.exit(1)
 
 # Dependencies

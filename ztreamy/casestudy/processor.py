@@ -15,6 +15,8 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
+
 import tornado.ioloop
 import tornado.options
 from rdflib.graph import Graph
@@ -45,10 +47,10 @@ class Processor(object):
         pass
 
     def _handle_event(self, evs):
-        print 'Received %d events.'%len(evs)
+        print('Received {} events.'.format(len(evs)))
         for event in evs:
             self.triple_store += event.body
-        print len(self.triple_store)
+        print(len(self.triple_store))
 
 
 def read_cmd_options():

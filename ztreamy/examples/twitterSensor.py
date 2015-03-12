@@ -20,6 +20,8 @@
     publishing those events into an output stream
 """
 
+from __future__ import print_function
+
 import sys
 import cjson as json
 import tornado
@@ -131,7 +133,7 @@ class TwitterStreamSensor():
                           auth_password=self.PASS,
                           request_timeout=0, connect_timeout=0)
         http_client.fetch(req, self.on_receive)
-        print "Launched Twitter request"
+        print("Launched Twitter request")
 
 
     def on_receive(self, data):
@@ -156,10 +158,10 @@ class TwitterStreamSensor():
 
     def publish(self, graph):
         event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph, application_id = self.app_id)
-        ## print event
+        ## print(event)
         self.publisher.publish(event)
         self.counter += 1
-        ## print "***",self.counter,"events published\n"
+        ## print("*** {} events published\n".format(self.counter))
         
 
 def main():
