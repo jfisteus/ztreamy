@@ -41,7 +41,7 @@ requirements = ['setuptools',
 if sys.version_info[1] == 6:
     requirements.append('argparse')
 
-tests_require = ['unittest2']
+tests_require = ['unittest']
 
 setup(
     name = "ztreamy",
