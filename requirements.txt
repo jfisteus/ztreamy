@@ -1,7 +1,6 @@
 setuptools
 tornado
-rdflib
-rdfextras
+rdflib>=4.0
 rdflib-jsonld
 tweepy==2.3.0
 pycurl
