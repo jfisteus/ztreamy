@@ -32,6 +32,7 @@ callbacks (for example, sources of events and filters), because the
 server will be blocked.
 
 """
+from __future__ import print_function
 
 import logging
 import tornado.escape
@@ -1072,7 +1073,7 @@ def main():
     server.add_stream(stream)
     ## server.add_stream(relay)
     if tornado.options.options.eventlog:
-        print stream.source_id
+        print(stream.source_id)
         comments = {'Buffer time (ms)': buffering_time}
 #        logger.logger = logger.ZtreamyLogger(stream.source_id,
         logger.logger = logger.CompactServerLogger(stream.source_id,

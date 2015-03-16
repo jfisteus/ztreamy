@@ -15,6 +15,8 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
+
 from optparse import OptionParser
 
 from ztreamy.tools import utils
@@ -74,7 +76,7 @@ def read_cmd_options():
 def main():
     options = read_cmd_options()
     stats = manyc_delays(options.filenames)
-    print '\n'.join([str(stats[num]) for num in sorted(stats.keys())])
+    print('\n'.join([str(stats[num]) for num in sorted(stats.keys())]))
 
 if __name__ == '__main__':
     main()

@@ -20,6 +20,8 @@
     to some methods used within other example applications
 """
 
+from __future__ import print_function
+
 import pycurl
 import cjson as json
 import cStringIO    
@@ -246,11 +248,11 @@ class GeonamesClient():
             # Sync the GateKeeper by expending all savings (thus disallowing future calls for a while)
             if errorCode == self.HOURLIMITERR:		
                 self.hourlyGateKeeper.expend(self.hourlyGateKeeper.savings())
-                print "Hour limit error"
+                print("Hour limit error")
 
             if errorCode == self.DAYLIMITERR:
                 self.dailyGateKeeper.expend(self.dailyGateKeeper.savings())
-                print "Day limit error"
+                print("Day limit error")
                 
             return True
         
@@ -270,7 +272,7 @@ class GeonamesClient():
             conn.perform()
             conn.close()
         except pycurl.error, error:
-            print "Error while accessing GeoNames"
+            print("Error while accessing GeoNames")
             
         return storage
 
@@ -283,10 +285,10 @@ def main():
     options = parser.parse_args()
 
     client = GeonamesClient(username = options.user)
-    print client.findNearbyWikipedia("-3.764647", "40.332020")
-    print client.findNearbyPlaceName("-3.764647", "40.332020")
-    print client.findNearbyPlaceNames("-3.704211", "40.416992", radius=1)
-    print client.children(3117735, godown=1)
+    print(client.findNearbyWikipedia("-3.764647", "40.332020"))
+    print(client.findNearbyPlaceName("-3.764647", "40.332020"))
+    print(client.findNearbyPlaceNames("-3.704211", "40.416992", radius=1))
+    print(client.children(3117735, godown=1))
 
 
 if __name__ == "__main__":

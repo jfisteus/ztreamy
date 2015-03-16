@@ -15,6 +15,8 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
+
 import tornado.options
 
 from ztreamy import RelayStream, StreamServer, logger
@@ -66,7 +68,7 @@ def main():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
 
     if tornado.options.options.eventlog:
-        print stream.source_id
+        print(stream.source_id)
         comments = {'Buffer time (ms)': buffering_time}
 #        logger.logger = logger.ZtreamyLogger(stream.source_id,
         logger.logger = logger.CompactServerLogger(stream.source_id,

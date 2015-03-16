@@ -26,6 +26,8 @@
     a country code can be used to define the geographic area of interest.
 """
 
+from __future__ import print_function
+
 import sys
 import argparse
 import re
@@ -124,7 +126,7 @@ def main():
                            6545078, 6545084, 6544099, 6545085, 3116156, 6545090, 6545088, 3113943, 6324376, 3119198, \
                            3112772, 3112737, 6544495, 6544491, 6545087, 6545083, 3108118, 6544490, 3106970]
         
-        print "List of geonamesIds to be watched: ",watchedIds
+        print("List of geonamesIds to be watched: {}".format(watchedIds))
 
     # Case 2: query by position and radius
     if queryType == "position":
@@ -133,13 +135,13 @@ def main():
         watchedIds = geo.findNearbyPlaceNames(long, lat, radius, maxResults = 30)
         # Mockup for Madrid city center obtained by calling findNearbyPlaceNames("-3.704211", "40.416992", radius=1, maxResults=10)
         # watchedIds = [6545083, 3117735, 6544494, 6545088, 6545077, 6545082, 6545081, 6545084]
-        print "List of geonamesIds to be watched: ",watchedIds
+        print("List of geonamesIds to be watched: {}".format(watchedIds))
     
     # Case 3: query by country code
     watchedCountry = []
     if queryType == "country":
         watchedCountry.append(queryValue[0])
-        print "Country code to be watched ",watchedCountry
+        print("Country code to be watched {}".format(watchedCountry))
 
     # Publisher to push the generated events 
     publisher = client.SynchronousEventPublisher(outputUrl)
@@ -172,14 +174,14 @@ def main():
             if onlyWatched:
                 if (geoId in watchedIds) or (country in watchedCountry):
                     publisher.publish(event)
-                    print event
+                    print(event)
                     counter += 1
-                    print "***",counter,"events published\n"
+                    print("*** {} events published\n".format(counter))
             else:
                 publisher.publish(event)
-                print event
+                print(event)
                 counter += 1
-                print "***",counter,"events published\n"
+                print("*** {} events published\n".format(counter))
 
 
 if __name__ == "__main__":

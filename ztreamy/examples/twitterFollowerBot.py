@@ -20,6 +20,8 @@
     his/her timeline and generating events with each tweet
 """
 
+from __future__ import print_function
+
 import argparse
 import tornado.ioloop
 import tornado.options
@@ -74,15 +76,15 @@ class TwitterFollowerBot():
         self.schedule_next_event()
         tweets = self.client.get_tweets(self.last_id)
         if len(tweets) > 0:
-          print "Generating ",len(tweets)," events..."
+          print("Generating {} events...".format(len(tweets)))
           for tweet in tweets:
             n3rdf = self.toN3(tweet)
             event = rdfevents.RDFEvent(self.source_id, 'text/n3', n3rdf, application_id=self.app_id)
-            print event
+            print(event)
             self.publisher.publish(event)
             self.last_id = tweet.id
         else:
-          print "No new events to be generated..."
+          print("No new events to be generated...")
 
     def start(self):
         self.schedule_next_event()
