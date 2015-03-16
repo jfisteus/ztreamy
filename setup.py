@@ -37,8 +37,6 @@ requirements = ['setuptools',
                 'httplib2',
                 'simplejson',
                 ]
-if sys.version_info[1] == 6:
-    requirements.append('argparse')
 
 tests_require = ['unittest']
 
