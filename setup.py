@@ -47,6 +47,7 @@ setup(
     version = "0.3",
     author = "Jesus Arias Fisteus",
     description = ("A framework for publishing semantic events on the Web"),
+    license = 'GPL3',
     keywords = "rdf sensors web semantic-sensor-web",
     url = "http://www.it.uc3m.es/jaf/ztreamy",
     packages=['ztreamy', 'ztreamy.utils', 'ztreamy.tools',
