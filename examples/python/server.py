@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import time
 import random
 
@@ -21,13 +23,13 @@ application_ids = ['ztreamy-example-a', 'ztreamy-example-b']
 
 # Publish events periodically
 def publish_hi():
-    print 'Publishing "hi"'
+    print('Publishing "hi"')
     app_id = random.choice(application_ids)
     event = ztreamy.Event(source_id, 'text/plain', 'Hi', application_id=app_id)
     publisher1.publish(event)
 
 def publish_there():
-    print 'Publishing "there"'
+    print('Publishing "there"')
     app_id = random.choice(application_ids)
     event = ztreamy.Event(source_id, 'text/plain', 'there!',
                           application_id=app_id)
@@ -38,7 +40,7 @@ time.sleep(5)
 tornado.ioloop.PeriodicCallback(publish_there, 10000).start()
 
 try:
-    print 'Starting the server'
+    print('Starting the server')
     server.start(loop=True)
 except KeyboardInterrupt:
     # Allow ctrl-c to close the server

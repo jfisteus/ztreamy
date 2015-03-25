@@ -22,6 +22,8 @@
     a Java properties file: propName = propValue
 """
 
+from __future__ import print_function
+
 import tweepy
 import argparse
 import twitter_config
@@ -62,7 +64,7 @@ class TwitterRESTclient():
                 for tweet in public_tweets:
                     tweets_list.append(tweet)
             except tweepy.error.TweepError as e:
-                print "Twitter Error: %s" % str(e)
+                print("Twitter Error: {}".format(e))
                 pass
         return tweets_list
 
@@ -76,7 +78,7 @@ def main():
     client = TwitterRESTclient(options.user)
     tweets = client.get_tweets()
     for tweet in tweets:
-        print tweet.id,"\t",tweet.created_at
+        print('{id}\t{ts}'.format(id=tweet.id, ts=tweet.created_at))
 
 if __name__ == "__main__":
     main()

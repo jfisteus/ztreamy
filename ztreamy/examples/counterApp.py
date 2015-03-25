@@ -22,6 +22,8 @@
     stream new events including the statistics gathered.
 """
 
+from __future__ import print_function
+
 import sys
 import tornado
 import uuid
@@ -89,7 +91,7 @@ def publish(app_id, source_id, publisher):
     graph = buildGraph(mentionsDict, "mention")
     if graph != None:
         event = rdfevents.RDFEvent(source_id, 'text/n3', graph, application_id = app_id)
-        print event
+        print(event)
         publisher.publish(event)
 
     mentionsDict.clear()
@@ -97,7 +99,7 @@ def publish(app_id, source_id, publisher):
     graph = buildGraph(hashtagsDict, "hashtag")
     if graph != None:    
         event = rdfevents.RDFEvent(source_id, 'text/n3', graph, application_id = app_id)
-        print event
+        print(event)
         publisher.publish(event)
 
     hashtagsDict.clear()

@@ -20,6 +20,8 @@
     and publishes those events into an output stream
 """
 
+from __future__ import print_function
+
 import ast
 import tornado
 import argparse
@@ -139,7 +141,7 @@ class COSMAQESensor():
 
 
     def lookForUpdates(self):
-        print "Requesting sensor data..."
+        print("Requesting sensor data...")
         response, content = self.http.request(self.FEED_URL, headers={"X-ApiKey": self.KEY})
         if response.status != 200:
             return
@@ -154,10 +156,10 @@ class COSMAQESensor():
 
     def publish(self, source_id, graph):
         event = rdfevents.RDFEvent(source_id, 'text/n3', graph, application_id = self.app_id)
-        ## print event
+        ## print(event)
         self.publisher.publish(event)
         self.counter += 1
-        ## print "***",self.counter,"events published\n"
+        ## print("*** {} events published\n".format(counter))
         
 
 def main():

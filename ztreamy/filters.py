@@ -37,7 +37,7 @@ and override its 'filter_event()' method.
 
 """
 import rdflib
-import rdfextras.sparql.parser
+from rdflib.plugins.sparql.parser import parseQuery
 from pyparsing import Word, Literal, NotAny, QuotedString, Group, Forward, \
                       Keyword, ZeroOrMore, printables, alphanums
 
@@ -204,7 +204,7 @@ class SPARQLFilter(Filter):
             raise ZtreamyException('Only ASK queries are allowed '
                                    'in SPARQLFilter')
         super(SPARQLFilter, self).__init__(callback)
-        self.query = rdfextras.sparql.parser.parse(sparql_query)
+        self.query = parseQuery(sparql_query)
 
     def filter_event(self, event):
         if self.callback is not None and isinstance(event, RDFEvent):

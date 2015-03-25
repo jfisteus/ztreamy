@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import sys
 
 from ztreamy.client import SynchronousClient
@@ -11,8 +13,8 @@ def main():
     while not client.stream_finished:
         events = client.receive_events()
         for event in events:
-            print str(event)
-            print
+            print(str(event))
+            print()
 
 if __name__ == "__main__":
     main()

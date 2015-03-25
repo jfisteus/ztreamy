@@ -15,6 +15,8 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
+
 import tornado.ioloop
 import logging
 import time
@@ -278,12 +280,11 @@ def main():
         clients.remove(cli)
         if tornado.options.options.reconnect and not cli.finished:
             if times_reconnected[0] >= max_reconnections:
-                print 'Active clients:', len(clients), '/', options.num_clients
+                print('Active clients: {} / {}'.format(len(clients), options.num_clients))
                 num_disconnected_clients[0] += 1
-                print 'A client got disconnected with times overflown.', \
-                      entity_id
+                print('A client got disconnected with times overflown {}'.format(entity_id))
             else:
-                print 'preparing reconnection', entity_id
+                print('preparing reconnection {}'.format(entity_id))
                 reconnecting = True
                 times_reconnected[0] += 1
                 if cli.no_parse:
@@ -292,8 +293,7 @@ def main():
                     _invoke_later(connect_new_client_parsing)
         elif not cli.finished:
             num_disconnected_clients[0] += 1
-            print 'A client got disconnected with reconnect disabled.', \
-                  entity_id
+            print('A client got disconnected with reconnect disabled {}'.format(entity_id))
         if len(clients) == 0 and not reconnecting:
             tornado.ioloop.IOLoop.instance().stop()
 
@@ -303,7 +303,7 @@ def main():
                                  close_callback=close_callback)
         clients.append(new_client)
         new_client.start(loop=False)
-        print "Created a new non-parsing client for reconnection", entity_id
+        print('Created a new non-parsing client for reconnection: {}'.format(entity_id))
 
     def connect_new_client_parsing():
         times_reconnected[0] += 1
@@ -312,7 +312,7 @@ def main():
                                  finish_callback=finish_callback)
         clients.append(new_client)
         new_client.start(loop=False)
-        print "Created parsing client for reconnection", entity_id
+        print('Created parsing client for reconnection {}'.format(entity_id))
 
     def finish_callback():
         for cli in clients:
@@ -354,7 +354,7 @@ def main():
         sched = tornado.ioloop.PeriodicCallback(saturation_mon.fire, 5000)
     sched.start()
     if tornado.options.options.eventlog:
-        print entity_id
+        print(entity_id)
         logger.logger = logger.ZtreamyManycLogger(entity_id,
                                                 'manyc-' + entity_id + '.log')
         logger.logger.auto_flush = True

@@ -18,6 +18,8 @@
 """Analyzes log files to obtain performance statistics.
 
 """
+from __future__ import print_function
+
 import sys
 
 class Analyzer(object):
@@ -129,10 +131,10 @@ def main():
     max_delay = max(analyzer.delivery_delays)
     avg_delay = sum(analyzer.delivery_delays) / len(analyzer.delivery_delays)
     med_delay = median(analyzer.delivery_delays)
-    print 'Delays:', min_delay, avg_delay, max_delay, med_delay
+    print('Delays: {} {} {} {}'.format(min_delay, avg_delay, max_delay, med_delay))
     data_log = analyzer.data_delivery_log
-    print 'Data:', data_log.uncompressed_data, data_log.compressed_data, \
-        float(data_log.compressed_data) / data_log.uncompressed_data
+    print('Data: {} {} {}'.format(data_log.uncompressed_data, data_log.compressed_data, \
+        float(data_log.compressed_data) / data_log.uncompressed_data))
 
 if __name__ == "__main__":
     main()

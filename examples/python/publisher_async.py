@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import ztreamy
 import tornado.ioloop
 
@@ -8,7 +10,7 @@ source_id = ztreamy.random_id()
 
 # Publish events periodically
 def publish():
-    print 'Publishing'
+    print('Publishing')
     event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
     publisher.publish(event)
 

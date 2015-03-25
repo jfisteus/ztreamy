@@ -20,6 +20,8 @@
     and generates events notifying these editions
 """
 
+from __future__ import print_function
+
 import httplib2
 import rdflib
 import tornado
@@ -118,13 +120,13 @@ class WikipediaSensor():
             (num_changes, graph) = self.decode(content)
             if graph != None:
                 self.publish(graph)
-            print "*** Number of updates detected ",num_changes," ***"
+            print("*** Number of updates detected {} ***".format(num_changes))
         except:
             return
        
     def publish(self, graph):	
 	event = rdfevents.RDFEvent(self.source_id, 'text/n3', graph, application_id = self.app_id)
-	print event
+	print(event)
 	self.publisher.publish(event)
 
 def main():

@@ -135,7 +135,7 @@ from events import Deserializer, JSONDeserializer, Event, Command, JSONEvent
 from rdfevents import RDFEvent
 from filters import (Filter, SourceFilter, ApplicationFilter,
                      SimpleTripleFilter, VocabularyFilter,
-                     SimpleTripleFilter, SPARQLFilter, TripleFilter)
+                     SPARQLFilter, TripleFilter)
 from server import StreamServer, Stream, RelayStream
 from client import (Client, AsyncStreamingClient, SynchronousClient,
                     EventPublisher, SynchronousEventPublisher,

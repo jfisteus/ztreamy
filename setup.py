@@ -15,6 +15,8 @@
 # along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
+
 import os
 import sys
 from setuptools import setup
@@ -23,14 +25,13 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 if sys.version_info[0] != 2 or sys.version_info[1] not in [7]:
-    print 'ztreamy needs Python 2.7'
+    print('ztreamy needs Python 2.7')
     sys.exit(1)
 
 # Dependencies
 requirements = ['setuptools',
                 'tornado',
-                'rdflib',
-                'rdfextras',
+                'rdflib>=4.0',
                 'rdflib-jsonld',
                 'tweepy==2.3.0',
                 'pycurl',
@@ -38,15 +39,16 @@ requirements = ['setuptools',
                 'httplib2',
                 'simplejson',
                 ]
-if sys.version_info[1] == 6:
-    requirements.append('argparse')
 
+tests_require = []
 
 setup(
     name = "ztreamy",
-    version = "0.3",
+    version = "0.3.1",
     author = "Jesus Arias Fisteus",
+    author_email="", # Removed to limit spam harvesting
     description = ("A framework for publishing semantic events on the Web"),
+    license = 'GPL3',
     keywords = "rdf sensors web semantic-sensor-web",
     url = "http://www.it.uc3m.es/jaf/ztreamy",
     packages=['ztreamy', 'ztreamy.utils', 'ztreamy.tools',
@@ -54,4 +56,6 @@ setup(
               'ztreamy.casestudy'],
     long_description=read('README'),
     install_requires = requirements,
+    tests_require = tests_require,
+    test_suite = "tests.get_tests",
 )
