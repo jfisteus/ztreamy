@@ -40,7 +40,7 @@ requirements = ['setuptools',
                 'simplejson',
                 ]
 
-tests_require = ['unittest']
+tests_require = []
 
 setup(
     name = "ztreamy",
