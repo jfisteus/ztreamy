@@ -44,7 +44,7 @@ tests_require = ['unittest']
 
 setup(
     name = "ztreamy",
-    version = "0.3",
+    version = "0.3.1",
     author = "Jesus Arias Fisteus",
     author_email="", # Removed to limit spam harvesting
     description = ("A framework for publishing semantic events on the Web"),
