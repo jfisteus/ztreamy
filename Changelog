@@ -1,3 +1,15 @@
+2015-03-25  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.3.1
+
+	* Setup for uploading to PYPI (by jvrplmlmn).
+
+	* Work towards making a Python 3 compatible release (by jvrplmlmn).
+
+	* Use of a newer version of rdflib for SPARQL filtering (by jvrplmlmn).
+
+	* Bugfixes and other minor changes.
+
 2015-02-06  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.3.
