@@ -1,3 +1,9 @@
+2015-03-26  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.3.2
+
+	* Minor fix for integration in Travis-CI.
+
 2015-03-25  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.3.1

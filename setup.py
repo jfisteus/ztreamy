@@ -44,13 +44,13 @@ tests_require = []
 
 setup(
     name = "ztreamy",
-    version = "0.3.1",
+    version = "0.3.2",
     author = "Jesus Arias Fisteus",
-    author_email="", # Removed to limit spam harvesting
+    author_email = "jfisteus@gmail.com",
     description = ("A framework for publishing semantic events on the Web"),
     license = 'GPL3',
     keywords = "rdf sensors web semantic-sensor-web",
-    url = "http://www.it.uc3m.es/jaf/ztreamy",
+    url = "http://www.ztreamy.org/",
     packages=['ztreamy', 'ztreamy.utils', 'ztreamy.tools',
               'ztreamy.examples', 'ztreamy.experiments',
               'ztreamy.casestudy'],
