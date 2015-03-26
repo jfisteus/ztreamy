@@ -169,7 +169,8 @@ code, tt {
 <ul class="simple">
 <li><a class="reference internal" href="#introduction" id="id1">Introduction</a></li>
 <li><a class="reference internal" href="#installation" id="id2">Installation</a></li>
-<li><a class="reference internal" href="#trying-the-installation-for-the-first-time" id="id3">Trying the installation for the first time</a></li>
+<li><a class="reference internal" href="#upgrading-ztreamy" id="id3">Upgrading Ztreamy</a></li>
+<li><a class="reference internal" href="#trying-the-installation-for-the-first-time" id="id4">Trying the installation for the first time</a></li>
 </ul>
 </div>
 <div class="section" id="introduction">
@@ -184,11 +185,10 @@ consume its events.</p>
 <h1><a class="toc-backref" href="#id2">Installation</a></h1>
 <p>This guide describes how to install Ztreamy in Linux systems. It
 should work also in Windows, but we have not yet tested it.</p>
-<p>In order to install Ztreamy, you need an installation of Python 2.6 or
-Python 2.7. Python 3 is not backwards compatible and is not supported
-yet. Python is installed by default in many Linux
-distributions. Therefore, it is probably already installed in your
-system.</p>
+<p>In order to install Ztreamy, you need an installation of Python 2.7.
+Python 3 is not backwards compatible and is not supported yet.
+Python is installed by default in many Linux distributions.
+Therefore, its version 2.7 is probably already installed in your system.</p>
 <p>You can install Ztreamy globally in your Linux installation, or in a
 local directory, using <em>virtualenv</em>. The latter is probably better if
 you just want to try Ztreamy, because this way it can be safely
@@ -198,53 +198,64 @@ your Linux distribution. For example, in Debian and Ubuntu:</p>
 <pre class="literal-block">
 sudo apt-get install python-virtualenv
 </pre>
-<p>Ztreamy requires the <em>libcurl</em> library and its development files to be
+<p>Ztreamy requires the Python header files
+and the <em>libcurl</em> with its header files to be
 installed in your system. In Debian and Ubuntu they are packaged as
-<cite>libcurl3</cite> and <cite>libcurl-dev</cite>:</p>
+<cite>python-dev</cite>, <cite>libcurl3</cite> and <cite>libcurl4-openssl-dev</cite> respectively:</p>
 <pre class="literal-block">
-sudo apt-get install curl libcurl3 libcurl4-openssl-dev
+sudo apt-get install python-dev curl libcurl3 libcurl4-openssl-dev
 </pre>
 <p>Now, somewhere in your user account, create the <em>virtualenv</em> directory
 in which Ztreamy will be installed. For example, if you call the
-directory <cite>venv</cite>:</p>
+directory <cite>ztreamy-venv</cite>:</p>
 <pre class="literal-block">
-virtualenv venv
-. venv/bin/activate
+virtualenv ztreamy-venv
+source ztreamy-venv/bin/activate
 </pre>
 <p>The first command creates the virtual environment and installs Python
 inside it. The second command makes this virtual environment the
 default in the current terminal. The second command has to be executed
 every time a new terminal is opened for using Ztreamy.</p>
-<p>Finally, you have to download Ztreamy and install it. Download the
-file <cite>ztreamy-&lt;version&gt;.tar.gz</cite> (where <cite>&lt;version&gt;</cite> represents the
-version number of the release of Ztreamy) from the <a class="reference external" href="http://www.it.uc3m.es/jaf/ztreamy/download/">downloads page of
-Ztreamy</a>. Then, install
-it with <cite>easy_install</cite>. For example, if you downloaded
-<cite>ztreamy-0.1.1.tar.gz</cite> you would install it with:</p>
+<p>Finally, you can install Ztreamy from the PyPI software repository:</p>
 <pre class="literal-block">
-easy_install ztreamy-0.1.1.tar.gz
+pip install ztreamy
 </pre>
-<p>The <cite>easy_install</cite> command will install Ztreamy inside the virtual
-environment. In addition, it will also download and install all the
-other python packages required by Ztreamy.</p>
+</div>
+<div class="section" id="upgrading-ztreamy">
+<h1><a class="toc-backref" href="#id3">Upgrading Ztreamy</a></h1>
+<p>If you already have an installation of Ztreamy,
+<em>pip</em> can also upgrade it to the latest release:</p>
+<pre class="literal-block">
+source ztreamy-venv/bin/activate
+pip install --upgrade ztreamy
+</pre>
 </div>
 <div class="section" id="trying-the-installation-for-the-first-time">
-<h1><a class="toc-backref" href="#id3">Trying the installation for the first time</a></h1>
-<p>In order to try your installation of Ztreamy, you can create a stream,
-send events to it from an event source and run a client to see what is
-transmitted through the stream:</p>
+<h1><a class="toc-backref" href="#id4">Trying the installation for the first time</a></h1>
+<p>In order to try your installation of Ztreamy,
+you'll create a new stream,
+run a client to consume it
+and run a source that publishes data through the stream.</p>
+<p>First, remember that,
+if you have installed Ztreamy inside a <em>virtualenv</em> environment,
+it must be activated for every terminal
+in which you run Ztreamy commands.
+Enter within every terminal the command:</p>
+<pre class="literal-block">
+source ztreamy-venv/bin/activate
+</pre>
+<p>Then, run a server that publishes a stream at TCP port 9000:</p>
 <pre class="literal-block">
 python -m ztreamy.server --port=9000
 </pre>
-<p>This command launches an HTTP server in the port 9000 of your computer,
-and serves an event stream from it.</p>
-<p>In another command window, launch a client to listen to that stream:</p>
+<p>In another terminal, launch a client to listen to that stream:</p>
 <pre class="literal-block">
 python -m ztreamy.client http://localhost:9000/events/stream
 </pre>
 <p>Finally, you need an event source that sends events to the server
 in order to be published in the stream. Ztreamy integrates a tool that
-creates events for testing purposes:</p>
+creates events for testing purposes.
+Enter in another terminal:</p>
 <pre class="literal-block">
 python -m ztreamy.tools.event_source --distribution=&quot;exp[3]&quot; http://localhost:9000/events/publish
 </pre>
@@ -254,7 +265,7 @@ should see the events arriving at the terminal in which the client is
 running.</p>
 <p>In order to stop the framework, type control-c in the terminals of the
 event source and the server. The client will stop automatically when
-the server is finished.</p>
+the server closes.</p>
 </div>
 </div>
 </body>

@@ -189,12 +189,13 @@ code, tt {
 <li><a class="reference internal" href="#accessing-event-objects" id="id14">4.2&nbsp;&nbsp;&nbsp;Accessing event objects</a></li>
 <li><a class="reference internal" href="#rdf-events" id="id15">4.3&nbsp;&nbsp;&nbsp;RDF events</a></li>
 <li><a class="reference internal" href="#creating-custom-event-classes" id="id16">4.4&nbsp;&nbsp;&nbsp;Creating custom event classes</a></li>
+<li><a class="reference internal" href="#json-serialization-of-events" id="id17">4.5&nbsp;&nbsp;&nbsp;JSON serialization of events</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#selecting-specific-events-filtering" id="id17">5&nbsp;&nbsp;&nbsp;Selecting specific events (filtering)</a><ul class="auto-toc">
-<li><a class="reference internal" href="#implementing-a-custom-filter-class" id="id18">5.1&nbsp;&nbsp;&nbsp;Implementing a custom filter class</a></li>
-<li><a class="reference internal" href="#filtering-events-in-a-client" id="id19">5.2&nbsp;&nbsp;&nbsp;Filtering events in a client</a></li>
-<li><a class="reference internal" href="#filtering-events-in-a-relay" id="id20">5.3&nbsp;&nbsp;&nbsp;Filtering events in a relay</a></li>
+<li><a class="reference internal" href="#selecting-specific-events-filtering" id="id18">5&nbsp;&nbsp;&nbsp;Selecting specific events (filtering)</a><ul class="auto-toc">
+<li><a class="reference internal" href="#implementing-a-custom-filter-class" id="id19">5.1&nbsp;&nbsp;&nbsp;Implementing a custom filter class</a></li>
+<li><a class="reference internal" href="#filtering-events-in-a-client" id="id20">5.2&nbsp;&nbsp;&nbsp;Filtering events in a client</a></li>
+<li><a class="reference internal" href="#filtering-events-in-a-relay" id="id21">5.3&nbsp;&nbsp;&nbsp;Filtering events in a relay</a></li>
 </ul>
 </li>
 </ul>
@@ -273,8 +274,10 @@ hold until at least one event is available.</li>
 <p>The access mode is communicated to the server by appending to the path
 of the URI one of the following components:</p>
 <ul class="simple">
-<li><cite>/compressed</cite>: long-lived requests with ZLIB compression.</li>
-<li><cite>/stream</cite>: long-lived requests with no compression.</li>
+<li><cite>/compressed</cite>: long-lived requests with <em>deflate</em> compression (ZLib).</li>
+<li><cite>/stream</cite>: long-lived requests with optional compression.
+Set the <em>Accept-Encoding</em> header to <em>deflate</em> in order to
+receive the data with <em>deflate</em> compression (ZLib).</li>
 <li><cite>/long-polling</cite>: long-polling requests with no compression.</li>
 </ul>
 </div>
@@ -337,7 +340,22 @@ access mode: the stream name in the path must be followed either by
 is that the first one uses ZLIB compression. Your program does not
 need to be aware about compression, because <cite>ztreamy</cite> decompresses the
 data internally. Connecting to the compressed stream should normally
-be the preferred option, due to the amount if traffic it saves.</p>
+be the preferred option, due to the amount of traffic it saves.</p>
+<p>Be aware that the HTTP client library of Tornado
+internally limits the maximum number of simultaneously active HTTP requests
+on the same IOLoop.
+The default in Tornado (with the CURL client, which is the one Ztreamy uses)
+is currently set to 10.
+If you need to subscribe to more than 10 simultaneous streams,
+you'll need to increase that maximum value.
+This can be done with a simple function call,
+as shown in the following example,
+which raises the maximum to 200 simultaneous requests:</p>
+<pre class="literal-block">
+import ztreamy.client
+
+ztreamy.client.configure_max_clients(200)
+</pre>
 </div>
 <div class="section" id="developing-a-consumer-synchronously">
 <h2><a class="toc-backref" href="#id7">2.3&nbsp;&nbsp;&nbsp;Developing a consumer synchronously</a></h2>
@@ -400,6 +418,8 @@ contain it.</p>
 <p>The following example sets up a stream server that serves two streams,
 and publishes periodical events on them:</p>
 <pre class="literal-block">
+from __future__ import print_function
+
 import time
 import random
 
@@ -423,13 +443,13 @@ application_ids = ['ztreamy-example-a', 'ztreamy-example-b']
 
 # Publish events periodically
 def publish_hi():
-    print 'Publishing &quot;hi&quot;'
+    print('Publishing &quot;hi&quot;')
     app_id = random.choice(application_ids)
     event = ztreamy.Event(source_id, 'text/plain', 'Hi', application_id=app_id)
     publisher1.publish(event)
 
 def publish_there():
-    print 'Publishing &quot;there&quot;'
+    print('Publishing &quot;there&quot;')
     app_id = random.choice(application_ids)
     event = ztreamy.Event(source_id, 'text/plain', 'there!',
                           application_id=app_id)
@@ -440,7 +460,7 @@ time.sleep(5)
 tornado.ioloop.PeriodicCallback(publish_there, 10000).start()
 
 try:
-    print 'Starting the server'
+    print('Starting the server')
     server.start(loop=True)
 except KeyboardInterrupt:
     # Allow ctrl-c to close the server
@@ -464,6 +484,8 @@ whereas <cite>publish_events</cite> receives a list of events.</li>
 <p>The following example publishes periodic events using the asynchronous
 API:</p>
 <pre class="literal-block">
+from __future__ import print_function
+
 import ztreamy
 import tornado.ioloop
 
@@ -474,7 +496,7 @@ source_id = ztreamy.random_id()
 
 # Publish events periodically
 def publish():
-    print 'Publishing'
+    print('Publishing')
     event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
     publisher.publish(event)
 
@@ -570,7 +592,7 @@ sequence CRLF.  However, Ztreamy imposes no restrictions regarding
 end-of-line delimiters in the body of the event, which should adhere
 the specifications for the specific data-type (e.g. for N3, RDF/XML
 and JSON-LD both LF and CRLF delimiters are allowed by their
-corresponding specifications.)</p>
+specifications.)</p>
 <p>Ztreamy provides an API for representing events as objects, and for
 serializing and deserializing them. The <cite>Event</cite> class is the base
 class for all the events. Classes for specific types of events, such
@@ -638,6 +660,8 @@ types, it automatically creates the event using the custom class.</p>
 <p>As an example, this is the source code of the implementation of
 <cite>RDFEvent</cite> in ztreamy:</p>
 <pre class="literal-block">
+from __future__ import print_function
+
 import ztreamy
 import tornado.ioloop
 
@@ -648,7 +672,7 @@ source_id = ztreamy.random_id()
 
 # Publish events periodically
 def publish():
-    print 'Publishing'
+    print('Publishing')
     event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
     publisher.publish(event)
 
@@ -665,9 +689,93 @@ finally:
 
 </pre>
 </div>
+<div class="section" id="json-serialization-of-events">
+<h2><a class="toc-backref" href="#id17">4.5&nbsp;&nbsp;&nbsp;JSON serialization of events</a></h2>
+<p>Since version 0.3, events can optionally be encoded
+as JSON objects.
+This is quite convenient, for example,
+for sending or receiving JSON-formatted events
+from a JavaScript client running within a web browser.</p>
+<p>The body can be represented as JSON or any other textual format.
+All the event headers are top-level properties
+in the JSON object.
+However, the <em>Body-Length</em> header is not necessary,
+because the body is properly delimited
+by the JSON syntax.
+For example, this is a JSON-serilized event
+in which the event body is also a JSON object:</p>
+<pre class="literal-block">
+{
+    &quot;Event-Id&quot;: &quot;124e409a-6157-48a6-b2f1-32b838584dc2&quot;,
+    &quot;Source-Id&quot;: &quot;83a4c888-c395-4bb7-a635-c5b864d6bd06&quot;,
+    &quot;Timestamp&quot;: &quot;2015-02-04T18:44:36+01:00&quot;,
+    &quot;Syntax&quot;: &quot;application/json&quot;,
+    &quot;Body&quot;: {
+        &quot;speed&quot;: &quot;40.5&quot;,
+        &quot;location&quot;: &quot;Madrid&quot;
+    }
+}
+</pre>
+<p>The following example shows an RDF body with JSON-LD syntax
+(the event body is cropped for clarity):</p>
+<pre class="literal-block">
+{
+    &quot;Event-Id&quot;: &quot;3f2fbe91-0850-4fe1-914a-79b577db200f&quot;,
+    &quot;Source-Id&quot;: &quot;83a4c888-c395-4bb7-a635-c5b864d6bd06&quot;,
+    &quot;Timestamp&quot;: &quot;2015-02-04T18:57:47+01:00&quot;,
+    &quot;Syntax&quot;: &quot;application/ld+json&quot;,
+    &quot;Body&quot;: [{&quot;http://www.w3.org/2003/01/geo/wgs84_pos#long&quot;: (...)
+}
+</pre>
+<p>For any body syntax different to JSON or JSON-LD,
+the body is specified just as a string.
+For example, a <em>text/plain</em> body would be represented as:</p>
+<pre class="literal-block">
+{
+    &quot;Event-Id&quot;: &quot;9b80f271-f3dc-4968-922b-12e1a6c60464&quot;
+    &quot;Source-Id&quot;: &quot;83a4c888-c395-4bb7-a635-c5b864d6bd06&quot;,
+    &quot;Timestamp&quot;: &quot;2015-02-04T19:09:12+01:00&quot;,
+    &quot;Syntax&quot;: &quot;text/plain&quot;,
+    &quot;Body&quot;: &quot;Call me at 5pm&quot;
+}
+</pre>
+<p>You can also serialize several events together.
+In order to do that,
+encapsulate each event as an object within a JSON array:</p>
+<pre class="literal-block">
+[
+    {
+        &quot;Event-Id&quot;: &quot;3f2fbe91-0850-4fe1-914a-79b577db200f&quot;,
+        &quot;Source-Id&quot;: &quot;83a4c888-c395-4bb7-a635-c5b864d6bd06&quot;,
+        &quot;Timestamp&quot;: &quot;2015-02-04T18:57:47+01:00&quot;,
+        &quot;Syntax&quot;: &quot;application/ld+json&quot;,
+        &quot;Body&quot;: [{&quot;http://www.w3.org/2003/01/geo/wgs84_pos#long&quot;: (...)
+    },
+    {
+        &quot;Event-Id&quot;: &quot;9b80f271-f3dc-4968-922b-12e1a6c60464&quot;
+        &quot;Source-Id&quot;: &quot;83a4c888-c395-4bb7-a635-c5b864d6bd06&quot;,
+        &quot;Timestamp&quot;: &quot;2015-02-04T19:09:12+01:00&quot;,
+        &quot;Syntax&quot;: &quot;text/plain&quot;,
+        &quot;Body&quot;: &quot;Call me at 5pm&quot;
+    }
+]
+</pre>
+<p>When you send a JSON object to a Ztreamy server,
+the <em>Content-Type</em> header of the HTTP request
+must be set to <em>application/json</em>.</p>
+<p>When you consume events from a stream,
+you can request events to be serialized with JSON
+only in long-polling requests.
+For long-lived requests,
+the Ztreamy event serialization format is the only one
+permitted right now.
+In order to get JSON events
+in for long-polling request,
+set the <em>Accept</em> header to <em>application/json</em>.</p>
+</div>
 </div>
 <div class="section" id="selecting-specific-events-filtering">
-<h1><a class="toc-backref" href="#id17">5&nbsp;&nbsp;&nbsp;Selecting specific events (filtering)</a></h1>
+<h1><a class="toc-backref" href="#id18">5&nbsp;&nbsp;&nbsp;Selecting specific events (filtering)</a></h1>
 <p>The <cite>ztreamy.filters</cite> module provides a base class for filtering
 events, called <cite>Filter</cite>, and several subclasses that implement some
 built-in filter. If you need to select just a subset of the events,
@@ -693,7 +801,7 @@ filter uses internally the <cite>SPARQLFilter</cite>, but receives the patterns
 with a different syntax.</li>
 </ul>
 <div class="section" id="implementing-a-custom-filter-class">
-<h2><a class="toc-backref" href="#id18">5.1&nbsp;&nbsp;&nbsp;Implementing a custom filter class</a></h2>
+<h2><a class="toc-backref" href="#id19">5.1&nbsp;&nbsp;&nbsp;Implementing a custom filter class</a></h2>
 <p>For implementing a custom filter class, just create a class that
 extends <cite>Filter</cite> and implements the method <cite>filter_event(self,
 event)</cite>. Remember to ask in the constructor of your class for a
@@ -724,7 +832,7 @@ class SourceFilter(Filter):
 </pre>
 </div>
 <div class="section" id="filtering-events-in-a-client">
-<h2><a class="toc-backref" href="#id19">5.2&nbsp;&nbsp;&nbsp;Filtering events in a client</a></h2>
+<h2><a class="toc-backref" href="#id20">5.2&nbsp;&nbsp;&nbsp;Filtering events in a client</a></h2>
 <p>Filter objects can act as event handlers. You can filter events when
 using a client object by passing an instance of the filter in the
 place of the event callback. This is an example:</p>
@@ -739,6 +847,8 @@ filter object as an event callback.</p>
 <p>This is a complete example that you can find in the examples directory
 under the name of <cite>consumer_filter.py</cite>:</p>
 <pre class="literal-block">
+from __future__ import print_function
+
 import ztreamy
 import tornado.ioloop
 
@@ -749,7 +859,7 @@ source_id = ztreamy.random_id()
 
 # Publish events periodically
 def publish():
-    print 'Publishing'
+    print('Publishing')
     event = ztreamy.Event(source_id, 'text/plain',  'This is a new event')
     publisher.publish(event)
 
@@ -771,7 +881,7 @@ You can compare the output of this consumer with the one described at
 <a class="reference internal" href="#developing-a-consumer-asynchronously">Developing a consumer asynchronously</a>. which does not apply filters.</p>
 </div>
 <div class="section" id="filtering-events-in-a-relay">
-<h2><a class="toc-backref" href="#id20">5.3&nbsp;&nbsp;&nbsp;Filtering events in a relay</a></h2>
+<h2><a class="toc-backref" href="#id21">5.3&nbsp;&nbsp;&nbsp;Filtering events in a relay</a></h2>
 <p>You can also apply filters in the <cite>RelayStream</cite> class, which
 implements a stream that relays the events of other streams. Pass a
 filter object with the keyword parameter <cite>filter_</cite> to the constructor
