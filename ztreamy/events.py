@@ -557,7 +557,7 @@ class JSONEvent(Event):
         return json.loads(body)
 
 for syntax in JSONEvent.supported_syntaxes:
-    Event.register_syntax(syntax, JSONEvent)
+    Event.register_syntax(syntax, JSONEvent, always_parse=True)
 
 
 def create_command(source_id, command):
