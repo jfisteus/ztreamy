@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2012 Norberto Fernandez Garcia
+# Copyright (C) 2011-2015 Norberto Fernandez Garcia
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

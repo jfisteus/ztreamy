@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2014 Jesus Arias Fisteus
+# Copyright (C) 2011-2015 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
