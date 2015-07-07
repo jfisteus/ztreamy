@@ -27,10 +27,19 @@ import ztreamy.utils.rfc3339
 stream_media_type = 'application/ztreamy-stream'
 event_media_type = 'application/ztreamy-event'
 json_media_type = 'application/json'
+ldjson_media_type = 'application/x-ldjson'
 json_ld_media_type = 'application/ld+json'
 
+SERIALIZATION_NONE = 0
 SERIALIZATION_ZTREAMY = 1
 SERIALIZATION_JSON = 2
+SERIALIZATION_LDJSON = 3
+SERIALIZATIONS = (
+    SERIALIZATION_NONE,
+    SERIALIZATION_ZTREAMY,
+    SERIALIZATION_JSON,
+    SERIALIZATION_LDJSON,
+)
 
 
 class ZtreamyException(Exception):
@@ -102,6 +111,8 @@ def serialize_events(events, serialization=SERIALIZATION_ZTREAMY):
         formatter_func = lambda event: event._serialize
     elif serialization == SERIALIZATION_JSON:
         return serialize_events_json(events)
+    elif serialization == SERIALIZATION_LDJSON:
+        return serialize_events_ldjson(events)
     else:
         raise ZtreamyException('Unknown serialization format', 'send_event')
     data = []
@@ -112,6 +123,10 @@ def serialize_events(events, serialization=SERIALIZATION_ZTREAMY):
 def serialize_events_json(events):
     data = [e.as_json() for e in events]
     return json.dumps(data)
+
+def serialize_events_ldjson(events):
+    data = [e.as_json() for e in events]
+    return '\r\n'.join([json.dumps(item) for item in data])
 
 def split_url(url):
     """Returns the URL splitted in components.
