@@ -277,7 +277,7 @@ class Stream(object):
         else:
             self.path = '/' + path
         self.allow_publish = allow_publish
-        self.dispatcher = _EventDispatcher()
+        self.dispatcher = _EventDispatcher(num_recent_events=num_recent_events)
         self.buffering_time = buffering_time
         self.event_adapter = event_adapter
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
@@ -568,17 +568,25 @@ class _EventDispatcher(object):
     def num_clients(self):
         return sum(len(dispatcher) for dispatcher in self.dispatchers.values())
 
-    def register_client(self, client, last_event_seen=None):
+    def register_client(self, client, last_event_seen=None,
+                        past_events_limit=None):
+        logging.info('Register: {}, {}'.format(last_event_seen,
+                                               past_events_limit))
         dispatcher = self.dispatchers.get(client.properties, None)
-        if dispatcher == None:
+        if dispatcher is None:
             raise ValueError('Not appropriate dispatcher')
+        past_data = None
         if last_event_seen:
             # Send the available events after the last seen event
-            evs, none_lost = self.recent_events.newer_than(last_event_seen)
-            if len(evs) > 0:
-                client.send_initial_events(evs)
-                if not client.properties.streaming:
-                    client.close()
+            past_data, none_lost = self.recent_events.newer_than( \
+                                                    last_event_seen,
+                                                    limit=past_events_limit)
+        elif past_events_limit is not None:
+            past_data = self.recent_events.most_recent(past_events_limit)
+        if past_data:
+            client.send_initial_events(past_data)
+            if not client.properties.streaming:
+                client.close()
         if not client.closed:
             dispatcher.subscribe(client)
             client.dispatcher = dispatcher
@@ -692,6 +700,24 @@ class _GenericHandler(tornado.web.RequestHandler):
 
     def __init__(self, application, request, **kwargs):
         super(_GenericHandler, self).__init__(application, request, **kwargs)
+
+    def _last_seen_parameters(self):
+        last_event_seen = self.get_argument('last-seen', default=None)
+        past_events_limit = self.get_argument('past-events-limit',
+                                              default=None)
+        if past_events_limit == '':
+            past_events_limit = None
+        elif past_events_limit is not None:
+            try:
+                past_events_limit = int(past_events_limit)
+            except ValueError:
+                raise tornado.web.HTTPError(404, 'Not Found')
+            else:
+                if past_events_limit == 0:
+                    past_events_limit = None
+                elif past_events_limit < 0:
+                    raise tornado.web.HTTPError(404, 'Not Found')
+        return last_event_seen, past_events_limit
 
     def _select_encoding(self, acceptable_encodings):
         """Selects an appropriate encoding for the HTTP response.
@@ -842,7 +868,7 @@ class _EventStreamHandler(_GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        last_event_seen = self.get_argument('last-seen', default=None)
+        last_event_seen, past_events_limit = self._last_seen_parameters()
         if ('Accept' in self.request.headers
             and ztreamy.ldjson_media_type in self.request.headers['Accept']):
             serialization = ztreamy.SERIALIZATION_LDJSON
@@ -866,8 +892,10 @@ class _EventStreamHandler(_GenericHandler):
                                 encoding=encoding,
                                 priority=self.priority)
             self.client = _Client(self, self._on_new_data, properties)
-            self.dispatcher.register_client(self.client,
-                                            last_event_seen=last_event_seen)
+            self.dispatcher.register_client( \
+                                        self.client,
+                                        last_event_seen=last_event_seen,
+                                        past_events_limit=past_events_limit)
             if serialization == ztreamy.SERIALIZATION_ZTREAMY:
                 self.set_header('Content-Type', ztreamy.stream_media_type)
             else:
@@ -895,7 +923,7 @@ class _ShortLivedHandler(_GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        last_event_seen = self.get_argument('last-seen', default=None)
+        last_event_seen, past_events_limit = self._last_seen_parameters()
         if ('Accept' in self.request.headers
             and ztreamy.json_media_type in self.request.headers['Accept']):
             serialization = ztreamy.SERIALIZATION_JSON
@@ -916,7 +944,8 @@ class _ShortLivedHandler(_GenericHandler):
                                 encoding=encoding)
         self.client = _Client(self, self._on_new_data, properties)
         self.dispatcher.register_client(self.client,
-                                        last_event_seen=last_event_seen)
+                                        last_event_seen=last_event_seen,
+                                        past_events_limit=past_events_limit)
 
     def _on_new_data(self, data):
         if not self.request.connection.stream.closed():
@@ -952,34 +981,56 @@ class _RecentEventsBuffer(object):
         else:
             self._append_internal(events)
 
-    def newer_than(self, event_id):
+    def newer_than(self, event_id, limit=None):
         """Returns the events newer than the given 'event_id'.
 
         If no event in the buffer has the 'event_id', all the events are
         returned. If the newest event in the buffer has that id, an empty
         list is returned.
 
+        If 'limit' is not None, at most 'limit' events are returned
+        (the most recent ones).
+
         Returns a tuple ('events', 'complete') where 'events' is the list
-        of events and 'complete' is True when 'event_id' is in the buffer.
+        of events and 'complete' is True when 'event_id' is in the buffer
+        and no limit was applied.
 
         """
         if event_id in self.events:
+            complete = True
             pos = self.events[event_id] + 1
             if pos == len(self.buffer):
                 pos = 0
             if pos == self.position:
-                return [], True
+                data = []
             elif pos < self.position:
-                return self.buffer[pos:self.position], True
+                data = self.buffer[pos:self.position]
             else:
-                return self.buffer[pos:] + self.buffer[:self.position], True
+                data = self.buffer[pos:] + self.buffer[:self.position]
         else:
+            complete = False
             if (self.position != len(self.buffer) - 1
                 and self.buffer[self.position + 1] is None):
-                return self.buffer[:self.position], False
+                data = self.buffer[:self.position]
             else:
-                return (self.buffer[self.position:]
-                        + self.buffer[:self.position]), False
+                data = (self.buffer[self.position:]
+                        + self.buffer[:self.position])
+        if limit is not None and len(data) > limit:
+            data = data[-limit:]
+            complete = False
+        return data, complete
+
+    def most_recent(self, num_events):
+        if num_events > len(self.buffer):
+            num_events = len(self.buffer)
+        pos = self.position - num_events
+        if pos >= 0:
+            data = self.buffer[pos:self.position]
+        elif self.buffer[-1] is not None:
+            data = self.buffer[pos:] + self.buffer[:self.position]
+        else:
+            data = self.buffer[:self.position]
+        return data
 
     def _append_internal(self, events):
         self._remove_from_dict(self.position, len(events))
