@@ -569,13 +569,11 @@ class _EventDispatcher(object):
         return sum(len(dispatcher) for dispatcher in self.dispatchers.values())
 
     def register_client(self, client, last_event_seen=None,
-                        past_events_limit=None):
-        logging.info('Register: {}, {}'.format(last_event_seen,
-                                               past_events_limit))
+                        past_events_limit=None, non_blocking=False):
         dispatcher = self.dispatchers.get(client.properties, None)
         if dispatcher is None:
             raise ValueError('Not appropriate dispatcher')
-        past_data = None
+        past_data = []
         if last_event_seen:
             # Send the available events after the last seen event
             past_data, none_lost = self.recent_events.newer_than( \
@@ -583,7 +581,7 @@ class _EventDispatcher(object):
                                                     limit=past_events_limit)
         elif past_events_limit is not None:
             past_data = self.recent_events.most_recent(past_events_limit)
-        if past_data:
+        if past_data or non_blocking:
             client.send_initial_events(past_data)
             if not client.properties.streaming:
                 client.close()
@@ -713,11 +711,14 @@ class _GenericHandler(tornado.web.RequestHandler):
             except ValueError:
                 raise tornado.web.HTTPError(404, 'Not Found')
             else:
-                if past_events_limit == 0:
-                    past_events_limit = None
-                elif past_events_limit < 0:
+                if past_events_limit < 0:
                     raise tornado.web.HTTPError(404, 'Not Found')
-        return last_event_seen, past_events_limit
+        non_blocking = self.get_argument('non-blocking', default=None)
+        if non_blocking is not None and non_blocking != '0':
+            non_blocking = True
+        else:
+            non_blocking = False
+        return last_event_seen, past_events_limit, non_blocking
 
     def _select_encoding(self, acceptable_encodings):
         """Selects an appropriate encoding for the HTTP response.
@@ -868,7 +869,9 @@ class _EventStreamHandler(_GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        last_event_seen, past_events_limit = self._last_seen_parameters()
+        # non_blocking will be ignored and False used always!
+        last_event_seen, past_events_limit, non_blocking = \
+            self._last_seen_parameters()
         if ('Accept' in self.request.headers
             and ztreamy.ldjson_media_type in self.request.headers['Accept']):
             serialization = ztreamy.SERIALIZATION_LDJSON
@@ -895,7 +898,8 @@ class _EventStreamHandler(_GenericHandler):
             self.dispatcher.register_client( \
                                         self.client,
                                         last_event_seen=last_event_seen,
-                                        past_events_limit=past_events_limit)
+                                        past_events_limit=past_events_limit,
+                                        non_blocking=False)
             if serialization == ztreamy.SERIALIZATION_ZTREAMY:
                 self.set_header('Content-Type', ztreamy.stream_media_type)
             else:
@@ -923,7 +927,8 @@ class _ShortLivedHandler(_GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        last_event_seen, past_events_limit = self._last_seen_parameters()
+        last_event_seen, past_events_limit, non_blocking = \
+            self._last_seen_parameters()
         if ('Accept' in self.request.headers
             and ztreamy.json_media_type in self.request.headers['Accept']):
             serialization = ztreamy.SERIALIZATION_JSON
@@ -945,7 +950,8 @@ class _ShortLivedHandler(_GenericHandler):
         self.client = _Client(self, self._on_new_data, properties)
         self.dispatcher.register_client(self.client,
                                         last_event_seen=last_event_seen,
-                                        past_events_limit=past_events_limit)
+                                        past_events_limit=past_events_limit,
+                                        non_blocking=non_blocking)
 
     def _on_new_data(self, data):
         if not self.request.connection.stream.closed():

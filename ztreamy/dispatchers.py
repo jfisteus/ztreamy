@@ -227,7 +227,9 @@ class SimpleDispatcher(Dispatcher):
         if len(self.subscriptions):
             logging.info('{}: {}'.format(self.properties,
                                          len(self.subscriptions)))
-        if len(self.subscriptions) and len(events_pack):
+        if (len(self.subscriptions)
+            and (len(events_pack)
+            or self.properties.serialization == ztreamy.SERIALIZATION_JSON)):
             self.last_event_time = time.time()
             data = events_pack.serialize(self.properties.serialization)
             if self.properties.encoding == ClientProperties.ENCODING_GZIP:
