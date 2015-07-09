@@ -43,6 +43,7 @@ import traceback
 import time
 from datetime import timedelta
 import re
+import os.path
 
 import ztreamy
 from ztreamy import events, logger
@@ -86,7 +87,6 @@ class StreamServer(tornado.web.Application):
         has been started.
 
         """
-        # No settings by now...
         settings = dict()
         super(StreamServer, self).__init__(**settings)
         logging.info('Initializing server...')
@@ -154,6 +154,13 @@ class StreamServer(tornado.web.Application):
 
     def _register_handlers(self):
         handlers = []
+        # Common static files
+        static_path = os.path.join(os.path.dirname(__file__), 'data',
+                                   'static')
+        handlers.append(tornado.web.URLSpec(r'/static/(.*)',
+                                            tornado.web.StaticFileHandler,
+                                            kwargs=dict(path=static_path)))
+        # Installed streams
         for stream in self.streams:
             handler_kwargs = {
                 'stream': stream,
@@ -177,6 +184,9 @@ class StreamServer(tornado.web.Application):
                 tornado.web.URLSpec(stream.path + r"/long-polling",
                                     _ShortLivedHandler,
                                     kwargs=handler_kwargs),
+                tornado.web.URLSpec(stream.path + r"/(dashboard.html)",
+                                    tornado.web.StaticFileHandler,
+                                    kwargs=dict(path=static_path)),
             ])
             if stream.allow_publish:
                 publish_kwargs = {'stream': stream,
@@ -277,7 +287,8 @@ class Stream(object):
         else:
             self.path = '/' + path
         self.allow_publish = allow_publish
-        self.dispatcher = _EventDispatcher(num_recent_events=num_recent_events)
+        self.dispatcher = _EventDispatcher(self,
+                                           num_recent_events=num_recent_events)
         self.buffering_time = buffering_time
         self.event_adapter = event_adapter
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
@@ -549,7 +560,8 @@ class _LocalClient(object):
 
 
 class _EventDispatcher(object):
-    def __init__(self, num_recent_events=2048, ioloop=None):
+    def __init__(self, stream, num_recent_events=2048, ioloop=None):
+        self.stream = stream
         self.dispatchers = {}
         self.immediate_dispatchers = []
         self.buffered_dispatchers = []
@@ -599,7 +611,8 @@ class _EventDispatcher(object):
             dispatcher.dispatch(pack)
 
     def dispatch(self, evs):
-        logging.info('Server cycle; events: {}'.format(len(evs)))
+        logging.info('{}: server cycle; events: {}'.format(self.stream.path,
+                                                           len(evs)))
         self.recent_events.append_events(evs)
         if not evs:
             if self._auto_finish and time.time() - self.last_event_time > 60:
@@ -629,21 +642,21 @@ class _EventDispatcher(object):
         # Streaming dispatcher, plain encoding, ztreamy serialization:
         properties = ClientPropertiesFactory.create( \
                                 streaming=True)
-        dispatcher = dispatchers.SimpleDispatcher(properties)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Streaming dispatcher, zlib encoding, ztreamy serialization:
         properties = ClientPropertiesFactory.create( \
                                 streaming=True,
                                 encoding=ClientProperties.ENCODING_ZLIB)
-        dispatcher = dispatchers.ZlibDispatcher(properties)
+        dispatcher = dispatchers.ZlibDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Streaming dispatcher, pain encoding, json serialization:
         properties = ClientPropertiesFactory.create( \
                                 streaming=True,
                                 serialization=ztreamy.SERIALIZATION_LDJSON)
-        dispatcher = dispatchers.SimpleDispatcher(properties)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Streaming dispatcher, zlib encoding, json serialization:
@@ -651,43 +664,43 @@ class _EventDispatcher(object):
                                 streaming=True,
                                 serialization=ztreamy.SERIALIZATION_LDJSON,
                                 encoding=ClientProperties.ENCODING_ZLIB)
-        dispatcher = dispatchers.ZlibDispatcher(properties)
+        dispatcher = dispatchers.ZlibDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Long polling dispatcher, plain encoding, ztreamy serialization:
         properties = ClientPropertiesFactory.create()
-        dispatcher = dispatchers.SimpleDispatcher(properties)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Long polling dispatcher, plain encoding, json serialization:
         properties = ClientPropertiesFactory.create( \
                                 serialization=ztreamy.SERIALIZATION_JSON)
-        dispatcher = dispatchers.SimpleDispatcher(properties)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Long polling dispatcher, gzip encoding, ztreamy serialization:
         properties = ClientPropertiesFactory.create( \
                                 encoding=ClientProperties.ENCODING_GZIP)
-        dispatcher = dispatchers.SimpleDispatcher(properties)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Long polling dispatcher, gzip encoding, json serialization:
         properties = ClientPropertiesFactory.create( \
                                 serialization=ztreamy.SERIALIZATION_JSON,
                                 encoding=ClientProperties.ENCODING_GZIP)
-        dispatcher = dispatchers.SimpleDispatcher(properties)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.buffered_dispatchers.append(dispatcher)
         # Priority dispatcher
         properties = ClientPropertiesFactory.create( \
                                 streaming=True,
                                 priority=True)
-        dispatcher = dispatchers.SimpleDispatcher(properties)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.immediate_dispatchers.append(dispatcher)
         # Local dispatcher
         properties = ClientPropertiesFactory.create_local_client()
-        dispatcher = dispatchers.LocalDispatcher(properties)
+        dispatcher = dispatchers.LocalDispatcher(self.stream, properties)
         self.dispatchers[properties] = dispatcher
         self.immediate_dispatchers.append(dispatcher)
 

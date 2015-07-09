@@ -91,7 +91,7 @@ class ClientProperties(object):
             parts.append('local')
         if self.priority:
             parts.append('priority')
-        return '/'.join(parts)
+        return '-'.join(parts)
 
 
 class ClientPropertiesFactory(object):
@@ -163,18 +163,21 @@ class EventsPack(object):
 
 
 class Dispatcher(object):
-    def __init__(self, properties):
+    def __init__(self, stream, properties):
+        self.stream = stream
         self.properties = properties
         self.subscriptions = []
 
     def subscribe(self, client):
         self.subscriptions.append(client)
-        logging.info('Client subscribed: {}'.format(client.properties))
+        logging.info('Client subscribed: {} {}'.format(self.stream.path,
+                                                       client.properties))
 
 
     def unsubscribe(self, client):
         self.subscriptions.remove(client)
-        logging.info('Client unsubscribed: {}'.format(client.properties))
+        logging.info('Client unsubscribed: {} {}'.format(self.stream.path,
+                                                         client.properties))
 
     def num_subscriptions(self):
         return len(self.subscriptions)
@@ -192,22 +195,23 @@ class Dispatcher(object):
 
 
 class LocalDispatcher(Dispatcher):
-    def __init__(self, properties):
+    def __init__(self, stream, properties):
         if not properties.local:
             raise ValueError('Incompatible properties for LocalDispacther')
-        super(LocalDispatcher, self).__init__(properties)
+        super(LocalDispatcher, self).__init__(stream, properties)
 
     def dispatch(self, events_pack):
         if len(self.subscriptions):
-            logging.info('{}: {}'.format(self.properties,
-                                         len(self.subscriptions)))
+            logging.info('{} {}: {}'.format(self.stream.path,
+                                            self.properties,
+                                            len(self.subscriptions)))
         if len(self.subscriptions) and len(events_pack):
             for client in self.subscriptions:
                 client.send_events(events_pack.events)
 
 
 class SimpleDispatcher(Dispatcher):
-    def __init__(self, properties):
+    def __init__(self, stream, properties):
         if (properties.encoding != ClientProperties.ENCODING_PLAIN
             and properties.encoding != ClientProperties.ENCODING_GZIP):
             raise ValueError('PlainDispatcher requires PLAIN or GZIP encoding')
@@ -215,7 +219,7 @@ class SimpleDispatcher(Dispatcher):
             and properties.streaming):
             raise ValueError('Serialization is incompatible '
                              'with GZIP encoding')
-        super(SimpleDispatcher, self).__init__(properties)
+        super(SimpleDispatcher, self).__init__(stream, properties)
         self.last_event_time = time.time()
 
     def subscribe(self, client):
@@ -225,11 +229,10 @@ class SimpleDispatcher(Dispatcher):
 
     def dispatch(self, events_pack):
         if len(self.subscriptions):
-            logging.info('{}: {}'.format(self.properties,
-                                         len(self.subscriptions)))
-        if (len(self.subscriptions)
-            and (len(events_pack)
-            or self.properties.serialization == ztreamy.SERIALIZATION_JSON)):
+            logging.info('{} {}: {}'.format(self.stream.path,
+                                            self.properties,
+                                            len(self.subscriptions)))
+        if len(self.subscriptions) and len(events_pack):
             self.last_event_time = time.time()
             data = events_pack.serialize(self.properties.serialization)
             if self.properties.encoding == ClientProperties.ENCODING_GZIP:
@@ -246,19 +249,21 @@ class SimpleDispatcher(Dispatcher):
                         client.close()
                         self.unsubscribe(client)
             elif time.time() - self.last_event_time > 595:
-                logging.info('Sending keep-alive event')
+                logging.info('{} {}: sending keep-alive event').format( \
+                                                self.stream.path,
+                                                self.properties)
                 keep_alive = events.Command('', 'ztreamy-command',
                                             'Test-Connection')
                 self.dispatch(EventsPack([keep_alive]))
 
 
 class ZlibDispatcher(Dispatcher):
-    def __init__(self, properties):
+    def __init__(self, stream, properties):
         if (properties.encoding != ClientProperties.ENCODING_ZLIB
             or not properties.streaming):
             raise ValueError('MainZlibDispatcher requires ZLIB encoding ',
                              'and streaming mode.')
-        super(ZlibDispatcher, self).__init__(properties)
+        super(ZlibDispatcher, self).__init__(stream, properties)
         self.groups = [SubscriptionGroup(properties)]
         self.new_subscriptions = []
         self.last_event_time = time.time()
@@ -288,9 +293,11 @@ class ZlibDispatcher(Dispatcher):
                 self.groups.append(new_group)
             self.new_subscriptions = []
         if len(self.subscriptions):
-            logging.info('{}: {} ({} groups)'.format(self.properties,
-                                                     len(self.subscriptions),
-                                                     len(self.groups)))
+            logging.info('{} {}: {} ({} groups)'.format( \
+                                                self.stream.path,
+                                                self.properties,
+                                                len(self.subscriptions),
+                                                len(self.groups)))
             if len(self.groups) > 1:
                 for i, group in enumerate(self.groups):
                     logging.info('    #{}: {} | {}'.format(i, len(group),
@@ -309,7 +316,9 @@ class ZlibDispatcher(Dispatcher):
     def periodic_maintenance(self):
         if (len(self.subscriptions)
             and time.time() - self.last_event_time > 595):
-            logging.info('Sending keep-alive event')
+            logging.info('{} {}: sending keep-alive event').format( \
+                                                        self.stream.path,
+                                                        self.properties)
             keep_alive = events.Command('', 'ztreamy-command',
                                         'Test-Connection')
             self.dispatch(EventsPack([keep_alive]))

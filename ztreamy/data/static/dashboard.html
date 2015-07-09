@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Ztreamy dashboard</title>
+    <link rel="stylesheet" href="/static/ztreamy.css" type="text/css">
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script src="/static/ztreamy.js" type="text/javascript"></script>
+    <script>
+      $(function() {
+          var url = window.location.href.replace(/\/dashboard.html$/, "");
+          stream = new ztreamy.Stream(url);
+          stream.displayStatus();
+          stream.mostRecent(25, function(events) {
+              stream.defaultEventsCallback(events);
+              stream.consume();
+          });
+      });
+    </script>
+  </head>
+  <body>
+    <div class="ztreamy-status">
+      <span class="ztreamy-status-header">Stream:</span>
+      <span class="ztreamy-status-url"></span>
+      |
+      <span class="ztreamy-status-header">Status: </span>
+      <span class="ztreamy-status-state"></span>
+      |
+      <button class="ztreamy-button-connect"
+              type="button" onclick="stream.connect()">Connect</button>
+      <button class="ztreamy-button-disconnect"
+              type="button" onclick="stream.disconnect()">Disconnect</button>
+    </div>
+    <div class="ztreamy-events">
+    </div>
+  </body>
+</html>

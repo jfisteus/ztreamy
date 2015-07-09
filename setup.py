@@ -44,7 +44,7 @@ tests_require = []
 
 setup(
     name = "ztreamy",
-    version = "0.3.2",
+    version = "0.3.2.dev2",
     author = "Jesus Arias Fisteus",
     author_email = "jfisteus@gmail.com",
     description = ("A framework for publishing semantic events on the Web"),
@@ -54,6 +54,7 @@ setup(
     packages=['ztreamy', 'ztreamy.utils', 'ztreamy.tools',
               'ztreamy.examples', 'ztreamy.experiments',
               'ztreamy.casestudy'],
+    package_data={'ztreamy': ['data/static/*']},
     long_description=read('README'),
     install_requires = requirements,
     tests_require = tests_require,
