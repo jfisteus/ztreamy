@@ -184,6 +184,22 @@ class Deserializer(object):
         self._event_reset()
         return event
 
+    def deserialize_file(self, file_, parse_body=True):
+        """Generator that deserializes from a file-like object.
+
+        It yields lists of event objects instead of single event objects.
+
+        """
+        while True:
+            data = file_.read(8192)
+            if data == '':
+                break
+            else:
+                events = self.deserialize(data, parse_body=parse_body,
+                                          complete=False)
+                if events:
+                    yield events
+
     def _update_header(self, header, value):
         if header not in Event.headers:
             self._extra_headers[header] = value

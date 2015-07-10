@@ -373,6 +373,9 @@ class Stream(object):
         self.dispatcher.register_client(client)
         return client
 
+    def preload_recent_events_buffer_from_file(self, file_):
+        self.dispatcher.recent_events.load_from_file(file_)
+
     def _start_timing(self):
         self._cpu_timer_start = time.clock()
         self._real_timer_start = time.time()
@@ -999,6 +1002,11 @@ class _RecentEventsBuffer(object):
             self._append_internal(events[first_block:])
         else:
             self._append_internal(events)
+
+    def load_from_file(self, file_):
+        deserializer = events.Deserializer()
+        for evs in deserializer.deserialize_file(file_):
+            self.append_events(evs)
 
     def newer_than(self, event_id, limit=None):
         """Returns the events newer than the given 'event_id'.
