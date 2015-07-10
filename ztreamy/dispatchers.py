@@ -249,9 +249,9 @@ class SimpleDispatcher(Dispatcher):
                         client.close()
                         self.unsubscribe(client)
             elif time.time() - self.last_event_time > 595:
-                logging.info('{} {}: sending keep-alive event').format( \
+                logging.info('{} {}: sending keep-alive event'.format( \
                                                 self.stream.path,
-                                                self.properties)
+                                                self.properties))
                 keep_alive = events.Command('', 'ztreamy-command',
                                             'Test-Connection')
                 self.dispatch(EventsPack([keep_alive]))
@@ -316,9 +316,9 @@ class ZlibDispatcher(Dispatcher):
     def periodic_maintenance(self):
         if (len(self.subscriptions)
             and time.time() - self.last_event_time > 595):
-            logging.info('{} {}: sending keep-alive event').format( \
+            logging.info('{} {}: sending keep-alive event'.format( \
                                                         self.stream.path,
-                                                        self.properties)
+                                                        self.properties))
             keep_alive = events.Command('', 'ztreamy-command',
                                         'Test-Connection')
             self.dispatch(EventsPack([keep_alive]))
