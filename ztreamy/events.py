@@ -236,6 +236,10 @@ class JSONDeserializer(object):
         if not 'Body' in d:
             raise ZtreamyException('Missing body in event',
                                    'event_deserialize')
+        if isinstance(d['Body'], dict):
+            body = d['Body']
+        else:
+            body = d['Body'].encode('utf-8')
         if ('Aggregator-Ids' in d
             and not isinstance(d['Aggregator-Ids'], list)):
             raise ZtreamyException('Incorrect Aggregator-Id data',
@@ -246,7 +250,7 @@ class JSONDeserializer(object):
                 extra_headers[header] = d[header]
         event = Event.create(d['Source-Id'],
                              d['Syntax'],
-                             d['Body'],
+                             body,
                              event_id=d['Event-Id'],
                              application_id=d.get('Application-Id'),
                              aggregator_id=d.get('Aggregator-Ids', []),
@@ -434,7 +438,7 @@ class Event(object):
             syntax = self.syntax
         data['Syntax'] = str(syntax)
         if body is None:
-            data['Body'] = self.serialize_body()
+            data['Body'] = self.serialize_body().decode('utf-8')
         else:
             data['Body'] = body
         return data
@@ -453,19 +457,20 @@ class Event(object):
 
     def _serialize(self):
         data = []
-        data.append('Event-Id: ' + self.event_id)
+        data.append('Event-Id: ' + str(self.event_id))
         data.append('Source-Id: ' + str(self.source_id))
         data.append('Syntax: ' + str(self.syntax))
         if self.application_id is not None:
             data.append('Application-Id: ' + str(self.application_id))
         if self.aggregator_id != []:
-            data.append('Aggregator-Ids: ' + ','.join(self.aggregator_id))
+            data.append('Aggregator-Ids: ' + ','.join( \
+                                    [str(s) for s in self.aggregator_id]))
         if self.event_type is not None:
             data.append('Event-Type: ' + str(self.event_type))
         if self.timestamp is not None:
             data.append('Timestamp: ' + str(self.timestamp))
         for header, value in self.extra_headers.iteritems():
-            data.append(header + ': ' + value)
+            data.append(str(header) + ': ' + str(value))
         serialized_body = self.serialize_body()
         data.append('Body-Length: ' + str(len(serialized_body)))
         data.append('')

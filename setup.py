@@ -44,7 +44,7 @@ tests_require = []
 
 setup(
     name = "ztreamy",
-    version = "0.3.2.dev2",
+    version = "0.3.2.dev4",
     author = "Jesus Arias Fisteus",
     author_email = "jfisteus@gmail.com",
     description = ("A framework for publishing semantic events on the Web"),
