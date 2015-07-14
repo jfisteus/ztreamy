@@ -17,6 +17,7 @@
 #
 
 import unittest
+import itertools
 
 import ztreamy
 import ztreamy.events as events
@@ -52,3 +53,32 @@ class TestEvent(unittest.TestCase):
             e.set_extra_header('Body', 'sdfsdfsdf')
         with self.assertRaises(ValueError):
             e.set_extra_header('Source-Id', 'sdfsdfsdf')
+
+    def test_serialize_ldjson(self):
+        source_id = 'source-id-value'
+        syntax = ztreamy.json_media_type
+        body = {'a': 1, 'b': 'blah!'}
+        evs = [
+            events.JSONEvent(source_id, syntax, body),
+            events.JSONEvent(source_id, syntax, body, event_id='6767676766'),
+            events.JSONEvent(source_id, syntax, body,
+                             aggregator_id=['6767676766', '788839393']),
+        ]
+        serialized = ztreamy.serialize_events_ldjson(evs)
+        parts = serialized.split('\r\n')
+        self.assertEqual(len(parts), 4)
+        self.assertEqual(parts[3], '')
+        deserializer = ztreamy.JSONDeserializer()
+        evs2 = list(itertools.chain( \
+                    *[deserializer.deserialize(part) for part in parts[:-1]]))
+        self.assertEqual(evs[0].source_id, evs2[0].source_id)
+        self.assertEqual(evs[0].syntax, evs2[0].syntax)
+        self.assertEqual(evs[0].body, evs2[0].body)
+        self.assertEqual(evs[1].source_id, evs2[1].source_id)
+        self.assertEqual(evs[1].syntax, evs2[1].syntax)
+        self.assertEqual(evs[1].body, evs2[1].body)
+        self.assertEqual(evs[1].event_id, evs2[1].event_id)
+        self.assertEqual(evs[2].source_id, evs2[2].source_id)
+        self.assertEqual(evs[2].syntax, evs2[2].syntax)
+        self.assertEqual(evs[2].body, evs2[2].body)
+        self.assertEqual(evs[2].aggregator_id, evs2[2].aggregator_id)

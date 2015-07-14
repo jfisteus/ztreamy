@@ -125,8 +125,11 @@ def serialize_events_json(events):
     return json.dumps(data)
 
 def serialize_events_ldjson(events):
-    data = [e.as_json() for e in events]
-    return '\r\n'.join([json.dumps(item) for item in data])
+    if events:
+        data = [e.serialize_json() for e in events]
+        return '\r\n'.join(item for item in data) + '\r\n'
+    else:
+        return ''
 
 def split_url(url):
     """Returns the URL splitted in components.
