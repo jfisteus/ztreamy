@@ -564,7 +564,7 @@ class SynchronousEventPublisher(object):
         True if the data is received correctly by the server.
 
         """
-        self.publish_events([event])
+        return self.publish_events([event])
 
     def publish_events(self, events):
         """Publishes a list of events.
