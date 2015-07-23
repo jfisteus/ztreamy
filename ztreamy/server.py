@@ -376,19 +376,6 @@ class Stream(object):
     def preload_recent_events_buffer_from_file(self, file_):
         self.dispatcher.recent_events.load_from_file(file_)
 
-    def _start_timing(self):
-        self._cpu_timer_start = time.clock()
-        self._real_timer_start = time.time()
-
-    def _stop_timing(self):
-        cpu_timer_stop = time.clock()
-        real_timer_stop = time.time()
-        cpu_time = cpu_timer_stop - self._cpu_timer_start
-        real_time = real_timer_stop - self._real_timer_start
-        logger.logger.server_timing(cpu_time, real_time,
-                                    self._real_timer_start)
-        logger.logger.flush()
-
     def _dump_buffer(self):
         self.dispatcher.dispatch(self._event_buffer)
         self._event_buffer = []
@@ -447,8 +434,6 @@ class RelayStream(Stream):
         self.stop_when_source_finishes = stop_when_source_finishes
         self.client = Client(streams, event_callback,
                         error_callback=self._handle_error,
-#                        connection_close_callback=self._handle_source_finish,
-                        source_start_callback=self._start_timing,
                         source_finish_callback=self._handle_source_finish,
                         parse_event_body=parse_event_body,
                         separate_events=False,
@@ -488,7 +473,6 @@ class RelayStream(Stream):
             logging.error(message)
 
     def _handle_source_finish(self):
-        self._stop_timing()
         if self.stop_when_source_finishes:
             self._finish_when_possible()
 
@@ -863,10 +847,7 @@ class _EventPublishHandler(_GenericHandler):
             raise tornado.web.HTTPError(400, str(ex))
         for event in evs:
             if event.syntax == 'ztreamy-command':
-                if event.command == 'Event-Source-Started':
-                    self.stream._start_timing()
-                elif event.command == 'Event-Source-Finished':
-                    self.stream._stop_timing()
+                if event.command == 'Event-Source-Finished':
                     if self.stop_when_source_finishes:
                         self.stream._finish_when_possible()
             event.aggregator_id.append(self.stream.source_id)
