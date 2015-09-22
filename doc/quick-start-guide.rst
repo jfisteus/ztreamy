@@ -109,6 +109,15 @@ follows an exponential distribution with an average of 3 seconds.  You
 should see the events arriving at the terminal in which the client is
 running.
 
+Alternatively to the console client,
+there is an integrated JavaScript client
+that allows you to watch the stream from a web browser.
+Access in your browser the URL
+`http://localhost:9000/events/dashboard.html
+<http://localhost:9000/events/dashboard.html>`_.
+The page will show the latest events in the stream
+and update as soon as new events are published in the stream.
+
 In order to stop the framework, type control-c in the terminals of the
 event source and the server. The client will stop automatically when
 the server closes.
