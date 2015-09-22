@@ -1,3 +1,28 @@
+2015-09-22  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.4
+
+	* Full refactoring of the dispatchers and improve the performance
+	of the zlib-based dispatcher.
+
+	* Add a web dashboard to view streams from the browser.
+
+	* Improve the client API: optional non-blocking requests,
+	limit the number of events they receive.
+
+	* Add filter for the EventType header.
+
+	* SynchronousEventPublisher confirms the data has been received
+	by the server.
+
+	* Fix issues with UTF-8 serialization/deserialization.
+
+	* Ability to preload the event buffer from file
+	when starting a stream.
+
+	* Other minor changes and bugfixes.
+
+
 2015-03-26  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.3.2
