@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2014 Jesus Arias Fisteus
+# Copyright (C) 2011-2015 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -564,7 +564,7 @@ class SynchronousEventPublisher(object):
         True if the data is received correctly by the server.
 
         """
-        self.publish_events([event])
+        return self.publish_events([event])
 
     def publish_events(self, events):
         """Publishes a list of events.

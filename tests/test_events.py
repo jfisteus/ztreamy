@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ztreamy: a framework for publishing semantic events on the Web
 # Copyright (C) 2015 Jesus Arias Fisteus
 #
@@ -17,6 +18,7 @@
 #
 
 import unittest
+import itertools
 
 import ztreamy
 import ztreamy.events as events
@@ -52,3 +54,78 @@ class TestEvent(unittest.TestCase):
             e.set_extra_header('Body', 'sdfsdfsdf')
         with self.assertRaises(ValueError):
             e.set_extra_header('Source-Id', 'sdfsdfsdf')
+
+    def test_serialize_ldjson(self):
+        source_id = 'source-id-value'
+        syntax = ztreamy.json_media_type
+        body = {'a': 1, 'b': 'blah!'}
+        evs = [
+            events.JSONEvent(source_id, syntax, body),
+            events.JSONEvent(source_id, syntax, body, event_id='6767676766'),
+            events.JSONEvent(source_id, syntax, body,
+                             aggregator_id=['6767676766', '788839393']),
+        ]
+        serialized = ztreamy.serialize_events_ldjson(evs)
+        parts = serialized.split('\r\n')
+        self.assertEqual(len(parts), 4)
+        self.assertEqual(parts[3], '')
+        deserializer = ztreamy.JSONDeserializer()
+        evs2 = list(itertools.chain( \
+                    *[deserializer.deserialize(part) for part in parts[:-1]]))
+        self.assertEqual(evs[0].source_id, evs2[0].source_id)
+        self.assertEqual(evs[0].syntax, evs2[0].syntax)
+        self.assertEqual(evs[0].body, evs2[0].body)
+        self.assertEqual(evs[1].source_id, evs2[1].source_id)
+        self.assertEqual(evs[1].syntax, evs2[1].syntax)
+        self.assertEqual(evs[1].body, evs2[1].body)
+        self.assertEqual(evs[1].event_id, evs2[1].event_id)
+        self.assertEqual(evs[2].source_id, evs2[2].source_id)
+        self.assertEqual(evs[2].syntax, evs2[2].syntax)
+        self.assertEqual(evs[2].body, evs2[2].body)
+        self.assertEqual(evs[2].aggregator_id, evs2[2].aggregator_id)
+
+    def test_unicode_fields(self):
+        event = ztreamy.Event(u'7272727828',
+                              u'text/plain',
+                              u'ásddf'.encode('utf-8'),
+                              event_id=u'777888333',
+                              application_id=u'app',
+                              aggregator_id=[u'234234234', '3333', u'324234'],
+                              event_type=u'TestType',
+                              timestamp=u'20150714T16:29:00+0200',
+                              extra_headers={u'X-Header': u'value'})
+        serialized = str(event)
+        deserializer = ztreamy.Deserializer()
+        deserialized = deserializer.deserialize(serialized, complete=True)
+        self.assertEqual(len(deserialized), 1)
+        self.assertEqual(event.source_id, deserialized[0].source_id)
+        self.assertEqual(event.syntax, deserialized[0].syntax)
+        self.assertEqual(event.body, deserialized[0].body)
+        self.assertEqual(event.event_id, deserialized[0].event_id)
+        self.assertEqual(event.aggregator_id, deserialized[0].aggregator_id)
+        self.assertEqual(event.event_type, deserialized[0].event_type)
+        self.assertEqual(event.timestamp, deserialized[0].timestamp)
+        self.assertEqual(event.extra_headers, deserialized[0].extra_headers)
+
+    def test_unicode_fields_json(self):
+        event = ztreamy.Event(u'7272727828',
+                              u'text/plain',
+                              u'ásddf'.encode('utf-8'),
+                              event_id=u'777888333',
+                              application_id=u'app',
+                              aggregator_id=[u'234234234', '3333', u'324234'],
+                              event_type=u'TestType',
+                              timestamp=u'20150714T16:29:00+0200',
+                              extra_headers={u'X-Header': u'value'})
+        serialized = event.serialize_json()
+        deserializer = ztreamy.JSONDeserializer()
+        deserialized = deserializer.deserialize(serialized, complete=True)
+        self.assertEqual(len(deserialized), 1)
+        self.assertEqual(event.source_id, deserialized[0].source_id)
+        self.assertEqual(event.syntax, deserialized[0].syntax)
+        self.assertEqual(event.body, deserialized[0].body)
+        self.assertEqual(event.event_id, deserialized[0].event_id)
+        self.assertEqual(event.aggregator_id, deserialized[0].aggregator_id)
+        self.assertEqual(event.event_type, deserialized[0].event_type)
+        self.assertEqual(event.timestamp, deserialized[0].timestamp)
+        self.assertEqual(event.extra_headers, deserialized[0].extra_headers)

@@ -1,0 +1,55 @@
+body {
+    background-color: white;
+}
+
+.ztreamy-event {
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 2ex;
+    background-color: #e8eaf6;
+    padding: 1ex;
+    box-shadow: 4px 4px 3px #888888;
+    overflow: auto;
+}
+
+.ztreamy-event-header {
+    white-space: nowrap;
+}
+
+.ztreamy-event-header-name {
+    font-weight: bold;
+    color: #ad1457;
+}
+
+.ztreamy-event-body {
+    border: 1px solid rgb(200, 200, 200);
+    padding: 1ex;
+    max-height: 500px;
+    overflow: auto;
+    margin-top: 2ex;
+    margin-bottom: 1ex;
+    font-family: monospace;
+    white-space: pre;
+}
+
+.ztreamy-status {
+    background-color: rgb(198, 198, 198);
+    color: black;
+    width: 95%;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 2ex;
+    padding: 1ex;
+    text-align: center;
+}
+
+.ztreamy-status-header {
+    font-weight: bold;
+    color: #ad1457;
+}
+
+.ztreamy-status-state, .ztreamy-status-url {
+    font-weight: bold;
+    color: black;
+}

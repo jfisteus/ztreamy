@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2012 Jesus Arias Fisteus
+# Copyright (C) 2011-2015 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ tests_require = []
 
 setup(
     name = "ztreamy",
-    version = "0.3.2",
+    version = "0.4",
     author = "Jesus Arias Fisteus",
     author_email = "jfisteus@gmail.com",
     description = ("A framework for publishing semantic events on the Web"),
@@ -54,6 +54,7 @@ setup(
     packages=['ztreamy', 'ztreamy.utils', 'ztreamy.tools',
               'ztreamy.examples', 'ztreamy.experiments',
               'ztreamy.casestudy'],
+    package_data={'ztreamy': ['data/static/*']},
     long_description=read('README'),
     install_requires = requirements,
     tests_require = tests_require,

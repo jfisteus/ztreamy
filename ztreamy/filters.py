@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2012 Jesus Arias Fisteus
+# Copyright (C) 2011-2015 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -114,6 +114,37 @@ class ApplicationFilter(Filter):
 
     def filter_event(self, event):
         if event.application_id in self.application_ids:
+            self.callback(event)
+
+
+class EventTypeFilter(Filter):
+    def __init__(self, callback, event_types, application_ids=[]):
+        """Creates a filter for application ids.
+
+        'application_ids' must be a list of ids. If empty,
+        any application_id is accepted.
+
+        'event_types' must be a list of event types. It cannot be empty.
+
+        """
+        if event_types is None or not len(event_types):
+            raise ValueError('Empty Event-Type filter')
+        super(EventTypeFilter, self).__init__(callback)
+        if application_ids is not None:
+            self.application_ids = set(application_ids)
+        self.event_types = set(event_types)
+        if len(self.application_ids):
+            self.filter_event = self._filter_event_with_application_id
+        else:
+            self.filter_event = self._filter_event_without_application_id
+
+    def _filter_event_with_application_id(self, event):
+        if (event.application_id in self.application_ids
+            and event.event_type in self.event_types):
+            self.callback(event)
+
+    def _filter_event_without_application_id(self, event):
+        if event.event_type in self.event_types:
             self.callback(event)
 
 

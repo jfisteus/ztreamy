@@ -1,5 +1,5 @@
 # ztreamy: a framework for publishing semantic events on the Web
-# Copyright (C) 2011-2012 Jesus Arias Fisteus
+# Copyright (C) 2011-2015 Jesus Arias Fisteus
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,17 +39,17 @@ import tornado.escape
 import tornado.ioloop
 import tornado.web
 import tornado.httpserver
-import zlib
 import traceback
 import time
 from datetime import timedelta
 import re
+import os.path
 
 import ztreamy
-from ztreamy.client import Client
-from ztreamy import events, ZtreamyException, logger
-
-param_max_events_sync = 20
+from ztreamy import events, logger
+from .client import Client
+from . import dispatchers
+from .dispatchers import ClientProperties, ClientPropertiesFactory
 
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
@@ -87,7 +87,6 @@ class StreamServer(tornado.web.Application):
         has been started.
 
         """
-        # No settings by now...
         settings = dict()
         super(StreamServer, self).__init__(**settings)
         logging.info('Initializing server...')
@@ -155,6 +154,13 @@ class StreamServer(tornado.web.Application):
 
     def _register_handlers(self):
         handlers = []
+        # Common static files
+        static_path = os.path.join(os.path.dirname(__file__), 'data',
+                                   'static')
+        handlers.append(tornado.web.URLSpec(r'/static/(.*)',
+                                            tornado.web.StaticFileHandler,
+                                            kwargs=dict(path=static_path)))
+        # Installed streams
         for stream in self.streams:
             handler_kwargs = {
                 'stream': stream,
@@ -178,6 +184,9 @@ class StreamServer(tornado.web.Application):
                 tornado.web.URLSpec(stream.path + r"/long-polling",
                                     _ShortLivedHandler,
                                     kwargs=handler_kwargs),
+                tornado.web.URLSpec(stream.path + r"/(dashboard.html)",
+                                    tornado.web.StaticFileHandler,
+                                    kwargs=dict(path=static_path)),
             ])
             if stream.allow_publish:
                 publish_kwargs = {'stream': stream,
@@ -278,7 +287,8 @@ class Stream(object):
         else:
             self.path = '/' + path
         self.allow_publish = allow_publish
-        self.dispatcher = _EventDispatcher()
+        self.dispatcher = _EventDispatcher(self,
+                                           num_recent_events=num_recent_events)
         self.buffering_time = buffering_time
         self.event_adapter = event_adapter
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
@@ -288,9 +298,9 @@ class Stream(object):
             self.buffer_dump_sched = \
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
                                                 buffering_time, self.ioloop)
-        self.stats_sched = tornado.ioloop.PeriodicCallback( \
-                                          self.dispatcher.stats, 10000,
-                                          self.ioloop)
+        ## self.stats_sched = tornado.ioloop.PeriodicCallback( \
+        ##                                   self.dispatcher.stats, 10000,
+        ##                                   self.ioloop)
 
     def start(self):
         """Starts the stream.
@@ -301,7 +311,7 @@ class Stream(object):
         """
         if self.buffering_time:
             self.buffer_dump_sched.start()
-        self.stats_sched.start()
+        ## self.stats_sched.start()
 
     def stop(self):
         """Stops the stream.
@@ -316,7 +326,7 @@ class Stream(object):
             self.buffer_dump_sched.stop()
             self._dump_buffer()
         self.dispatcher.close()
-        self.stats_sched.stop()
+        ## self.stats_sched.stop()
 
     def dispatch_event(self, event):
         """Publishes an event in this stream.
@@ -341,7 +351,7 @@ class Stream(object):
 #            logger.logger.event_published(e)
         if self.event_adapter:
             evs = self.event_adapter(evs)
-        self.dispatcher.dispatch_priority(evs)
+        self.dispatcher.dispatch_immediate(evs)
         if self.buffering_time is None:
             self.dispatcher.dispatch(evs)
         else:
@@ -357,22 +367,14 @@ class Stream(object):
         contain one or more event objects.
 
         """
-        client = _LocalClient(callback, separate_events=separate_events)
+        properties = dispatchers.ClientPropertiesFactory.create_local_client()
+        client = _LocalClient(callback, properties,
+                              separate_events=separate_events)
         self.dispatcher.register_client(client)
         return client
 
-    def _start_timing(self):
-        self._cpu_timer_start = time.clock()
-        self._real_timer_start = time.time()
-
-    def _stop_timing(self):
-        cpu_timer_stop = time.clock()
-        real_timer_stop = time.time()
-        cpu_time = cpu_timer_stop - self._cpu_timer_start
-        real_time = real_timer_stop - self._real_timer_start
-        logger.logger.server_timing(cpu_time, real_time,
-                                    self._real_timer_start)
-        logger.logger.flush()
+    def preload_recent_events_buffer_from_file(self, file_):
+        self.dispatcher.recent_events.load_from_file(file_)
 
     def _dump_buffer(self):
         self.dispatcher.dispatch(self._event_buffer)
@@ -432,8 +434,6 @@ class RelayStream(Stream):
         self.stop_when_source_finishes = stop_when_source_finishes
         self.client = Client(streams, event_callback,
                         error_callback=self._handle_error,
-#                        connection_close_callback=self._handle_source_finish,
-                        source_start_callback=self._start_timing,
                         source_finish_callback=self._handle_source_finish,
                         parse_event_body=parse_event_body,
                         separate_events=False,
@@ -473,37 +473,32 @@ class RelayStream(Stream):
             logging.error(message)
 
     def _handle_source_finish(self):
-        self._stop_timing()
         if self.stop_when_source_finishes:
             self._finish_when_possible()
 
 
 class _Client(object):
-    def __init__(self, handler, callback, streaming=False, compress=False,
-                 priority=False, json=False):
-        assert streaming or not compress
+    def __init__(self, handler, callback, properties):
         self.handler = handler
         self.callback = callback
-        self.streaming = streaming
-        if not priority:
-            self.compress = compress
-        else:
-            self.compress = False
-        self.priority = priority
+        self.properties = properties
         self.closed = False
-        if self.compress:
-            self.compression_synced = False
-            self.compressor = zlib.compressobj()
-        self.local = False
-        self.json = json
+        self.creation_time = time.time()
 
     def send(self, data):
-        if self.compress and not self.compression_synced:
-            comp_data = self.compressor.compress(data)
-            comp_data_extra = self.compressor.flush(zlib.Z_SYNC_FLUSH)
-            self.callback(comp_data + comp_data_extra)
-        else:
-            self.callback(data)
+        self.callback(data)
+
+    def send_initial_events(self, evs):
+        serialized = ztreamy.serialize_events( \
+                                evs,
+                                serialization=self.properties.serialization)
+        if self.properties.encoding == ClientProperties.ENCODING_PLAIN:
+            data = serialized
+        elif self.properties.encoding == ClientProperties.ENCODING_ZLIB:
+            data = dispatchers.compress_zlib(serialized)
+        elif self.properties.encoding == ClientProperties.ENCODING_GZIP:
+            data = dispatchers.compress_gzip(serialized)
+        self.send(data)
 
     def close(self):
         """Closes the connection to this client.
@@ -515,14 +510,6 @@ class _Client(object):
         if not self.handler.request.connection.stream.closed():
             ## logging.info('Finishing a client...')
             self.handler.finish()
-            self.compressor = None
-
-    def sync_compression(self):
-        """Places the object in synced state."""
-        if self.compress and not self.compression_synced:
-            self.send('')
-            self.compressor = None
-            self.compression_synced = True
 
 
 class _LocalClient(object):
@@ -534,25 +521,24 @@ class _LocalClient(object):
     object.
 
     """
-    def __init__(self, callback, separate_events=True):
+    def __init__(self, callback, properties, separate_events=True):
         """Not intended to be called by the user.
 
         Use 'create_local_client()' in 'Stream' instead.
 
         """
+        if not properties.local:
+            raise ValueError('Non-local properties for local client')
         self.callback = callback
         self.separate_events = separate_events
-        self.local = True
-        self.streaming = False
-        self.compress = False
-        self.priority = False
+        self.properties = properties
         self.closed = False
 
     def close(self):
         """Disconnects from the stream."""
         self.closed = True
 
-    def _send_events(self, evs):
+    def send_events(self, evs):
         if not self.separate_events:
             self.callback(evs)
         else:
@@ -561,190 +547,149 @@ class _LocalClient(object):
 
 
 class _EventDispatcher(object):
-    def __init__(self, num_recent_events=2048, ioloop=None):
-        self.priority_clients = []
-        self.streaming_clients = []
-        self.compressed_streaming_clients = []
-        self.unsynced_compressed_streaming_clients = []
-        self.one_time_clients = []
-        self.one_time_json_clients = []
-        self.local_clients = []
-        self._compressor = zlib.compressobj()
-        self._num_events_since_sync = 0
-        self._next_client_cleanup = -1
-        self._periods_since_last_event = 0
-        self.sent_bytes = 0
+    def __init__(self, stream, num_recent_events=2048, ioloop=None):
+        self.stream = stream
+        self.dispatchers = {}
+        self.immediate_dispatchers = []
+        self.buffered_dispatchers = []
+        self._init_dispatchers()
+        self.last_event_time = time.time()
         self._auto_finish = False
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.recent_events = _RecentEventsBuffer(num_recent_events)
+        self.periodic_maintenance_timer = tornado.ioloop.PeriodicCallback( \
+                                                   self._periodic_maintenance,
+                                                   60000,
+                                                   io_loop=self.ioloop)
+        self.periodic_maintenance_timer.start()
 
-    def register_client(self, client, last_event_seen=None):
-        if client.streaming:
-            if client.priority:
-                self.priority_clients.append(client)
-            elif client.compress:
-                self.unsynced_compressed_streaming_clients.append(client)
-            else:
-                self.streaming_clients.append(client)
-            logging.info('Streaming client registered; stream: %i; comp: %i'\
-                             %(client.streaming, client.compress))
+    @property
+    def num_clients(self):
+        return sum(len(dispatcher) for dispatcher in self.dispatchers.values())
+
+    def register_client(self, client, last_event_seen=None,
+                        past_events_limit=None, non_blocking=False):
+        dispatcher = self.dispatchers.get(client.properties, None)
+        if dispatcher is None:
+            raise ValueError('Not appropriate dispatcher')
+        past_data = []
         if last_event_seen:
             # Send the available events after the last seen event
-            evs, none_lost = self.recent_events.newer_than(last_event_seen)
-            if len(evs) > 0:
-                client.send(self._serialize_events(evs, json=client.json))
-                if not client.streaming:
-                    client.close()
-        if client.local:
-            self.local_clients.append(client)
-        elif not client.streaming and not client.closed:
-            if not client.json:
-                self.one_time_clients.append(client)
-            else:
-                self.one_time_json_clients.append(client)
+            past_data, none_lost = self.recent_events.newer_than( \
+                                                    last_event_seen,
+                                                    limit=past_events_limit)
+        elif past_events_limit is not None:
+            past_data = self.recent_events.most_recent(past_events_limit)
+        if past_data or non_blocking:
+            client.send_initial_events(past_data)
+            if not client.properties.streaming:
+                client.close()
+        if not client.closed:
+            dispatcher.subscribe(client)
+            client.dispatcher = dispatcher
 
     def deregister_client(self, client):
-        if client.streaming:
-            client.closed = True
-            logging.info('Client deregistered')
-            if self._next_client_cleanup < 0:
-                self._next_client_cleanup = 10
-        elif client.local:
-            client.close()
+        client.dispatcher.unsubscribe(client)
+        client.close()
 
-    def clean_closed_clients(self):
-        self.priority_clients = \
-            [c for c in self.priority_clients if not c.closed]
-        self.streaming_clients = \
-            [c for c in self.streaming_clients if not c.closed]
-        self.compressed_streaming_clients = \
-            [c for c in self.compressed_streaming_clients if not c.closed]
-        self.unsynced_compressed_streaming_clients = \
-            [c for c in self.unsynced_compressed_streaming_clients \
-                 if not c.closed]
-        self.local_clients = [c for c in self.local_clients if not c.closed]
-        self._next_client_cleanup = -1
-        logging.info('Cleaning up clients')
-
-    def dispatch_priority(self, evs):
-        if len(self.priority_clients) > 0 and len(evs) > 0:
-            serialized = self._serialize_events(evs)
-            for client in self.priority_clients:
-                self._send(serialized, client)
+    def dispatch_immediate(self, evs):
+        pack = dispatchers.EventsPack(evs)
+        for dispatcher in self.immediate_dispatchers:
+            dispatcher.dispatch(pack)
 
     def dispatch(self, evs):
-        num_normal_clients = (len(self.streaming_clients)
-                              + len(self.one_time_clients)
-                              + len(self.unsynced_compressed_streaming_clients)
-                              + len(self.compressed_streaming_clients)
-                              + len(self.local_clients))
-        num_json_clients = len(self.one_time_json_clients)
-        num_clients = num_normal_clients + num_json_clients
-        logging.info('Sending %r events to %r clients', len(evs),
-                     num_clients)
+        logging.info('{}: server cycle; events: {}'.format(self.stream.path,
+                                                           len(evs)))
         self.recent_events.append_events(evs)
-        self._next_client_cleanup -= 1
-        if self._next_client_cleanup == 0:
-            self.clean_closed_clients()
-        if isinstance(evs, list):
-            if evs == []:
-                self._periods_since_last_event += 1
-                if self._periods_since_last_event > 20 and self._auto_finish:
-                    logger.logger.server_closed(num_clients)
-                    self.close()
-                    self.ioloop.stop()
-                # Use the following line for the experiments
-                ## if False:
-                elif ((num_clients
-                       or len(self.priority_clients))
-                      and self._periods_since_last_event > 20):
-                    logging.info('Sending Test-Connection event')
-                    evs = [events.Command('', 'ztreamy-command',
-                                          'Test-Connection')]
-                    self.dispatch_priority(evs)
-                    test_connection = True
-                else:
-                    return
-            else:
-                test_connection = False
+        if not evs:
+            if self._auto_finish and time.time() - self.last_event_time > 60:
+                logger.logger.server_closed(self.num_clients)
+                self.close()
+                self.ioloop.stop()
         else:
-            raise ZtreamyException('Bad event type', 'send_event')
-        self._periods_since_last_event = 0
-        if len(self.unsynced_compressed_streaming_clients) > 0:
-            if (len(self.compressed_streaming_clients) == 0
-                or self._num_events_since_sync > param_max_events_sync):
-                self._sync_compressor()
-        if num_clients > 0:
-            logging.info('Compressed clients: %d synced; %d unsynced'%\
-                             (len(self.compressed_streaming_clients),
-                              len(self.unsynced_compressed_streaming_clients)))
-            if num_normal_clients > 0:
-                serialized = self._serialize_events(evs)
-                for client in self.streaming_clients:
-                    self._send(serialized, client)
-                for client in self.unsynced_compressed_streaming_clients:
-                    self._send(serialized, client)
-                if not test_connection:
-                    for client in self.local_clients:
-                        if not client.closed:
-                            client._send_events(evs)
-                    for client in self.one_time_clients:
-                        self._send(serialized, client)
-                        client.close()
-                    self.one_time_clients = []
-                if len(self.compressed_streaming_clients) > 0:
-                    compressed_data = (self._compressor.compress(serialized)
-                                   + self._compressor.flush(zlib.Z_SYNC_FLUSH))
-                    for client in self.compressed_streaming_clients:
-                        self._send(compressed_data, client)
-            if not test_connection and num_json_clients > 0:
-                serialized = self._serialize_events(evs, json=True)
-                for client in self.one_time_json_clients:
-                    self._send(serialized, client)
-                    client.close()
-                self.one_time_json_clients = []
+            self.last_event_time = time.time()
+        pack = dispatchers.EventsPack(evs)
+        for dispatcher in self.buffered_dispatchers:
+            dispatcher.dispatch(pack)
+            if evs and not dispatcher.properties.streaming:
+                dispatcher.close()
             for e in evs:
                 logger.logger.event_dispatched(e)
-        self._num_events_since_sync += len(evs)
 
     def close(self):
         """Closes every active streaming client."""
-        for client in self.streaming_clients:
-            client.close()
-        self.streaming_clients = []
-        self.stats()
+        for dispatcher in self.dispatchers.values():
+            dispatcher.close()
 
-    def stats(self):
-        logger.logger.server_traffic_sent(time.time(), self.sent_bytes)
-        self.sent_bytes = 0
+    def _periodic_maintenance(self):
+        for dispatcher in self.dispatchers.values():
+            dispatcher.periodic_maintenance()
 
-    def _sync_compressor(self):
-        for client in self.unsynced_compressed_streaming_clients:
-            client.sync_compression()
-        data = self._compressor.flush(zlib.Z_FULL_FLUSH)
-        if len(data) > 0:
-            for client in self.compressed_streaming_clients:
-                self._send(data, client)
-        self.compressed_streaming_clients.extend( \
-            self.unsynced_compressed_streaming_clients)
-        self.unsynced_compressed_streaming_clients = []
-        self._num_events_since_sync = 0
-        logging.info('Compressor synced')
-
-    def _send(self, data, client):
-        try:
-            if not client.closed:
-                client.send(data)
-                self.sent_bytes += len(data)
-        except:
-            logging.error("Error in client callback", exc_info=True)
-
-    def _serialize_events(self, evs, json=False):
-        if json:
-            serialization = ztreamy.SERIALIZATION_JSON
-        else:
-            serialization = ztreamy.SERIALIZATION_ZTREAMY
-        return ztreamy.serialize_events(evs, serialization=serialization)
+    def _init_dispatchers(self):
+        # Streaming dispatcher, plain encoding, ztreamy serialization:
+        properties = ClientPropertiesFactory.create( \
+                                streaming=True)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Streaming dispatcher, zlib encoding, ztreamy serialization:
+        properties = ClientPropertiesFactory.create( \
+                                streaming=True,
+                                encoding=ClientProperties.ENCODING_ZLIB)
+        dispatcher = dispatchers.ZlibDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Streaming dispatcher, pain encoding, json serialization:
+        properties = ClientPropertiesFactory.create( \
+                                streaming=True,
+                                serialization=ztreamy.SERIALIZATION_LDJSON)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Streaming dispatcher, zlib encoding, json serialization:
+        properties = ClientPropertiesFactory.create( \
+                                streaming=True,
+                                serialization=ztreamy.SERIALIZATION_LDJSON,
+                                encoding=ClientProperties.ENCODING_ZLIB)
+        dispatcher = dispatchers.ZlibDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Long polling dispatcher, plain encoding, ztreamy serialization:
+        properties = ClientPropertiesFactory.create()
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Long polling dispatcher, plain encoding, json serialization:
+        properties = ClientPropertiesFactory.create( \
+                                serialization=ztreamy.SERIALIZATION_JSON)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Long polling dispatcher, gzip encoding, ztreamy serialization:
+        properties = ClientPropertiesFactory.create( \
+                                encoding=ClientProperties.ENCODING_GZIP)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Long polling dispatcher, gzip encoding, json serialization:
+        properties = ClientPropertiesFactory.create( \
+                                serialization=ztreamy.SERIALIZATION_JSON,
+                                encoding=ClientProperties.ENCODING_GZIP)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.buffered_dispatchers.append(dispatcher)
+        # Priority dispatcher
+        properties = ClientPropertiesFactory.create( \
+                                streaming=True,
+                                priority=True)
+        dispatcher = dispatchers.SimpleDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.immediate_dispatchers.append(dispatcher)
+        # Local dispatcher
+        properties = ClientPropertiesFactory.create_local_client()
+        dispatcher = dispatchers.LocalDispatcher(self.stream, properties)
+        self.dispatchers[properties] = dispatcher
+        self.immediate_dispatchers.append(dispatcher)
 
 
 class _GenericHandler(tornado.web.RequestHandler):
@@ -753,6 +698,27 @@ class _GenericHandler(tornado.web.RequestHandler):
 
     def __init__(self, application, request, **kwargs):
         super(_GenericHandler, self).__init__(application, request, **kwargs)
+
+    def _last_seen_parameters(self):
+        last_event_seen = self.get_argument('last-seen', default=None)
+        past_events_limit = self.get_argument('past-events-limit',
+                                              default=None)
+        if past_events_limit == '':
+            past_events_limit = None
+        elif past_events_limit is not None:
+            try:
+                past_events_limit = int(past_events_limit)
+            except ValueError:
+                raise tornado.web.HTTPError(404, 'Not Found')
+            else:
+                if past_events_limit < 0:
+                    raise tornado.web.HTTPError(404, 'Not Found')
+        non_blocking = self.get_argument('non-blocking', default=None)
+        if non_blocking is not None and non_blocking != '0':
+            non_blocking = True
+        else:
+            non_blocking = False
+        return last_event_seen, past_events_limit, non_blocking
 
     def _select_encoding(self, acceptable_encodings):
         """Selects an appropriate encoding for the HTTP response.
@@ -881,10 +847,7 @@ class _EventPublishHandler(_GenericHandler):
             raise tornado.web.HTTPError(400, str(ex))
         for event in evs:
             if event.syntax == 'ztreamy-command':
-                if event.command == 'Event-Source-Started':
-                    self.stream._start_timing()
-                elif event.command == 'Event-Source-Finished':
-                    self.stream._stop_timing()
+                if event.command == 'Event-Source-Finished':
                     if self.stop_when_source_finishes:
                         self.stream._finish_when_possible()
             event.aggregator_id.append(self.stream.source_id)
@@ -903,7 +866,14 @@ class _EventStreamHandler(_GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        last_event_seen = self.get_argument('last-seen', default=None)
+        # non_blocking will be ignored and False used always!
+        last_event_seen, past_events_limit, non_blocking = \
+            self._last_seen_parameters()
+        if ('Accept' in self.request.headers
+            and ztreamy.ldjson_media_type in self.request.headers['Accept']):
+            serialization = ztreamy.SERIALIZATION_LDJSON
+        else:
+            serialization = ztreamy.SERIALIZATION_ZTREAMY
         if not self.priority:
             if self.force_compression:
                 encoding = 'deflate'
@@ -912,15 +882,28 @@ class _EventStreamHandler(_GenericHandler):
         else:
             encoding = 'identity'
         if encoding is not None:
-            compress = True if encoding == 'deflate' else False
-            self.client = _Client(self, self._on_new_data, streaming=True,
-                                  compress=compress, priority=self.priority)
-            self.dispatcher.register_client(self.client,
-                                            last_event_seen=last_event_seen)
-            self.set_header('Content-Type', ztreamy.stream_media_type)
+            if encoding == 'deflate':
+                encoding = ClientProperties.ENCODING_ZLIB
+            else:
+                encoding = ClientProperties.ENCODING_PLAIN
+            properties = ClientPropertiesFactory.create( \
+                                streaming=True,
+                                serialization=serialization,
+                                encoding=encoding,
+                                priority=self.priority)
+            self.client = _Client(self, self._on_new_data, properties)
+            self.dispatcher.register_client( \
+                                        self.client,
+                                        last_event_seen=last_event_seen,
+                                        past_events_limit=past_events_limit,
+                                        non_blocking=False)
+            if serialization == ztreamy.SERIALIZATION_ZTREAMY:
+                self.set_header('Content-Type', ztreamy.stream_media_type)
+            else:
+                self.set_header('Content-Type', ztreamy.ldjson_media_type)
             # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
             self.set_header('Access-Control-Allow-Origin', '*')
-            if compress:
+            if encoding == ClientProperties.ENCODING_ZLIB:
                 self.set_header('Content-Encoding', 'deflate')
         else:
             raise tornado.web.HTTPError(406, 'Not Acceptable')
@@ -932,9 +915,6 @@ class _EventStreamHandler(_GenericHandler):
         self.write(data)
         self.flush()
 
-    def _on_client_close(self):
-        self.dispatcher.deregister_client(self.client)
-
 
 class _ShortLivedHandler(_GenericHandler):
     def __init__(self, application, request, dispatcher=None, stream=None):
@@ -944,20 +924,31 @@ class _ShortLivedHandler(_GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        last_event_seen = self.get_argument('last-seen', default=None)
-        json = False
+        last_event_seen, past_events_limit, non_blocking = \
+            self._last_seen_parameters()
         if ('Accept' in self.request.headers
             and ztreamy.json_media_type in self.request.headers['Accept']):
-                json = True
-        if not json:
-            self.set_header('Content-Type', ztreamy.stream_media_type)
-        else:
+            serialization = ztreamy.SERIALIZATION_JSON
             self.set_header('Content-Type', ztreamy.json_media_type)
+        else:
+            serialization=ztreamy.SERIALIZATION_ZTREAMY
+            self.set_header('Content-Type', ztreamy.stream_media_type)
         self.set_header('Access-Control-Allow-Origin', '*')
-        self.client = _Client(self, self._on_new_data, streaming=False,
-                              json=json)
+        encoding = self._select_encoding(['gzip', 'identity'])
+        if encoding == 'gzip':
+            encoding = ClientProperties.ENCODING_GZIP
+            self.set_header('Content-Encoding', 'gzip')
+        else:
+            encoding = ClientProperties.ENCODING_PLAIN
+        properties = ClientPropertiesFactory.create( \
+                                streaming=False,
+                                serialization=serialization,
+                                encoding=encoding)
+        self.client = _Client(self, self._on_new_data, properties)
         self.dispatcher.register_client(self.client,
-                                        last_event_seen=last_event_seen)
+                                        last_event_seen=last_event_seen,
+                                        past_events_limit=past_events_limit,
+                                        non_blocking=non_blocking)
 
     def _on_new_data(self, data):
         if not self.request.connection.stream.closed():
@@ -993,34 +984,61 @@ class _RecentEventsBuffer(object):
         else:
             self._append_internal(events)
 
-    def newer_than(self, event_id):
+    def load_from_file(self, file_):
+        deserializer = events.Deserializer()
+        for evs in deserializer.deserialize_file(file_):
+            self.append_events(evs)
+
+    def newer_than(self, event_id, limit=None):
         """Returns the events newer than the given 'event_id'.
 
         If no event in the buffer has the 'event_id', all the events are
         returned. If the newest event in the buffer has that id, an empty
         list is returned.
 
+        If 'limit' is not None, at most 'limit' events are returned
+        (the most recent ones).
+
         Returns a tuple ('events', 'complete') where 'events' is the list
-        of events and 'complete' is True when 'event_id' is in the buffer.
+        of events and 'complete' is True when 'event_id' is in the buffer
+        and no limit was applied.
 
         """
         if event_id in self.events:
+            complete = True
             pos = self.events[event_id] + 1
             if pos == len(self.buffer):
                 pos = 0
             if pos == self.position:
-                return [], True
+                data = []
             elif pos < self.position:
-                return self.buffer[pos:self.position], True
+                data = self.buffer[pos:self.position]
             else:
-                return self.buffer[pos:] + self.buffer[:self.position], True
+                data = self.buffer[pos:] + self.buffer[:self.position]
         else:
+            complete = False
             if (self.position != len(self.buffer) - 1
                 and self.buffer[self.position + 1] is None):
-                return self.buffer[:self.position], False
+                data = self.buffer[:self.position]
             else:
-                return (self.buffer[self.position:]
-                        + self.buffer[:self.position]), False
+                data = (self.buffer[self.position:]
+                        + self.buffer[:self.position])
+        if limit is not None and len(data) > limit:
+            data = data[-limit:]
+            complete = False
+        return data, complete
+
+    def most_recent(self, num_events):
+        if num_events > len(self.buffer):
+            num_events = len(self.buffer)
+        pos = self.position - num_events
+        if pos >= 0:
+            data = self.buffer[pos:self.position]
+        elif self.buffer[-1] is not None:
+            data = self.buffer[pos:] + self.buffer[:self.position]
+        else:
+            data = self.buffer[:self.position]
+        return data
 
     def _append_internal(self, events):
         self._remove_from_dict(self.position, len(events))
