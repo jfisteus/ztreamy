@@ -263,6 +263,13 @@ python -m ztreamy.tools.event_source --distribution=&quot;exp[3]&quot; http://lo
 follows an exponential distribution with an average of 3 seconds.  You
 should see the events arriving at the terminal in which the client is
 running.</p>
+<p>Alternatively to the console client,
+there is an integrated JavaScript client
+that allows you to watch the stream from a web browser.
+Access in your browser the URL
+<a class="reference external" href="http://localhost:9000/events/dashboard.html">http://localhost:9000/events/dashboard.html</a>.
+The page will show the latest events in the stream
+and update as soon as new events are published in the stream.</p>
 <p>In order to stop the framework, type control-c in the terminals of the
 event source and the server. The client will stop automatically when
 the server closes.</p>
