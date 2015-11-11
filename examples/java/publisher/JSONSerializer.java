@@ -1,3 +1,4 @@
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.List;
@@ -30,4 +31,12 @@ public class JSONSerializer implements Serializer {
         return gson.toJson(maps).getBytes(charsetUTF8);
     }
 
+    public static void main(String[] args) throws IOException {
+        Event event = new Event(Event.createUUID(), Event.createUUID(),
+                                "text/plain", "Ztreamy-test",
+                                "Test event");
+        event.setBody("Test body.");
+        Serializer serializer = new JSONSerializer();
+        System.out.write(serializer.serialize(event));
+    }
 }

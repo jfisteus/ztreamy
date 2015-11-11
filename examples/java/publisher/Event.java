@@ -13,6 +13,7 @@ public class Event {
     private String syntax;
     private String timestamp;
     private String applicationId;
+    private String eventType;
     private Map<String, Object> body;
     private Map<String, String> extraHeaders;
 
@@ -21,23 +22,39 @@ public class Event {
         new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
 
     public Event(String eventId, String sourceId, String syntax,
-                 String applicationId, Map<String, Object> body) {
+                 String applicationId, String eventType,
+                 Map<String, Object> body) {
         this.eventId = eventId;
         this.sourceId = sourceId;
         this.syntax = syntax;
         this.applicationId = applicationId;
+        this.eventType = eventType;
         this.body = body;
         this.extraHeaders = new LinkedHashMap<String, String>();
         timestamp = createTimestamp();
     }
 
-    public Event(String eventId, String sourceId, String syntax,
-                 String applicationId) {
-        this(eventId, sourceId, syntax, applicationId, null);
+    public Event(String sourceId, String syntax, String applicationId,
+                 String eventType, Map<String, Object> body) {
+        this(createUUID(), sourceId, syntax, applicationId, eventType, body);
+    }
+
+    public Event(String sourceId, String syntax,
+                 String applicationId, Map<String, Object> body) {
+        this(createUUID(), sourceId, syntax, applicationId, null, body);
+    }
+
+    public Event(String sourceId, String syntax,
+                 String applicationId, String eventType) {
+        this(createUUID(), sourceId, syntax, applicationId, eventType, null);
     }
 
     public Event(String sourceId, String syntax, String applicationId) {
-        this(createUUID(), sourceId, syntax, applicationId);
+        this(createUUID(), sourceId, syntax, applicationId, null, null);
+    }
+
+    public Map<String, Object> getBody() {
+        return body;
     }
 
     public void setBody(Map<String, Object> bodyAsMap) {
@@ -60,6 +77,9 @@ public class Event {
         serializeHeader(buffer, "Syntax", syntax);
         if (applicationId != null) {
             serializeHeader(buffer, "Application-Id", applicationId);
+        }
+        if (eventType != null) {
+            serializeHeader(buffer, "Event-Type", eventType);
         }
         if (timestamp != null) {
             serializeHeader(buffer, "Timestamp", timestamp);
@@ -88,14 +108,19 @@ public class Event {
         if (applicationId != null) {
             data.put("Application-Id", applicationId);
         }
+        if (eventType != null) {
+            data.put("Event-Type", eventType);
+        }
         if (timestamp != null) {
             data.put("Timestamp", timestamp);
         }
         data.putAll(extraHeaders);
         if (syntax.equals("application/json")) {
             data.put("Body", body);
-        } else {
+        } else if (body.get("value") != null) {
             data.put("Body", body.get("value").toString());
+        } else {
+            data.put("Body", "");
         }
         return data;
     }
@@ -129,7 +154,9 @@ public class Event {
     }
 
     public static void main(String[] args) throws IOException {
-        Event event = new Event(createUUID(), "text/plain", "Ztreamy-test");
+        Event event = new Event(createUUID(),
+                                "text/plain", "Ztreamy-test",
+                                "Test event");
         event.setBody("Test body.");
         System.out.write(event.serialize());
     }
