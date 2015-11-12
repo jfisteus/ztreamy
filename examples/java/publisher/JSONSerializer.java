@@ -32,7 +32,7 @@ public class JSONSerializer implements Serializer {
     }
 
     public static void main(String[] args) throws IOException {
-        Event event = new Event(Event.createUUID(), Event.createUUID(),
+        Event event = new Event(Event.createUUID(),
                                 "text/plain", "Ztreamy-test",
                                 "Test event");
         event.setBody("Test body.");
