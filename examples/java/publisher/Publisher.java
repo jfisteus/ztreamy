@@ -78,7 +78,7 @@ public class Publisher {
         for (int i = 0; i < numEvents; i++) {
             int result = publisher.publish(new TestEvent(sourceId));
             if (result == 200) {
-                System.out.println("An event just just been sent to the server");
+                System.out.println("An event has just been sent to the server");
             } else {
                 System.out.println("The server responded with error " + result);
             }
