@@ -19,5 +19,5 @@ in order to run this example.
 If you want to use this code from Android, you'll probably want to
 write an alternative JSONSerializer class that uses the JSON
 support already provided by Android. If you do that, I would appreciate
-it if you would contribute your implementation back, so that I can
+it if you contributed your implementation back, so that I can
 make it available with the rest of this code.
