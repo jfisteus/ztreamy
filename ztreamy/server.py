@@ -248,10 +248,14 @@ class Stream(object):
     'dispatch_event()' or 'dispatch_events()' methods.
 
     """
-    def __init__(self, path, allow_publish=False, buffering_time=None,
-                 source_id=None, num_recent_events=2048,
+    def __init__(self, path,
+                 source_id=None,
+                 allow_publish=False,
+                 buffering_time=None,
+                 num_recent_events=2048,
                  event_adapter=None,
-                 parse_event_body=True, ioloop=None):
+                 parse_event_body=True,
+                 ioloop=None):
         """Creates a stream object.
 
         The stream will be served with the specified 'path' prefix,
@@ -398,10 +402,13 @@ class RelayStream(Stream):
     order to select which events are published.
 
     """
-    def __init__(self, path, streams, allow_publish=False, filter_=None,
-                 parse_event_body=False,
+    def __init__(self, path, streams,
+                 filter_=None,
+                 allow_publish=False,
                  buffering_time=None,
+                 num_recent_events=2048,
                  event_adapter=None,
+                 parse_event_body=False,
                  ioloop=None,
                  stop_when_source_finishes=False):
         """Creates a new relay stream.
@@ -424,7 +431,9 @@ class RelayStream(Stream):
         super(RelayStream, self).__init__(path,
                                           allow_publish=allow_publish,
                                           buffering_time=buffering_time,
+                                          num_recent_events=num_recent_events,
                                           event_adapter=event_adapter,
+                                          parse_event_body=parse_event_body,
                                           ioloop=ioloop)
         if filter_ is not None:
             filter_.callback = self._relay_events
