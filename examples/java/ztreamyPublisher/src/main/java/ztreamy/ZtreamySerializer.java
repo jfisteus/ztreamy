@@ -1,3 +1,4 @@
+package ztreamy;
 public class ZtreamySerializer implements Serializer {
 
     public String contentType() {

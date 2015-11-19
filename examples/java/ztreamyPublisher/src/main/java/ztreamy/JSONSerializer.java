@@ -1,8 +1,10 @@
+package ztreamy;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+
 import com.google.gson.Gson;
 
 public class JSONSerializer implements Serializer {
