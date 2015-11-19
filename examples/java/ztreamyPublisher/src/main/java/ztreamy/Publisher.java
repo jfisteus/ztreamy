@@ -1,9 +1,11 @@
 package ztreamy;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.zip.GZIPOutputStream;
 
 public class Publisher {
 
@@ -30,14 +32,24 @@ public class Publisher {
     }
 
     public int publish(Event[] events) throws IOException {
+        return publish(events, false);
+    }
+
+    public int publish(Event[] events, boolean compress) throws IOException {
         HttpURLConnection con = (HttpURLConnection) serverURL.openConnection();
         con.setRequestMethod("POST");
         con.setRequestProperty("Content-Type", serializer.contentType());
+        if (compress) {
+            con.setRequestProperty("Content-Encoding", "gzip");
+        }
         con.setDoOutput(true);
         OutputStream out = con.getOutputStream();
         OutputStream log = null;
         if (logFileName != null) {
             log = new FileOutputStream(logFileName, true);
+        }
+        if (compress) {
+            out = new GZIPOutputStream(out);
         }
         byte[] data;
         if (events.length == 1) {
@@ -57,6 +69,10 @@ public class Publisher {
     }
 
     public int publish(Event event) throws IOException {
-        return publish(new Event[] {event});
+        return publish(event, false);
+    }
+
+    public int publish(Event event, boolean compress) throws IOException {
+        return publish(new Event[] {event}, compress);
     }
 }

@@ -90,7 +90,8 @@ class StreamServer(tornado.web.Application):
         settings = dict()
         super(StreamServer, self).__init__(**settings)
         logging.info('Initializing server...')
-        self.http_server = tornado.httpserver.HTTPServer(self)
+        self.http_server = tornado.httpserver.HTTPServer(self,
+                                                decompress_request=True)
         self.streams = []
         self.port = port
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
