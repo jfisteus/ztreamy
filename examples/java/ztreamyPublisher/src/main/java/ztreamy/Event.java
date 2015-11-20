@@ -8,6 +8,10 @@ import java.util.Map;
 import java.text.SimpleDateFormat;
 import com.google.gson.Gson;
 
+/**
+ * A Ztreamy event with all its fields.
+ *
+ */
 public class Event {
     private String eventId;
     private String sourceId;
@@ -22,6 +26,21 @@ public class Event {
     private static SimpleDateFormat rfc3339Format =
         new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
 
+    /**
+     * Create an event with all the required parameters.
+     *
+     * @param eventId the id of the new event (normally a UUID).
+     * @param sourceId the id of the source of this event (normally a UUID).
+     * @param syntax the syntax of the event body (a MIME type).
+     * @param applicationId the identifier of the application to which
+     *            the event belongs.
+     * @param eventType the application-specific type of event.
+     * @param body the body of the event as a map. The map can contain nested
+     *            maps for defining complex structures. When the event
+     *            is not JSON, the map must contain a single key "value"
+     *            with a String value.
+     *
+     */
     public Event(String eventId, String sourceId, String syntax,
                  String applicationId, String eventType,
                  Map<String, Object> body) {
@@ -35,42 +54,122 @@ public class Event {
         timestamp = createTimestamp();
     }
 
+    /**
+     * Create an event with an auto-generated event id.
+     *
+     * @param sourceId the id of the source of this event (normally a UUID).
+     * @param syntax the syntax of the event body (a MIME type).
+     * @param applicationId the identifier of the application to which
+     *            the event belongs.
+     * @param eventType the application-specific type of event.
+     * @param body the body of the event as a map. The map can contain nested
+     *            maps for defining complex structures. When the event
+     *            is not JSON, the map must contain a single key "value"
+     *            with a String value.
+     *
+     */
     public Event(String sourceId, String syntax, String applicationId,
                  String eventType, Map<String, Object> body) {
         this(createUUID(), sourceId, syntax, applicationId, eventType, body);
     }
 
+    /**
+     * Create an event with an auto-generated event id and no event type.
+     *
+     * @param sourceId the id of the source of this event (normally a UUID).
+     * @param syntax the syntax of the event body (a MIME type).
+     * @param applicationId the identifier of the application to which
+     *            the event belongs.
+     * @param body the body of the event as a map. The map can contain nested
+     *            maps for defining complex structures. When the event
+     *            is not JSON, the map must contain a single key "value"
+     *            with a String value.
+     *
+     */
     public Event(String sourceId, String syntax,
                  String applicationId, Map<String, Object> body) {
         this(createUUID(), sourceId, syntax, applicationId, null, body);
     }
 
+    /**
+     * Create an event with an auto-generated event id and no body.
+     * The body can be set later through the methods of the class.
+     *
+     * @param sourceId the id of the source of this event (normally a UUID).
+     * @param syntax the syntax of the event body (a MIME type).
+     * @param applicationId the identifier of the application to which
+     *            the event belongs.
+     * @param eventType the application-specific type of event.
+     *
+     */
     public Event(String sourceId, String syntax,
                  String applicationId, String eventType) {
         this(createUUID(), sourceId, syntax, applicationId, eventType, null);
     }
 
+    /**
+     * Create an event with an auto-generated event id, no event type
+     * and no body.
+     * The body can be set later through the methods of the class.
+     *
+     * @param sourceId the id of the source of this event (normally a UUID).
+     * @param syntax the syntax of the event body (a MIME type).
+     * @param applicationId the identifier of the application to which
+     *            the event belongs.
+     *
+     */
     public Event(String sourceId, String syntax, String applicationId) {
         this(createUUID(), sourceId, syntax, applicationId, null, null);
     }
 
+    /**
+     * Return the body of the event.
+     *
+     * @return the body of the event as a map.
+     *
+     */
     public Map<String, Object> getBody() {
         return body;
     }
 
+    /**
+     * Set the body of the event.
+     *
+     * @param bodyAsMap the body of the event as a map.
+     *
+     */
     public void setBody(Map<String, Object> bodyAsMap) {
         this.body = bodyAsMap;
     }
 
+    /**
+     * Set the body of the event as a String.
+     *
+     * @param bodyAsMap the body of the event as a String.
+     *
+     */
     public void setBody(String bodyAsString) {
         body = new LinkedHashMap<String, Object>();
         body.put("value", bodyAsString);
     }
 
+    /**
+     * Add an extra event header or modify an existing one.
+     *
+     * @param name the name of the extra header.
+     * @param value the value of the extra header.
+     *
+     */
     public void setExtraHeader(String name, String value) {
         extraHeaders.put(name, value);
     }
 
+    /**
+     * Serialize the event as a byte array by using the configured serializer.
+     *
+     * @return the event serialized as a byte array.
+     *
+     */
     public byte[] serialize() {
         StringBuffer buffer = new StringBuffer();
         serializeHeader(buffer, "Event-Id", eventId);
@@ -101,6 +200,15 @@ public class Event {
         return concatenate(headers, bodyAsBytes);
     }
 
+    /**
+     * Get a Map that represents the whole event.
+     *
+     * Each header is a top-level key, and the body is the value
+     * of the "Body" top-level key.
+     *
+     * @return the whole event as a map.
+     *
+     */
     public Map<String, Object> toMap() {
         Map<String, Object> data = new LinkedHashMap<String, Object>();
         data.put("Event-Id", eventId);
@@ -126,6 +234,10 @@ public class Event {
         return data;
     }
 
+    /**
+     * Create and return a new UUID.
+     *
+     */
     public static String createUUID() {
         return UUID.randomUUID().toString();
     }
