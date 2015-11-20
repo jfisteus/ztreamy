@@ -4,7 +4,7 @@ publication through a Ztreamy stream.
 An example of how to use the library:
 
 ```java
-String streamURL = "http://localhost:9000/events/stream
+String streamURL = "http://localhost:9000/events/stream"
 Serializer serializer = new JSONSerializer();
 Publisher publisher = new Publisher(new URL(streamURL), serializer);
 String sourceId = Event.createUUID();
