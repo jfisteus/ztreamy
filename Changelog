@@ -1,3 +1,11 @@
+2015-11-23  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.4.1
+
+	* Fix issue #25: bug with zlib compression when previous data
+	needed to be sent from the recent event buffer.
+
+
 2015-09-22  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.4
