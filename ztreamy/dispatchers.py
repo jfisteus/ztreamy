@@ -349,8 +349,10 @@ class SubscriptionGroup(object):
         self.subscriptions = []
         if properties.encoding == ClientProperties.ENCODING_ZLIB:
             self.compressor = zlib.compressobj(compression_level)
+            self.initial_data = self.compressor.compress('')
         else:
             self.compressor = None
+            self.initial_data = None
         self.is_reset = True
         self.data_counter = 0
         self.terminated = False
@@ -361,11 +363,17 @@ class SubscriptionGroup(object):
         if not self.is_reset:
             raise ValueError('Compressor in dirty state')
         self.subscriptions.append(client)
+        if self.compressor and client.is_fresh:
+            client.send(self.initial_data, flush=False)
 
     def subscribe_clients(self, clients):
         if not self.is_reset:
             raise ValueError('Compressor in dirty state')
         self.subscriptions.extend(clients)
+        if self.compressor:
+            for client in clients:
+                if client.is_fresh:
+                    client.send(self.initial_data, flush=False)
 
     def unsubscribe(self, client):
         if not self.inside_dispatch:
@@ -421,6 +429,10 @@ class SubscriptionGroup(object):
     def __iter__(self):
         return iter(self.subscriptions)
 
+    def _full_flush(self):
+        if self.compressor is not None:
+            self.compressor.flush(zlib.Z_FULL_FLUSH)
+
 
 def compress_gzip(data):
     sio = StringIO.StringIO()
@@ -431,4 +443,5 @@ def compress_gzip(data):
 def compress_zlib(data):
     compressor = zlib.compressobj()
     data = compressor.compress(data)
-    data += compressor.flush(zlib.Z_FULL_FLUSH)
+    data += compressor.flush(zlib.Z_SYNC_FLUSH)
+    return data
