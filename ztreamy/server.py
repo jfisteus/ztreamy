@@ -494,9 +494,12 @@ class _Client(object):
         self.properties = properties
         self.closed = False
         self.creation_time = time.time()
+        self.is_fresh = True
 
-    def send(self, data):
-        self.callback(data)
+    def send(self, data, flush=True):
+        self.callback(data, flush=flush)
+        if data:
+            self.is_fresh = False
 
     def send_initial_events(self, evs):
         serialized = ztreamy.serialize_events( \
@@ -543,6 +546,7 @@ class _LocalClient(object):
         self.separate_events = separate_events
         self.properties = properties
         self.closed = False
+        self.creation_time = time.time()
 
     def close(self):
         """Disconnects from the stream."""
@@ -918,12 +922,13 @@ class _EventStreamHandler(_GenericHandler):
         else:
             raise tornado.web.HTTPError(406, 'Not Acceptable')
 
-    def _on_new_data(self, data):
+    def _on_new_data(self, data, flush=True):
         if self.request.connection.stream.closed():
             self.dispatcher.deregister_client(self.client)
             return
         self.write(data)
-        self.flush()
+        if flush:
+            self.flush()
 
 
 class _ShortLivedHandler(_GenericHandler):
@@ -960,7 +965,9 @@ class _ShortLivedHandler(_GenericHandler):
                                         past_events_limit=past_events_limit,
                                         non_blocking=non_blocking)
 
-    def _on_new_data(self, data):
+    def _on_new_data(self, data, flush=False):
+        # No need to flush because the request will be soon completed
+        # The parameter is kept for compatibility
         if not self.request.connection.stream.closed():
             self.write(data)
 
