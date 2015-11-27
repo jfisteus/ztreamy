@@ -890,6 +890,14 @@ class _EventStreamHandler(_GenericHandler):
                 encoding = ClientProperties.ENCODING_ZLIB
             else:
                 encoding = ClientProperties.ENCODING_PLAIN
+            if serialization == ztreamy.SERIALIZATION_ZTREAMY:
+                self.set_header('Content-Type', ztreamy.stream_media_type)
+            else:
+                self.set_header('Content-Type', ztreamy.ldjson_media_type)
+            # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
+            self.set_header('Access-Control-Allow-Origin', '*')
+            if encoding == ClientProperties.ENCODING_ZLIB:
+                self.set_header('Content-Encoding', 'deflate')
             properties = ClientPropertiesFactory.create( \
                                 streaming=True,
                                 serialization=serialization,
@@ -901,14 +909,6 @@ class _EventStreamHandler(_GenericHandler):
                                         last_event_seen=last_event_seen,
                                         past_events_limit=past_events_limit,
                                         non_blocking=False)
-            if serialization == ztreamy.SERIALIZATION_ZTREAMY:
-                self.set_header('Content-Type', ztreamy.stream_media_type)
-            else:
-                self.set_header('Content-Type', ztreamy.ldjson_media_type)
-            # Allow cross-origin with CORS (see http://www.w3.org/TR/cors/):
-            self.set_header('Access-Control-Allow-Origin', '*')
-            if encoding == ClientProperties.ENCODING_ZLIB:
-                self.set_header('Content-Encoding', 'deflate')
         else:
             raise tornado.web.HTTPError(406, 'Not Acceptable')
 
