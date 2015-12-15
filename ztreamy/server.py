@@ -325,8 +325,8 @@ class Stream(object):
         is stopped. User code won't probably need to call it.
 
         """
-        self.dispatch_event(events.create_command(self.source_id,
-                                                  'Stream-Finished'))
+        ## self.dispatch_event(events.create_command(self.source_id,
+        ##                                           'Stream-Finished'))
         if self.buffering_time:
             self.buffer_dump_sched.stop()
             self._dump_buffer()
