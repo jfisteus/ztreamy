@@ -107,6 +107,12 @@ class Client(object):
         If 'separate_events' is set to None, then the event callback
         will receive a list of events instead of a single events.
 
+        A 'label' (string) may be set to this client. Setting a label
+        allows the client to save the id of the latest event it received
+        and ask for missed events when the client is run again.
+        Set 'retrieve_missing_events' to True in order to do that.
+        If 'retrieve_missing_events' is True, a non-empty label must be set.
+
         If a 'ioloop' object is given, the client will block on it
         apon calling the 'start()' method. If not, it will block on
         the default 'ioloop' of Tornado.
@@ -261,9 +267,19 @@ class AsyncStreamingClient(object):
         If 'separate_events' is set to None, then the event callback
         will receive a list of events instead of a single events.
 
+        A 'label' (string) may be set to this client. Setting a label
+        allows the client to save the id of the latest event it received
+        and ask for missed events when the client is run again.
+        Set 'retrieve_missing_events' to True in order to do that.
+        If 'retrieve_missing_events' is True, a non-empty label must be set.
+
         If a 'ioloop' object is given, the client will block on it
         apon calling the 'start()' method. If not, it will block on
         the default 'ioloop' of Tornado.
+
+        When 'reconnect' is True (which is the default), the client tries
+        to automatically reconnect when it loses connection
+        with the server, following an exponential back-off mechanism.
 
         """
         if retrieve_missing_events and not label:

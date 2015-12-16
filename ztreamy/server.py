@@ -410,6 +410,8 @@ class RelayStream(Stream):
                  num_recent_events=2048,
                  event_adapter=None,
                  parse_event_body=False,
+                 label=None,
+                 retrieve_missing_events=False,
                  ioloop=None,
                  stop_when_source_finishes=False):
         """Creates a new relay stream.
@@ -424,6 +426,13 @@ class RelayStream(Stream):
         An 'event_adapter' is a function that receives a list of
         events, adapts them and returns a list of adapted events,
         which are the ones that will be relayed.
+
+        A 'label' (string) may be set to the clients of this relay.
+        Setting a label allows each client to save the id of the
+        latest event it received and ask for missed events
+        when the client is run again. Set 'retrieve_missing_events'
+        to True in order to do that.
+        If 'retrieve_missing_events' is True, a non-empty label must be set.
 
         The rest of the parameters are as described in the constructor
         of the Stream class.
@@ -447,6 +456,8 @@ class RelayStream(Stream):
                         source_finish_callback=self._handle_source_finish,
                         parse_event_body=parse_event_body,
                         separate_events=False,
+                        label=label,
+                        retrieve_missing_events=retrieve_missing_events,
                         ioloop=ioloop)
 
     def start(self):
