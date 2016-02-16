@@ -298,7 +298,8 @@ class Stream(object):
         self.event_adapter = event_adapter
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.parse_event_body = parse_event_body
-        self._event_buffer = []
+        self.event_buffer = []
+        self.event_buffer_ids = set()
         if buffering_time:
             self.buffer_dump_sched = \
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
@@ -341,7 +342,6 @@ class Stream(object):
         immediately to priority clients.
 
         """
-#        logger.logger.event_published(event)
         self.dispatch_events([event])
 
     def dispatch_events(self, evs):
@@ -352,15 +352,19 @@ class Stream(object):
         be sent immediately to priority clients.
 
         """
-#        for e in events:
-#            logger.logger.event_published(e)
+        accepted_events = []
+        for e in evs:
+            if (not e.event_id in self.event_buffer_ids
+                and not self.dispatcher.is_duplicate(e)):
+                accepted_events.append(e)
+                self.event_buffer_ids.add(e.event_id)
         if self.event_adapter:
-            evs = self.event_adapter(evs)
-        self.dispatcher.dispatch_immediate(evs)
+            accepted_events = self.event_adapter(accepted_events)
+        self.dispatcher.dispatch_immediate(accepted_events)
         if self.buffering_time is None:
-            self.dispatcher.dispatch(evs)
+            self.dispatcher.dispatch(accepted_events)
         else:
-            self._event_buffer.extend(evs)
+            self.event_buffer.extend(accepted_events)
 
     def create_local_client(self, callback, separate_events=True):
         """Creates a local client for this stream.
@@ -382,8 +386,9 @@ class Stream(object):
         self.dispatcher.recent_events.load_from_file(file_)
 
     def _dump_buffer(self):
-        self.dispatcher.dispatch(self._event_buffer)
-        self._event_buffer = []
+        self.dispatcher.dispatch(self.event_buffer)
+        self.event_buffer = []
+        self.event_buffer_ids.clear()
 
     def _finish_when_possible(self):
         self.dispatcher._auto_finish = True
@@ -645,6 +650,10 @@ class _EventDispatcher(object):
         """Closes every active streaming client."""
         for dispatcher in self.dispatchers.values():
             dispatcher.close()
+
+    def is_duplicate(self, event):
+        """Checks if an event with the same id has already been dispatched."""
+        return self.recent_events.contains(event)
 
     def _periodic_maintenance(self):
         for dispatcher in self.dispatchers.values():
@@ -1067,6 +1076,9 @@ class _RecentEventsBuffer(object):
         else:
             data = self.buffer[:self.position]
         return data
+
+    def contains(self, event):
+        return event.event_id in self.events
 
     def _append_internal(self, events):
         self._remove_from_dict(self.position, len(events))
