@@ -36,6 +36,8 @@ A way of implementing a custom filter is to extend the 'Filter' class
 and override its 'filter_event()' method.
 
 """
+import inspect
+
 import rdflib
 from rdflib.plugins.sparql import prepareQuery
 from pyparsing import Word, Literal, NotAny, QuotedString, Group, Forward, \
@@ -279,6 +281,50 @@ class TripleFilter(SPARQLFilter):
         sparql_query = _triple_filter_to_sparql(filter_expression)
         ## print(sparql_query)
         super(TripleFilter, self).__init__(callback, sparql_query)
+
+
+class SynchronousFilter(object):
+    """ Converts a normal (asynchronous) filter into synchronous.
+
+    Example:
+
+    filter_ = filters.SynchronousFilter(filters.EventTypeFilter,
+                                        ['TypeA', 'TypeB'],
+                                        application_ids=['AppA'])
+     if filter_.filter_event(event):
+        # do something
+    (...)
+    accepted_events = filter_.filter_events(events)
+
+    """
+    def __init__(self, async_filter_class, *filter_args, **filter_kwargs):
+        if not inspect.isclass(async_filter_class):
+            raise ValueError('The SynchronousFilter constructor '
+                             'expects a class')
+        # Create an instance of the filter class
+        self.async_filter = async_filter_class(self._callback, *filter_args,
+                                               **filter_kwargs)
+        self.events = []
+
+    def filter_event(self, event):
+        """ Return True if the event passes the filter, False otherwise."""
+        self.async_filter.filter_event(event)
+        if self.events:
+            result = True
+        else:
+            result = False
+        self.events = []
+        return result
+
+    def filter_events(self, events):
+        """ Return the list of events that pass the filter."""
+        self.async_filter.filter_events(events)
+        result = self.events
+        self.events = []
+        return result
+
+    def _callback(self, event):
+        self.events.append(event)
 
 
 #

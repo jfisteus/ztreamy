@@ -211,6 +211,80 @@ class TestTripleFilter(unittest.TestCase):
         self.assertEqual(expected_events, callback.events)
 
 
+class TestSynchronousFilter(unittest.TestCase):
+
+    def test_synchronous_filter(self):
+        filter_ = filters.SynchronousFilter(filters.Filter)
+        test_events = [
+            events.Event('', 'text/plain', '',
+                         event_type='TypeC', application_id='AppB'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeA', application_id='AppA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeC', application_id='AppA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeB', application_id='AppA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeA', application_id='AppB'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeB', application_id='AppB'),
+        ]
+        self.assertFalse(filter_.filter_event(test_events[0]))
+        self.assertEqual([], filter_.filter_events(test_events))
+
+    def test_synchronous_filter_args(self):
+        filter_ = filters.SynchronousFilter(filters.VocabularyFilter,
+                                            ['http://example.com/'])
+        test_graphs = [
+            """@prefix e: <http://ample.com/> .
+               e:me e:liveAt e:here .
+               e:you e:liveAt e:there .
+               e:me e:state e:happy .
+            """,
+            """@prefix e: <http://example.com/> .
+               e:me e:liveAt e:here .
+               e:you e:liveAt e:there .
+               e:me e:state e:happy .
+            """,
+        ]
+        test_events = [rdfevents.RDFEvent('', 'text/n3', g) \
+                       for g in test_graphs]
+        self.assertEqual([test_events[1]], filter_.filter_events(test_events))
+        self.assertFalse(filter_.filter_event(test_events[0]))
+        self.assertTrue(filter_.filter_event(test_events[1]))
+        self.assertFalse(filter_.filter_event(test_events[0]))
+
+    def test_synchronous_filter_kwargs(self):
+        filter_ = filters.SynchronousFilter(filters.EventTypeFilter,
+                                            ['TypeA', 'TypeB'],
+                                            application_ids=['AppA'])
+        test_events = [
+            events.Event('', 'text/plain', '',
+                         event_type='TypeC', application_id='AppB'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeA', application_id='AppA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeC', application_id='AppA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeB', application_id='AppA'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeA', application_id='AppB'),
+            events.Event('', 'text/plain', '',
+                         event_type='TypeB', application_id='AppB'),
+        ]
+        # Check first this one to test that no memory is kept in the filter
+        self.assertTrue(filter_.filter_event(test_events[2]))
+        self.assertFalse(filter_.filter_event(test_events[0]))
+        self.assertFalse(filter_.filter_event(test_events[1]))
+        self.assertEqual([test_events[2], test_events[4]],
+                         filter_.filter_events(test_events))
+        self.assertEqual([], filter_.filter_events(test_events[:2]))
+
+
 class _FilterCallback(object):
     def __init__(self):
         self.events = []
