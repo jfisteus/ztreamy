@@ -37,7 +37,7 @@ and override its 'filter_event()' method.
 
 """
 import rdflib
-from rdflib.plugins.sparql.parser import parseQuery
+from rdflib.plugins.sparql import prepareQuery
 from pyparsing import Word, Literal, NotAny, QuotedString, Group, Forward, \
                       Keyword, ZeroOrMore, printables, alphanums
 
@@ -235,7 +235,7 @@ class SPARQLFilter(Filter):
             raise ZtreamyException('Only ASK queries are allowed '
                                    'in SPARQLFilter')
         super(SPARQLFilter, self).__init__(callback)
-        self.query = parseQuery(sparql_query)
+        self.query = prepareQuery(sparql_query)
 
     def filter_event(self, event):
         if self.callback is not None and isinstance(event, RDFEvent):
@@ -314,12 +314,9 @@ def _triple_filter_to_sparql(text):
 def _build_sparql(parse_results):
     parts = ['ASK']
     pattern = _build_sparql_internal(parse_results, [0])
-    if len(pattern) > 0 and not pattern[0].startswith('{'):
-        parts.append('{')
-        parts.extend(pattern)
-        parts.append('}')
-    else:
-        parts.extend(pattern)
+    parts.append('{')
+    parts.extend(pattern)
+    parts.append('}')
     return ' '.join(parts)
 
 def _build_sparql_internal(parse_results, num_used_variables):

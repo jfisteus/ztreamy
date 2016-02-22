@@ -18,10 +18,11 @@
 #
 
 import unittest
-import itertools
 
 import ztreamy.events as events
 import ztreamy.filters as filters
+import ztreamy.rdfevents as rdfevents
+
 
 class TestEventTypeFilter(unittest.TestCase):
 
@@ -81,6 +82,133 @@ class TestEventTypeFilter(unittest.TestCase):
         self.assertEqual(id(callback.events[2]), id(test_events[4]))
         self.assertEqual(id(callback.events[3]), id(test_events[5]))
         self.assertEqual(id(callback.events[4]), id(test_events[6]))
+
+
+class TestTripleFilter(unittest.TestCase):
+    test_graphs = [
+        """@prefix e: <http://example.com/> .
+           e:me e:liveAt e:here .
+           e:you e:liveAt e:there .
+           e:me e:state e:happy .
+        """,
+        """@prefix e: <http://example.com/> .
+           e:you e:liveAt e:there .
+           e:me e:state e:happy .
+        """,
+        """@prefix e: <http://example.com/> .
+           e:me e:state e:happy .
+        """,
+        """@prefix e: <http://example.com/> .
+           e:you e:state e:happy .
+        """,
+    ]
+    test_events = [rdfevents.RDFEvent('', 'text/n3', g) for g in test_graphs]
+
+    def test_triple_filter_one_triple(self):
+        expr = ('<http://example.com/me '
+                'http://example.com/liveAt '
+                'http://example.com/here>')
+        test_events = TestTripleFilter.test_events
+        expected_events = [test_events[0]]
+        self._check_filter(expr, test_events, expected_events)
+
+    def test_triple_filter_or(self):
+        expr = ('<http://example.com/me '
+                'http://example.com/liveAt '
+                'http://example.com/here> '
+                'OR '
+                '<http://example.com/me '
+                'http://example.com/state '
+                'http://example.com/happy>'
+                )
+        test_events = TestTripleFilter.test_events
+        expected_events = test_events[:3]
+        self._check_filter(expr, test_events, expected_events)
+
+    def test_triple_filter_and(self):
+        expr = ('<http://example.com/me '
+                'http://example.com/liveAt '
+                'http://example.com/here> '
+                'AND '
+                '<http://example.com/me '
+                'http://example.com/state '
+                'http://example.com/happy>'
+                )
+        test_events = TestTripleFilter.test_events
+        expected_events = [test_events[0]]
+        self._check_filter(expr, test_events, expected_events)
+
+    def test_triple_filter_asterisk(self):
+        expr = ('<* '
+                'http://example.com/liveAt '
+                'http://example.com/there> '
+                )
+        test_events = TestTripleFilter.test_events
+        expected_events = test_events[:2]
+        self._check_filter(expr, test_events, expected_events)
+
+    def test_triple_filter_asterisk_and(self):
+        expr = ('<* '
+                'http://example.com/liveAt '
+                'http://example.com/there> '
+                'AND '
+                '<* '
+                'http://example.com/liveAt '
+                'http://example.com/here> '
+                )
+        test_events = TestTripleFilter.test_events
+        expected_events = [test_events[0]]
+        self._check_filter(expr, test_events, expected_events)
+
+    def test_triple_filter_asterisk_multiple(self):
+        expr = ('<http://example.com/me '
+                '* '
+                '*>'
+                )
+        test_events = TestTripleFilter.test_events
+        expected_events = test_events[:3]
+        self._check_filter(expr, test_events, expected_events)
+
+    def test_triple_filter_parenthesis_1(self):
+        expr = ('(<http://example.com/you '
+                'http://example.com/liveAt '
+                'http://example.com/there> '
+                'AND '
+                '<http://example.com/me '
+                'http://example.com/liveAt '
+                'http://example.com/here> '
+                ') OR '
+                '<http://example.com/me '
+                'http://example.com/state '
+                'http://example.com/happy>'
+                )
+        test_events = TestTripleFilter.test_events
+        expected_events = test_events[:3]
+        self._check_filter(expr, test_events, expected_events)
+
+    def test_triple_filter_parenthesis_2(self):
+        expr = ('<http://example.com/me '
+                'http://example.com/liveAt '
+                'http://example.com/here> '
+                'AND '
+                '(<http://example.com/you '
+                'http://example.com/liveAt '
+                'http://example.com/there> '
+                ' OR '
+                '<http://example.com/me '
+                'http://example.com/state '
+                'http://example.com/happy>)'
+                )
+        test_events = TestTripleFilter.test_events
+        expected_events = test_events[:1]
+        self._check_filter(expr, test_events, expected_events)
+
+    def _check_filter(self, expr, test_events, expected_events):
+        callback = _FilterCallback()
+        filter_ = filters.TripleFilter(callback.callback, expr)
+        for event in test_events:
+            filter_.filter_event(event)
+        self.assertEqual(expected_events, callback.events)
 
 
 class _FilterCallback(object):
