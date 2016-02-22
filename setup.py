@@ -35,7 +35,6 @@ requirements = ['setuptools',
                 'rdflib-jsonld',
                 'pycurl',
                 'pyparsing',
-                'httplib2',
                 'simplejson',
                 ]
 
