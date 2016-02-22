@@ -331,6 +331,10 @@ class Event(object):
         should be used instead.
 
         """
+        if source_id is None:
+            raise ValueError('Required event field missing: source_id')
+        elif not syntax:
+            raise ValueError('Required event field missing: syntax')
         self.event_id = event_id or ztreamy.random_id()
         self.source_id = source_id
         self.syntax = syntax
@@ -503,8 +507,7 @@ class Command(Event):
         if syntax != 'ztreamy-command':
             raise ZtreamyException('Usupported syntax in Command',
                                    'programming')
-        super(Command, self).__init__(source_id, syntax, None, **kwargs)
-        self.body = command
+        super(Command, self).__init__(source_id, syntax, command, **kwargs)
         self.command = command
         if not command in Command.valid_commands:
             raise ZtreamyException('Usupported command ' + command,
@@ -531,9 +534,8 @@ class TestEvent(Event):
         if syntax != 'ztreamy-test':
             raise ZtreamyException('Usupported syntax in TestEvent',
                                    'programming')
-        super(TestEvent, self).__init__(source_id, syntax, None, **kwargs)
+        super(TestEvent, self).__init__(source_id, syntax, '', **kwargs)
         if body is not None:
-            self._parse_body(body)
             parts = self.extra_headers['X-Float-Timestamp'].split('/')
             self.float_time = float(parts[1])
             self.sequence_num = int(parts[0])
@@ -543,12 +545,6 @@ class TestEvent(Event):
             self.extra_headers['X-Float-Timestamp'] = \
                 str(sequence_num) + '/' + str(self.float_time)
 
-    def serialize_body(self):
-        return ''
-
-    def _parse_body(self, body):
-        # This event has an empty body
-        pass
 
 Event.register_syntax('ztreamy-test', TestEvent, always_parse=True)
 
@@ -562,11 +558,9 @@ class JSONEvent(Event):
         if not syntax in JSONEvent.supported_syntaxes:
             raise ZtreamyException('Usupported syntax in JSONEvent',
                                    'programming')
-        super(JSONEvent, self).__init__(source_id, syntax, None, **kwargs)
         if isinstance(body, basestring):
-            self.body = self._parse_body(body)
-        else:
-            self.body = body
+            body = self._parse_body(body)
+        super(JSONEvent, self).__init__(source_id, syntax, body, **kwargs)
 
     def serialize_body(self):
         return json.dumps(self.body) + '\r\n\r\n'
@@ -584,5 +578,5 @@ for syntax in JSONEvent.supported_syntaxes:
 def create_command(source_id, command):
     return Command(source_id, 'ztreamy-command', command)
 
-def parse_aggregator_id(data):
+def parse_aggregator_ids(data):
     return [v.strip() for v in data.split(',') if v != '']

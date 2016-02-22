@@ -44,6 +44,7 @@ import time
 from datetime import timedelta
 import re
 import os.path
+import inspect
 
 import ztreamy
 from ztreamy import events, logger
@@ -194,7 +195,7 @@ class StreamServer(tornado.web.Application):
                                   'stop_when_source_finishes': \
                                        self.stop_when_source_finishes}
                 handlers.append(tornado.web.URLSpec(stream.path + r"/publish",
-                                                    _EventPublishHandler,
+                                                    stream.publish_handler,
                                                     kwargs=publish_kwargs))
         self.add_handlers(".*$", handlers)
 
@@ -256,6 +257,7 @@ class Stream(object):
                  num_recent_events=2048,
                  event_adapter=None,
                  parse_event_body=True,
+                 custom_publish_handler=None,
                  ioloop=None):
         """Creates a stream object.
 
@@ -278,6 +280,10 @@ class Stream(object):
         and compression ratios, but increase the latency in the
         delivery of events.
 
+        If 'custom_publish_handler' is None, the default publish handler
+        is used. When a custom handler is necessary pass the class of
+        the handler as an argument.
+
         If a 'ioloop' object is given, it will be used by the internal
         timers of the stream.  If not, the default 'ioloop' of the
         Tornado instance will be used.
@@ -296,6 +302,17 @@ class Stream(object):
                                            num_recent_events=num_recent_events)
         self.buffering_time = buffering_time
         self.event_adapter = event_adapter
+        if custom_publish_handler is None:
+            self.publish_handler = EventPublishHandler
+        else:
+            if (inspect.isclass(custom_publish_handler)
+                and isinstance(custom_publish_handler,
+                               tornado.web.RequestHandler)):
+                self.publish_handler = custom_publish_handler
+            else:
+                 raise ValueError('custom_publish_handler expected to be '
+                                  'a class (tornado.web.RequestHandler '
+                                  'or subclass')
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.parse_event_body = parse_event_body
         self.event_buffer = []
@@ -356,6 +373,7 @@ class Stream(object):
         for e in evs:
             if (not e.event_id in self.event_buffer_ids
                 and not self.dispatcher.is_duplicate(e)):
+                e.aggregator_id.append(self.source_id)
                 accepted_events.append(e)
                 self.event_buffer_ids.add(e.event_id)
         if self.event_adapter:
@@ -726,12 +744,12 @@ class _EventDispatcher(object):
         self.immediate_dispatchers.append(dispatcher)
 
 
-class _GenericHandler(tornado.web.RequestHandler):
+class GenericHandler(tornado.web.RequestHandler):
     _q_re = re.compile(r'^\s*(\w+)\s*;\s*q=(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$')
     _attribute_re = re.compile(r'^\s*(\w+)\s*')
 
     def __init__(self, application, request, **kwargs):
-        super(_GenericHandler, self).__init__(application, request, **kwargs)
+        super(GenericHandler, self).__init__(application, request, **kwargs)
 
     def _last_seen_parameters(self):
         last_event_seen = self.get_argument('last-seen', default=None)
@@ -787,7 +805,7 @@ class _GenericHandler(tornado.web.RequestHandler):
         Quality values are processed according to HTTP content negotiation.
 
         """
-        return _GenericHandler._accept_values_internal( \
+        return GenericHandler._accept_values_internal( \
                                     self.request.headers.get_list(header_name))
 
     @staticmethod
@@ -802,7 +820,7 @@ class _GenericHandler(tornado.web.RequestHandler):
             values.extend([value.strip() for value in value_list.split(',')])
         q_values = []
         for i, value in enumerate(values):
-            attribute, quality = _GenericHandler._read_q_value(value)
+            attribute, quality = GenericHandler._read_q_value(value)
             q_values.append((-quality, i, attribute))
         return [v[2] for v in sorted(q_values)]
 
@@ -810,7 +828,7 @@ class _GenericHandler(tornado.web.RequestHandler):
     def _read_q_value(value):
         correct = False
         if ';' in value:
-            r = _GenericHandler._q_re.search(value)
+            r = GenericHandler._q_re.search(value)
             if r:
                 attribute = r.group(1)
                 try:
@@ -820,7 +838,7 @@ class _GenericHandler(tornado.web.RequestHandler):
                     # correct remains False
                     pass
         else:
-            r = _GenericHandler._attribute_re.search(value)
+            r = GenericHandler._attribute_re.search(value)
             if r:
                 attribute = r.group(1)
                 quality = 1.0
@@ -831,39 +849,86 @@ class _GenericHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(400, 'Bad Request')
 
 
-class _MainHandler(_GenericHandler):
+class _MainHandler(GenericHandler):
     def get(self):
         raise tornado.web.HTTPError(404)
 
 
-class _EventPublishHandler(_GenericHandler):
+class EventPublishHandler(GenericHandler):
     def __init__(self, application, request, stream=None,
                  stop_when_source_finishes=False):
-        super(_EventPublishHandler, self).__init__(application, request)
+        super(EventPublishHandler, self).__init__(application, request)
         self.stream = stream
         self.stop_when_source_finishes = stop_when_source_finishes
+        if stream is None:
+            raise ValueError('EventPublishHandler requires a stream object')
 
     def get(self):
+        self._get()
+
+    def post(self):
+        self._post()
+
+    def retrieve_events(self):
+        """ Gets the events from a GET or POST message.
+
+        Returns a list of events.Event objects.
+
+        Exceptions may be risen due to errors in the request.
+
+        """
+        if self.request.method == 'GET':
+            evs = [self.retrieve_event_get()]
+        elif self.request.method == 'POST':
+            evs = self.retrieve_events_post()
+        else:
+            raise ValueError('Cannot retrieve event from method {}',
+                             self.request.method)
+        return evs
+
+    def retrieve_event_get(self):
+        """ Gets the event data for a single event from a GET request.
+
+        Returns one events.Event object.
+
+        The HTTP GET request may have the following request properties:
+            - 'event-id': the event id. If not present, a random one
+                is created.
+            - 'source-id' (required): the source id of the event.
+            - 'syntax' (required): the syntax of the body of the event.
+            - 'body' (required): the body of the event.
+            - 'application-id': application id of the event.
+            - 'aggregator-ids': the aggregator ids of the event
+                (a comma-sparated list of ids).
+            - 'event-type': the event type of the event.
+            - 'timestamp': the timestamp of the event.
+        """
         event_id = self.get_argument('event-id', default=None)
         if event_id is None:
             event_id = ztreamy.random_id()
         source_id = self.get_argument('source-id')
         syntax = self.get_argument('syntax')
-        application_id = self.get_argument('application_id')
         body = self.get_argument('body')
+        application_id = self.get_argument('application-id', default=None)
         aggregator_id = events.parse_aggregator_id( \
-            self.get_argument('aggregator-id', default=''))
+            self.get_argument('aggregator-ids', default=''))
         event_type = self.get_argument('event-type', default=None)
         timestamp = self.get_argument('timestamp', default=None)
         event = events.Event(source_id, syntax, body,
                              application_id=application_id,
                              aggregator_id=aggregator_id,
                              event_type=event_type, timestamp=timestamp)
-        event.aggregator_id.append(self.stream.source_id)
-        self.stream.dispatch_event(event)
-        self.finish()
+        return event
 
-    def post(self):
+    def retrieve_events_post(self):
+        """ Gets a list of events from a POST request.
+
+        The method reads the Content-Type header in order to parse
+        the events as ztreamy.event_media_type or ztreamy.json_media_type.
+
+        The method does not catch any parsing exception that might happen.
+
+        """
         if self.request.headers['Content-Type'] == ztreamy.event_media_type:
             deserializer = events.Deserializer()
             parse_body = self.stream.parse_event_body
@@ -872,10 +937,23 @@ class _EventPublishHandler(_GenericHandler):
             parse_body = True
         else:
             raise tornado.web.HTTPError(400, 'Bad content type')
+        return deserializer.deserialize(self.request.body,
+                                        parse_body=parse_body,
+                                        complete=True)
+
+    def _get(self, async=False):
         try:
-            evs = deserializer.deserialize(self.request.body,
-                                           parse_body=parse_body,
-                                           complete=True)
+            event = self.retrieve_event_get()
+        except Exception as ex:
+            traceback.print_exc()
+            raise tornado.web.HTTPError(400, str(ex))
+        event.aggregator_id.append(self.stream.source_id)
+        self.stream.dispatch_event(event)
+        self.finish()
+
+    def _post(self, async=False):
+        try:
+            evs = self.retrieve_events_post()
         except Exception as ex:
             traceback.print_exc()
             raise tornado.web.HTTPError(400, str(ex))
@@ -884,12 +962,25 @@ class _EventPublishHandler(_GenericHandler):
                 if event.command == 'Event-Source-Finished':
                     if self.stop_when_source_finishes:
                         self.stream._finish_when_possible()
-            event.aggregator_id.append(self.stream.source_id)
-            self.stream.dispatch_event(event)
+        self.stream.dispatch_events(evs)
         self.finish()
 
 
-class _EventStreamHandler(_GenericHandler):
+class EventPublishHandlerAsync(EventPublishHandler):
+    def __init__(self, application, request, **kwargs):
+        super(EventPublishHandlerAsync, self).__init__(application, request,
+                                                       **kwargs)
+
+    @tornado.web.asynchronous
+    def get(self):
+        super(EventPublishHandlerAsync, self)._get(async=True)
+
+    @tornado.web.asynchronous
+    def post(self):
+        super(EventPublishHandlerAsync, self)._post(async=True)
+
+
+class _EventStreamHandler(GenericHandler):
     def __init__(self, application, request, stream=None,
                  dispatcher=None, force_compression=False, priority=False):
         super(_EventStreamHandler, self).__init__(application, request)
@@ -951,7 +1042,7 @@ class _EventStreamHandler(_GenericHandler):
             self.flush()
 
 
-class _ShortLivedHandler(_GenericHandler):
+class _ShortLivedHandler(GenericHandler):
     def __init__(self, application, request, dispatcher=None, stream=None):
         super(_ShortLivedHandler, self).__init__(application, request)
         self.dispatcher = dispatcher
