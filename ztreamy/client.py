@@ -636,7 +636,7 @@ class SynchronousEventPublisher(object):
         """
         return self.publish_events([event])
 
-    def publish_events(self, events):
+    def publish_events(self, events, return_response=False):
         """Publishes a list of events.
 
         The events in the list 'events' are sent to the server in a new
@@ -648,11 +648,12 @@ class SynchronousEventPublisher(object):
         conn = httplib.HTTPConnection(self.hostname, self.port)
         conn.request('POST', self.path, body, self.headers)
         response = conn.getresponse()
-        if response.status == 200:
-            return True
-        else:
+        if response.status != 200:
             logging.error(str(response.status) + ' ' + response.reason)
-            return False
+        if return_response:
+            return response
+        else:
+            return response.status == 200
 
     def close(self):
         """Closes the event publisher.

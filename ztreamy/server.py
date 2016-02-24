@@ -306,7 +306,7 @@ class Stream(object):
             self.publish_handler = EventPublishHandler
         else:
             if (inspect.isclass(custom_publish_handler)
-                and isinstance(custom_publish_handler,
+                and issubclass(custom_publish_handler,
                                tornado.web.RequestHandler)):
                 self.publish_handler = custom_publish_handler
             else:
@@ -750,6 +750,11 @@ class GenericHandler(tornado.web.RequestHandler):
 
     def __init__(self, application, request, **kwargs):
         super(GenericHandler, self).__init__(application, request, **kwargs)
+        self.application = application
+
+    @property
+    def ioloop(self):
+        return self.application.ioloop
 
     def _last_seen_parameters(self):
         last_event_seen = self.get_argument('last-seen', default=None)
@@ -855,6 +860,18 @@ class _MainHandler(GenericHandler):
 
 
 class EventPublishHandler(GenericHandler):
+    """ Synchronous event publishing handler.
+
+    Extend this class if you need to send a custom response to the source
+    of the events (override methods get/post so that they fit your needs).
+
+    If your response depends on external services (e.g. you need to do
+    an HTTP request before answering the client, extend instead
+    `EventPublishHandlerAsync`, which is the asynchronous version
+    of this handler.
+
+    """
+
     def __init__(self, application, request, stream=None,
                  stop_when_source_finishes=False):
         super(EventPublishHandler, self).__init__(application, request)
@@ -864,10 +881,10 @@ class EventPublishHandler(GenericHandler):
             raise ValueError('EventPublishHandler requires a stream object')
 
     def get(self):
-        self._get()
+        self.get_and_dispatch_events()
 
     def post(self):
-        self._post()
+        self.get_and_dispatch_events()
 
     def retrieve_events(self):
         """ Gets the events from a GET or POST message.
@@ -884,6 +901,21 @@ class EventPublishHandler(GenericHandler):
         else:
             raise ValueError('Cannot retrieve event from method {}',
                              self.request.method)
+        return evs
+
+    def retrieve_events_checked(self):
+        """ Gets the events from a GET or POST message.
+
+        Returns a list of events.Event objects.
+
+        If exceptions happens, they are caught and an HTTPError is re-raised.
+
+        """
+        try:
+            evs = self.retrieve_events()
+        except Exception as ex:
+            traceback.print_exc()
+            raise tornado.web.HTTPError(400, str(ex))
         return evs
 
     def retrieve_event_get(self):
@@ -941,43 +973,101 @@ class EventPublishHandler(GenericHandler):
                                         parse_body=parse_body,
                                         complete=True)
 
-    def _get(self, async=False):
-        try:
-            event = self.retrieve_event_get()
-        except Exception as ex:
-            traceback.print_exc()
-            raise tornado.web.HTTPError(400, str(ex))
-        event.aggregator_id.append(self.stream.source_id)
-        self.stream.dispatch_event(event)
-        self.finish()
-
-    def _post(self, async=False):
-        try:
-            evs = self.retrieve_events_post()
-        except Exception as ex:
-            traceback.print_exc()
-            raise tornado.web.HTTPError(400, str(ex))
+    def process_events(self, evs):
+        """ Does the event processing and dispatching tasks."""
         for event in evs:
             if event.syntax == 'ztreamy-command':
                 if event.command == 'Event-Source-Finished':
                     if self.stop_when_source_finishes:
                         self.stream._finish_when_possible()
         self.stream.dispatch_events(evs)
-        self.finish()
+
+    def get_and_dispatch_events(self, finish_request=True):
+        """ Publishes the events.
+
+        This methods includes all the tasks needed to get the events
+        from the request, process them and dispatch them.
+
+        Returns the list of events that were dispatched.
+
+        If `finish_request` is True (the default), the request is finished
+        with an empty 200 OK message.
+
+        """
+        evs = self.retrieve_events_checked()
+        self.process_events(evs)
+        if finish_request:
+            self.finish()
+        return evs
 
 
 class EventPublishHandlerAsync(EventPublishHandler):
+    """ Asynchronous event publishing handler.
+
+    Extend this class if you need to send a custom response to the client
+    that sends the event in an asynchronous way (e.g. you need to
+    do an asynchronous HTTP request before answering the client).
+
+    Override get/post as needed, but remember that you are responsible
+    in this case of getting the events
+    (events = self.retrieve_events_checked()) and
+    dispatching them (self.process_events(events)).
+    The method self.get_and_dispatch_events(finish_request=False)
+    does that and leaves the response unanswered for further processing
+    from your custom code.
+
+    You can also set a timeout so that a response is sent if your
+    asynchronous calls do not finish on time.
+
+    """
     def __init__(self, application, request, **kwargs):
         super(EventPublishHandlerAsync, self).__init__(application, request,
                                                        **kwargs)
+        self.finished = False
 
     @tornado.web.asynchronous
     def get(self):
-        super(EventPublishHandlerAsync, self)._get(async=True)
+        self.get_and_dispatch_events(finish_request=True)
 
     @tornado.web.asynchronous
     def post(self):
-        super(EventPublishHandlerAsync, self)._post(async=True)
+        self.get_and_dispatch_events(finish_request=True)
+
+    def set_response_timeout(self, timeout):
+        """ Sets a response timeout.
+
+        If the response is not finished before the timeout,
+        the method `self.on_response_timeout` is called
+        in order to close it.
+
+        The `timeout` is given as a (possibly float) number of seconds.
+
+        """
+        self.ioloop.call_later(timeout, self.on_response_timeout)
+
+    def on_response_timeout(self):
+        """ Called when the response timeout fires.
+
+        This method closes the response with a 200 OK answer and no body.
+        It can be overriden by subclasses for custom responses,
+        but it should close the response always.
+
+        This callback might be called even after the response has already
+        been finished, since this class does not cancel the timeout
+        for simplicity. Use the `self.finished` atribute if you need
+        to check that the response hasn't already been finished.
+        Note, however, that calling the self.finish() method more than
+        once is safe since it already checks that attribute.
+
+        """
+        if not self.finished:
+            logging.info('Timeout a source request')
+        self.finish()
+
+    def finish(self):
+        if not self.finished:
+            self.finished = True
+            super(EventPublishHandlerAsync, self).finish()
 
 
 class _EventStreamHandler(GenericHandler):
