@@ -607,7 +607,7 @@ class _EventDispatcher(object):
         self._auto_finish = False
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.recent_events = \
-            events_buffer.RecentEventsBuffer(num_recent_events)
+            events_buffer.EventsBuffer(num_recent_events)
         self.periodic_maintenance_timer = tornado.ioloop.PeriodicCallback( \
                                                    self._periodic_maintenance,
                                                    60000,

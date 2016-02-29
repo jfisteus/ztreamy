@@ -386,6 +386,9 @@ class Event(object):
         """Returns the string serialization of the event."""
         return self._serialize()
 
+    def __eq__(self, other):
+        return str(self) == str(other)
+
     def serialize_body(self):
         """Returns a string representation of the body of the event.
 
