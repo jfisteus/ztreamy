@@ -253,10 +253,12 @@ class Stream(object):
 
     """
     def __init__(self, path,
+                 label=None,
                  source_id=None,
                  allow_publish=False,
                  buffering_time=None,
                  num_recent_events=2048,
+                 persist_recent_events=False,
                  event_adapter=None,
                  parse_event_body=True,
                  custom_publish_handler=None,
@@ -291,6 +293,10 @@ class Stream(object):
         Tornado instance will be used.
 
         """
+        if persist_recent_events and label is None:
+            raise ValueError('Persisting recent events requires '
+                             'a stream label')
+        self.label = label
         if source_id is not None:
             self.source_id = source_id
         else:
@@ -300,8 +306,10 @@ class Stream(object):
         else:
             self.path = '/' + path
         self.allow_publish = allow_publish
-        self.dispatcher = _EventDispatcher(self,
-                                           num_recent_events=num_recent_events)
+        self.dispatcher = _EventDispatcher( \
+                                self,
+                                num_recent_events=num_recent_events,
+                                persist_recent_events=persist_recent_events)
         self.buffering_time = buffering_time
         self.event_adapter = event_adapter
         if custom_publish_handler is None:
@@ -433,6 +441,7 @@ class RelayStream(Stream):
                  allow_publish=False,
                  buffering_time=None,
                  num_recent_events=2048,
+                 persist_recent_events=False,
                  event_adapter=None,
                  parse_event_body=False,
                  label=None,
@@ -463,13 +472,15 @@ class RelayStream(Stream):
         of the Stream class.
 
         """
-        super(RelayStream, self).__init__(path,
-                                          allow_publish=allow_publish,
-                                          buffering_time=buffering_time,
-                                          num_recent_events=num_recent_events,
-                                          event_adapter=event_adapter,
-                                          parse_event_body=parse_event_body,
-                                          ioloop=ioloop)
+        super(RelayStream, self).__init__( \
+                                path,
+                                allow_publish=allow_publish,
+                                buffering_time=buffering_time,
+                                num_recent_events=num_recent_events,
+                                persist_recent_events=persist_recent_events,
+                                event_adapter=event_adapter,
+                                parse_event_body=parse_event_body,
+                                ioloop=ioloop)
         if filter_ is not None:
             filter_.callback = self._relay_events
             event_callback = filter_.filter_events
@@ -597,7 +608,8 @@ class _LocalClient(object):
 
 
 class _EventDispatcher(object):
-    def __init__(self, stream, num_recent_events=2048, ioloop=None):
+    def __init__(self, stream, num_recent_events=2048,
+                 persist_recent_events=False, ioloop=None):
         self.stream = stream
         self.dispatchers = {}
         self.immediate_dispatchers = []
@@ -606,8 +618,13 @@ class _EventDispatcher(object):
         self.last_event_time = time.time()
         self._auto_finish = False
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
-        self.recent_events = \
-            events_buffer.EventsBuffer(num_recent_events)
+        if not persist_recent_events:
+            self.recent_events = \
+                events_buffer.EventsBuffer(num_recent_events)
+        else:
+            self.recent_events = \
+                events_buffer.PersistentEventsBuffer(num_recent_events,
+                                                     stream.label)
         self.periodic_maintenance_timer = tornado.ioloop.PeriodicCallback( \
                                                    self._periodic_maintenance,
                                                    60000,
