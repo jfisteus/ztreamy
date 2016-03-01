@@ -20,15 +20,17 @@ import unittest
 import tempfile
 import shutil
 
-from ztreamy.events_buffer import EventsBuffer, PersistentEventsBuffer
+from ztreamy.events_buffer import (EventsBuffer,
+                                   PersistentEventsBuffer,
+                                   PendingEventsBuffer,
+                                   PersistentPendingEventsBuffer)
 from ztreamy import events
 
 
 class TestEventBuffer(unittest.TestCase):
 
     def setUp(self):
-        self.events = [_MockEvent('xxxx-xxxx-xx{:02d}'.format(i)) \
-                       for i in range(100)]
+        self.events = _create_mock_events(100)
 
     def test_buffer_complete_no_overflow(self):
         buf = _EventsBufferStrict(8)
@@ -114,11 +116,7 @@ class TestEventBuffer(unittest.TestCase):
 class TestPersistentEventBuffer(unittest.TestCase):
 
     def setUp(self):
-        self.events = [events.Event('test-application',
-                                    'text/plain',
-                                    'body {:02d}'.format(i),
-                                    event_id='xxxx-xxxx-xx{:02d}'.format(i)) \
-                       for i in range(100)]
+        self.events = _create_mock_events(100)
 
     def test_buffer_complete_no_overflow(self):
         base_dir = None
@@ -274,6 +272,142 @@ class TestPersistentEventBuffer(unittest.TestCase):
             shutil.rmtree(base_dir)
 
 
+class TestPendingEventsBuffer(unittest.TestCase):
+
+    def setUp(self):
+        self.events = _create_mock_events(20)
+
+    def test_simple(self):
+        buf = PendingEventsBuffer()
+        self.assertEqual(buf.get_events(), [])
+        self.assertTrue(buf.add_event(self.events[0]))
+        self.assertTrue(buf.add_event(self.events[1]))
+        self.assertTrue(buf.add_event(self.events[2]))
+        self.assertEqual(buf.get_events(), self.events[:3])
+        self.assertEqual(buf.get_events(), [])
+
+    def test_duplicate(self):
+        buf = PendingEventsBuffer()
+        self.assertTrue(buf.add_event(self.events[0]))
+        self.assertTrue(buf.add_event(self.events[1]))
+        self.assertTrue(buf.add_event(self.events[2]))
+        duplicate = _MockEvent(self.events[1].event_id)
+        self.assertFalse(buf.add_event(duplicate))
+        self.assertTrue(buf.add_event(self.events[3]))
+        self.assertEqual(buf.get_events(), self.events[:4])
+        self.assertEqual(buf.get_events(), [])
+        self.assertTrue(buf.add_event(self.events[2]))
+        self.assertEqual(buf.get_events(),  [self.events[2]])
+
+    def test_is_duplicate(self):
+        buf = PendingEventsBuffer()
+        self.assertTrue(buf.add_event(self.events[0]))
+        self.assertTrue(buf.add_event(self.events[1]))
+        self.assertTrue(buf.add_event(self.events[2]))
+        duplicate = _MockEvent(self.events[1].event_id)
+        self.assertTrue(buf.is_duplicate(duplicate))
+
+    def test_add_events(self):
+        buf = PendingEventsBuffer()
+        self.assertTrue(buf.add_event(self.events[0]))
+        accepted = buf.add_events(self.events[1:7])
+        self.assertEqual(accepted, self.events[1:7])
+        duplicate = _MockEvent(self.events[5].event_id)
+        to_insert = self.events[7:10] + [duplicate] + self.events[10:13]
+        accepted = buf.add_events(to_insert)
+        self.assertEqual(accepted, self.events[7:13])
+        self.assertEqual(buf.get_events(), self.events[:13])
+
+
+class TestPersistentPendingEventsBuffer(unittest.TestCase):
+
+    def setUp(self):
+        self.events = _create_mock_events(20)
+
+    def test_simple(self):
+        base_dir = None
+        try:
+            base_dir = tempfile.mkdtemp()
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertEqual(buf.get_events(), [])
+            self.assertTrue(buf.add_event(self.events[0]))
+            self.assertTrue(buf.add_event(self.events[1]))
+            # Interruption! Reload from disk:
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertTrue(buf.add_event(self.events[2]))
+            self.assertEqual(buf.get_events(), self.events[:3])
+            # Interruption! Reload from disk:
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertEqual(buf.get_events(), [])
+        finally:
+            shutil.rmtree(base_dir)
+
+    def test_duplicate(self):
+        base_dir = None
+        try:
+            base_dir = tempfile.mkdtemp()
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertTrue(buf.add_event(self.events[0]))
+            self.assertTrue(buf.add_event(self.events[1]))
+            self.assertTrue(buf.add_event(self.events[2]))
+            # Interruption! Reload from disk:
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            duplicate = _MockEvent(self.events[1].event_id)
+            self.assertFalse(buf.add_event(duplicate))
+            self.assertTrue(buf.add_event(self.events[3]))
+            self.assertEqual(buf.get_events(), self.events[:4])
+            self.assertEqual(buf.get_events(), [])
+            self.assertTrue(buf.add_event(self.events[2]))
+            # Interruption! Reload from disk:
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertEqual(buf.get_events(),  [self.events[2]])
+        finally:
+            shutil.rmtree(base_dir)
+
+    def test_is_duplicate(self):
+        base_dir = None
+        try:
+            base_dir = tempfile.mkdtemp()
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertTrue(buf.add_event(self.events[0]))
+            self.assertTrue(buf.add_event(self.events[1]))
+            self.assertTrue(buf.add_event(self.events[2]))
+            duplicate = _MockEvent(self.events[1].event_id)
+            # Interruption! Reload from disk:
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertTrue(buf.is_duplicate(duplicate))
+        finally:
+            shutil.rmtree(base_dir)
+
+    def test_add_events(self):
+        base_dir = None
+        try:
+            base_dir = tempfile.mkdtemp()
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            self.assertTrue(buf.add_event(self.events[0]))
+            accepted = buf.add_events(self.events[1:7])
+            self.assertEqual(accepted, self.events[1:7])
+            # Interruption! Reload from disk:
+            buf = PersistentPendingEventsBuffer('test-label',
+                                                base_dir=base_dir)
+            duplicate = _MockEvent(self.events[5].event_id)
+            to_insert = self.events[7:10] + [duplicate] + self.events[10:13]
+            accepted = buf.add_events(to_insert)
+            self.assertEqual(accepted, self.events[7:13])
+            self.assertEqual(buf.get_events(), self.events[:13])
+        finally:
+            shutil.rmtree(base_dir)
+
+
 class _MockEvent(object):
     def __init__(self, event_id):
         self.event_id = event_id
@@ -296,3 +430,11 @@ class _PersistentEventsBufferStrict(PersistentEventsBuffer):
         for i in range(position, position + num_events):
             if self.buffer[i] is not None:
                 del self.events[self.buffer[i].event_id]
+
+
+def _create_mock_events(num):
+    return [events.Event('test-application',
+                         'text/plain',
+                         'body {:02d}'.format(i),
+                         event_id='xxxx-xxxx-xx{:02d}'.format(i)) \
+            for i in range(100)]

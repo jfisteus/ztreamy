@@ -27,8 +27,178 @@ from __future__ import print_function
 import os
 import os.path
 import shutil
+import base64
+import re
 
 from . import events
+
+
+class PendingEventsBuffer(object):
+    """Buffer for the events waiting to be dispatched."""
+    def __init__(self):
+        self.events = []
+        self.event_ids = set()
+
+    def get_events(self, reset=True):
+        """Get the events waiting and, by default, reset this buffer."""
+        events = self.events
+        self.reset()
+        return events
+
+    def reset(self):
+        """Reset this buffer."""
+        self.events = []
+        self.event_ids = set()
+
+    def add_event(self, event):
+        """Add an event to this buffer.
+
+        Returns True if the event is accepted, False otherwise.
+        The event won't be accepted if there is another one with the
+        same event_id.
+
+        An event shouldn't be modified after it has been added to this buffer
+        because this is the version of the event that will be stored in disk
+        in subclasses that provide persistence.
+
+        """
+        if not event.event_id in self.event_ids:
+            self.events.append(event)
+            self.event_ids.add(event.event_id)
+            accepted = True
+        else:
+            accepted = False
+        return accepted
+
+    def add_events(self, events):
+        """Add a list of events to this buffer.
+
+        Returns a new list with the events that were accepted.
+        An event won't be accepted if there is another one with the
+        same event_id.
+
+        An event shouldn't be modified after it has been added to this buffer
+        because this is the version of the event that will be stored in disk
+        in subclasses that provide persistence.
+
+        """
+        accepted = []
+        for event in events:
+            if self.add_event(event):
+                accepted.append(event)
+        return accepted
+
+    def is_duplicate(self, event):
+        """True if there is an event with the same event_id in the buffer."""
+        return event.event_id in self.event_ids
+
+
+class PersistentPendingEventsBuffer(PendingEventsBuffer):
+    """A pending event buffer that backs the events up to disk."""
+
+    DIRNAME_STORE = 'pending'
+    DIRNAME_CURRENT = 'current'
+    DIRNAME_PREVIOUS = 'previous'
+
+    def __init__(self, stream_label, reset=False, base_dir=''):
+        super(PersistentPendingEventsBuffer, self).__init__()
+        self.store_dir = os.path.join(base_dir,
+                                      '.ztreamy-stream-' + stream_label,
+                                      self.DIRNAME_STORE)
+        self.current_dir = os.path.join(self.store_dir, self.DIRNAME_CURRENT)
+        self.previous_dir = os.path.join(self.store_dir, self.DIRNAME_PREVIOUS)
+        self._init_store(reset)
+
+    def add_event(self, event):
+        """Add an event to this buffer andback it up to disk.
+
+        Returns True if the event is accepted, False otherwise.
+        The event won't be accepted if there is another one with the
+        same event_id.
+
+        An event shouldn't be modified after it has been added to this buffer
+        because this is the version of the event that will be stored in disk.
+
+        """
+        accepted = super(PersistentPendingEventsBuffer, self).add_event(event)
+        if accepted:
+            self._store_event(event)
+        return accepted
+
+    def reset(self):
+        """Reset this buffer."""
+        super(PersistentPendingEventsBuffer, self).reset()
+        self._roll_current_dir()
+
+    def move_event_file(self, index, event_id, dest_filename):
+        orig_filename = os.path.join(self.previous_dir,
+                                     self._filename(index, event_id))
+        try:
+            os.rename(orig_filename, dest_filename)
+        except IOError:
+            if os.path.exists(orig_filename):
+                # In Windows an IOError is raised if the destination exists
+                os.remove(dest_filename)
+                os.rename(orig_filename, dest_filename)
+            else:
+                raise
+
+    def _init_store(self, reset):
+        if reset and os.path.exists(self.store_dir):
+            shutil.rmtree(self.store_dir)
+        if not os.path.exists(self.store_dir):
+            self._create_store()
+        else:
+            self._read_store()
+
+    def _create_store(self):
+        # We assume that the in-memory buffer is already initialized and empty
+        # The self.store_dir directory gets created automatically
+        # because current_dir is its subdirectory
+        os.makedirs(self.current_dir)
+
+    def _read_store(self):
+        for event in self._read_events():
+            super(PersistentPendingEventsBuffer, self).add_event(event)
+
+    def _read_events(self):
+        files = self._files_in_store()
+        for index, event_id, filename in files:
+            try:
+                event = events.single_event_from_file(filename)
+            except IOError:
+                event = None
+            if event is not None and event.event_id == event_id:
+                yield event
+            else:
+                os.remove(filename)
+
+    _re_filename = re.compile(r'(\d+)-(.*)')
+
+    def _files_in_store(self):
+        files = []
+        for name in os.listdir(self.current_dir):
+            match = PersistentPendingEventsBuffer._re_filename.search(name)
+            if match:
+                index, encoded_event_id = match.groups()
+                event_id = base64.urlsafe_b64decode(str(encoded_event_id))
+                full_name = os.path.join(self.current_dir, name)
+                files.append((int(index), event_id, full_name))
+        return sorted(files)
+
+    def _store_event(self, event):
+        name = self._filename(len(self.events) - 1, event.event_id)
+        with open(os.path.join(self.current_dir, name), mode='w') as f:
+            f.write(str(event))
+
+    def _filename(self, index, event_id):
+        return '{}-{}'.format(index, base64.urlsafe_b64encode(event_id))
+
+    def _roll_current_dir(self):
+        if os.path.exists(self.previous_dir):
+            shutil.rmtree(self.previous_dir)
+        os.rename(self.current_dir, self.previous_dir)
+        os.makedirs(self.current_dir)
 
 
 class EventsBuffer(object):
@@ -227,17 +397,11 @@ class PersistentEventsBuffer(EventsBuffer):
         self._store_number(self.store_pos_filename, self.position)
 
     def _read_event(self, index):
-        deserializer = events.Deserializer()
         try:
-            with open(os.path.join(self.store_dir, str(index))) as f:
-                evs = deserializer.deserialize(f.read(), complete=True)
+            event = events.single_event_from_file( \
+                                    os.path.join(self.store_dir, str(index)))
         except IOError:
             event = None
-        else:
-            if len(evs) == 1:
-                event = evs[0]
-            else:
-                raise ValueError('More than one event read in buffer!')
         return event
 
     def _store_event(self, index, event):
@@ -259,3 +423,28 @@ class PersistentEventsBuffer(EventsBuffer):
         with open(filename) as f:
             number = int(f.readline().strip())
         return number
+
+
+class CoordinatedEventsBuffer(PersistentEventsBuffer):
+    """Events buffer for recent events that backs up to disk.
+
+    This buffer coordinates with a persistent pending events buffer
+    in order to avoid saving each event twice. They are moved from
+    the store of the pending events buffer to this store when possible.
+
+    The buffer is automatically reloaded from disk upon restart.
+
+    """
+    def __init__(self, size, stream_label, pending_buffer, **kwargs):
+        super(CoordinatedEventsBuffer, self).__init__(size, stream_label,
+                                                      **kwargs)
+        self.pending_buffer = pending_buffer
+
+    def _store_events(self, ini_index, events, ini, end):
+        offset = ini_index - ini
+        for i in range(ini, end):
+            try:
+                self.pending_buffer.move_event_file(i, events[i].event_id,
+                                os.path.join(self.store_dir, str(offset + i)))
+            except IOError:
+                self._store_event(offset + i, events[i])

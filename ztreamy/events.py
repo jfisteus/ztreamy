@@ -260,6 +260,24 @@ class JSONDeserializer(object):
         return event
 
 
+def single_event_from_file(filename):
+    """Read a single event from the given filename.
+
+    Raises ValueError if the file contains more than one event,
+    ZtreamyException if syntax errors are found.
+    IOError exceptions may also happen.
+
+    """
+    deserializer = Deserializer()
+    with open(filename) as f:
+        evs = deserializer.deserialize(f.read(), complete=True)
+    if len(evs) == 1:
+        event = evs[0]
+    else:
+        raise ValueError('More than one event read in buffer!')
+    return event
+
+
 class Event(object):
     """Generic event in the system.
 
@@ -388,6 +406,9 @@ class Event(object):
 
     def __eq__(self, other):
         return str(self) == str(other)
+
+    def __hash__(self):
+        return hash(str(self))
 
     def serialize_body(self):
         """Returns a string representation of the body of the event.
