@@ -51,6 +51,8 @@ from ztreamy import events, logger
 from .client import Client
 from . import dispatchers
 from .dispatchers import ClientProperties, ClientPropertiesFactory
+from . import events_buffer
+
 
 # Uncomment to do memory profiling
 #import guppy.heapy.RM
@@ -251,10 +253,12 @@ class Stream(object):
 
     """
     def __init__(self, path,
+                 label=None,
                  source_id=None,
                  allow_publish=False,
                  buffering_time=None,
                  num_recent_events=2048,
+                 persist_events=False,
                  event_adapter=None,
                  parse_event_body=True,
                  custom_publish_handler=None,
@@ -289,6 +293,10 @@ class Stream(object):
         Tornado instance will be used.
 
         """
+        if persist_events and label is None:
+            raise ValueError('Persisting recent events requires '
+                             'a stream label')
+        self.label = label
         if source_id is not None:
             self.source_id = source_id
         else:
@@ -298,8 +306,15 @@ class Stream(object):
         else:
             self.path = '/' + path
         self.allow_publish = allow_publish
-        self.dispatcher = _EventDispatcher(self,
-                                           num_recent_events=num_recent_events)
+        if not persist_events:
+            self.event_buffer = events_buffer.PendingEventsBuffer()
+        else:
+            self.event_buffer = \
+                events_buffer.PersistentPendingEventsBuffer(self.label)
+        self.dispatcher = _EventDispatcher( \
+                                self,
+                                num_recent_events=num_recent_events,
+                                persist_events=persist_events)
         self.buffering_time = buffering_time
         self.event_adapter = event_adapter
         if custom_publish_handler is None:
@@ -315,8 +330,6 @@ class Stream(object):
                                   'or subclass')
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.parse_event_body = parse_event_body
-        self.event_buffer = []
-        self.event_buffer_ids = set()
         if buffering_time:
             self.buffer_dump_sched = \
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
@@ -371,18 +384,17 @@ class Stream(object):
         """
         accepted_events = []
         for e in evs:
-            if (not e.event_id in self.event_buffer_ids
+            if (not self.event_buffer.is_duplicate(e)
                 and not self.dispatcher.is_duplicate(e)):
                 e.aggregator_id.append(self.source_id)
                 accepted_events.append(e)
-                self.event_buffer_ids.add(e.event_id)
         if self.event_adapter:
             accepted_events = self.event_adapter(accepted_events)
         self.dispatcher.dispatch_immediate(accepted_events)
         if self.buffering_time is None:
             self.dispatcher.dispatch(accepted_events)
         else:
-            self.event_buffer.extend(accepted_events)
+            self.event_buffer.add_events(accepted_events)
 
     def create_local_client(self, callback, separate_events=True):
         """Creates a local client for this stream.
@@ -404,9 +416,7 @@ class Stream(object):
         self.dispatcher.recent_events.load_from_file(file_)
 
     def _dump_buffer(self):
-        self.dispatcher.dispatch(self.event_buffer)
-        self.event_buffer = []
-        self.event_buffer_ids.clear()
+        self.dispatcher.dispatch(self.event_buffer.get_events())
 
     def _finish_when_possible(self):
         self.dispatcher._auto_finish = True
@@ -427,13 +437,14 @@ class RelayStream(Stream):
 
     """
     def __init__(self, path, streams,
+                 label=None,
                  filter_=None,
                  allow_publish=False,
                  buffering_time=None,
                  num_recent_events=2048,
+                 persist_events=False,
                  event_adapter=None,
                  parse_event_body=False,
-                 label=None,
                  retrieve_missing_events=False,
                  ioloop=None,
                  stop_when_source_finishes=False):
@@ -461,13 +472,16 @@ class RelayStream(Stream):
         of the Stream class.
 
         """
-        super(RelayStream, self).__init__(path,
-                                          allow_publish=allow_publish,
-                                          buffering_time=buffering_time,
-                                          num_recent_events=num_recent_events,
-                                          event_adapter=event_adapter,
-                                          parse_event_body=parse_event_body,
-                                          ioloop=ioloop)
+        super(RelayStream, self).__init__( \
+                                path,
+                                label=label,
+                                allow_publish=allow_publish,
+                                buffering_time=buffering_time,
+                                num_recent_events=num_recent_events,
+                                persist_events=persist_events,
+                                event_adapter=event_adapter,
+                                parse_event_body=parse_event_body,
+                                ioloop=ioloop)
         if filter_ is not None:
             filter_.callback = self._relay_events
             event_callback = filter_.filter_events
@@ -595,7 +609,8 @@ class _LocalClient(object):
 
 
 class _EventDispatcher(object):
-    def __init__(self, stream, num_recent_events=2048, ioloop=None):
+    def __init__(self, stream, num_recent_events=2048,
+                 persist_events=False, ioloop=None):
         self.stream = stream
         self.dispatchers = {}
         self.immediate_dispatchers = []
@@ -604,7 +619,14 @@ class _EventDispatcher(object):
         self.last_event_time = time.time()
         self._auto_finish = False
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
-        self.recent_events = _RecentEventsBuffer(num_recent_events)
+        if not persist_events:
+            self.recent_events = \
+                events_buffer.EventsBuffer(num_recent_events)
+        else:
+            self.recent_events = \
+                events_buffer.CoordinatedEventsBuffer(num_recent_events,
+                                                      stream.label,
+                                                      stream.event_buffer)
         self.periodic_maintenance_timer = tornado.ioloop.PeriodicCallback( \
                                                    self._periodic_maintenance,
                                                    60000,
@@ -1172,107 +1194,6 @@ class _ShortLivedHandler(GenericHandler):
         if not self.request.connection.stream.closed():
             self.write(data)
 
-
-class _RecentEventsBuffer(object):
-    """A circular buffer that stores the latest events of a stream."""
-    def __init__(self, size):
-        """Creates a new buffer with capacity for 'size' events."""
-        self.buffer = [None] * size
-        self.position = 0
-        self.events = {}
-
-    def append_event(self, event):
-        """Appends an event to the buffer."""
-        if self.buffer[self.position] is not None:
-            del self.events[self.buffer[self.position].event_id]
-        self.buffer[self.position] = event
-        self.events[event.event_id] = self.position
-        self.position += 1
-        if self.position == len(self.buffer):
-            self.position = 0
-
-    def append_events(self, events):
-        """Appends a list of events to the buffer."""
-        if len(events) > len(self.buffer):
-            events = events[-len(self.buffer):]
-        if self.position + len(events) >= len(self.buffer):
-            first_block = len(self.buffer) - self.position
-            self._append_internal(events[:first_block])
-            self._append_internal(events[first_block:])
-        else:
-            self._append_internal(events)
-
-    def load_from_file(self, file_):
-        deserializer = events.Deserializer()
-        for evs in deserializer.deserialize_file(file_):
-            self.append_events(evs)
-
-    def newer_than(self, event_id, limit=None):
-        """Returns the events newer than the given 'event_id'.
-
-        If no event in the buffer has the 'event_id', all the events are
-        returned. If the newest event in the buffer has that id, an empty
-        list is returned.
-
-        If 'limit' is not None, at most 'limit' events are returned
-        (the most recent ones).
-
-        Returns a tuple ('events', 'complete') where 'events' is the list
-        of events and 'complete' is True when 'event_id' is in the buffer
-        and no limit was applied.
-
-        """
-        if event_id in self.events:
-            complete = True
-            pos = self.events[event_id] + 1
-            if pos == len(self.buffer):
-                pos = 0
-            if pos == self.position:
-                data = []
-            elif pos < self.position:
-                data = self.buffer[pos:self.position]
-            else:
-                data = self.buffer[pos:] + self.buffer[:self.position]
-        else:
-            complete = False
-            if (self.position != len(self.buffer) - 1
-                and self.buffer[self.position + 1] is None):
-                data = self.buffer[:self.position]
-            else:
-                data = (self.buffer[self.position:]
-                        + self.buffer[:self.position])
-        if limit is not None and len(data) > limit:
-            data = data[-limit:]
-            complete = False
-        return data, complete
-
-    def most_recent(self, num_events):
-        if num_events > len(self.buffer):
-            num_events = len(self.buffer)
-        pos = self.position - num_events
-        if pos >= 0:
-            data = self.buffer[pos:self.position]
-        elif self.buffer[-1] is not None:
-            data = self.buffer[pos:] + self.buffer[:self.position]
-        else:
-            data = self.buffer[:self.position]
-        return data
-
-    def contains(self, event):
-        return event.event_id in self.events
-
-    def _append_internal(self, events):
-        self._remove_from_dict(self.position, len(events))
-        self.buffer[self.position:self.position + len(events)] = events
-        for i in range(0, len(events)):
-            self.events[events[i].event_id] = self.position + i
-        self.position = (self.position + len(events)) % len(self.buffer)
-
-    def _remove_from_dict(self, position, num_events):
-        for i in range(position, position + num_events):
-            if self.buffer[i] is not None:
-                if self.buffer[i].event_id in self.events:
-                    del self.events[self.buffer[i].event_id]
 
 def main():
     import time
