@@ -437,6 +437,7 @@ class RelayStream(Stream):
 
     """
     def __init__(self, path, streams,
+                 label=None,
                  filter_=None,
                  allow_publish=False,
                  buffering_time=None,
@@ -444,7 +445,6 @@ class RelayStream(Stream):
                  persist_events=False,
                  event_adapter=None,
                  parse_event_body=False,
-                 label=None,
                  retrieve_missing_events=False,
                  ioloop=None,
                  stop_when_source_finishes=False):
@@ -474,6 +474,7 @@ class RelayStream(Stream):
         """
         super(RelayStream, self).__init__( \
                                 path,
+                                label=label,
                                 allow_publish=allow_publish,
                                 buffering_time=buffering_time,
                                 num_recent_events=num_recent_events,
