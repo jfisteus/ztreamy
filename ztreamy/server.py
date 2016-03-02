@@ -521,8 +521,6 @@ class RelayStream(Stream):
     def _relay_events(self, evs):
         if isinstance(evs, events.Event):
             evs = [evs]
-        for e in evs:
-            e.append_aggregator_id(self.source_id)
         self.dispatch_events(evs)
 
     def _handle_error(self, message, http_error=None):
