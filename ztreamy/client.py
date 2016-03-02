@@ -364,10 +364,12 @@ class AsyncStreamingClient(object):
                           request_timeout=0, connect_timeout=0)
         http_client.fetch(req, self._request_callback)
         self.connection_attempts += 1
+        logging.info('Connecting to {}'.format(self.url))
 
     def _reconnect(self):
         t = self._reconnection_delay()
-        logging.info('Reconnecting to the stream after {:.02f}s'.format(t))
+        logging.info('Disconnected from {}. Next attempt in {:.02f}s'\
+                     .format(self.url, t))
         self.ioloop.add_timeout(datetime.timedelta(seconds=t), self._connect)
 
     def _reconnection_delay(self):
