@@ -30,10 +30,6 @@ served in a stream. 'SynchronousEventPublisher' has a similar
 interface, but is synchronous.
 
 """
-import tornado.ioloop
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest
-from tornado.curl_httpclient import CurlAsyncHTTPClient
-import tornado.options
 import logging
 import sys
 import urllib2
@@ -43,6 +39,11 @@ import random
 import os
 import os.path
 import base64
+
+import tornado.ioloop
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.curl_httpclient import CurlAsyncHTTPClient
+import tornado.options
 
 import ztreamy
 from ztreamy import Deserializer, Command, Filter

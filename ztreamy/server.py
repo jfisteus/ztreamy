@@ -35,16 +35,17 @@ server will be blocked.
 from __future__ import print_function
 
 import logging
-import tornado.escape
-import tornado.ioloop
-import tornado.web
-import tornado.httpserver
 import traceback
 import time
 from datetime import timedelta
 import re
 import os.path
 import inspect
+
+import tornado.escape
+import tornado.ioloop
+import tornado.web
+import tornado.httpserver
 
 import ztreamy
 from ztreamy import events, logger
