@@ -36,13 +36,14 @@ requirements = ['setuptools',
                 'pycurl',
                 'pyparsing',
                 'simplejson',
+                'futures',
                 ]
 
 tests_require = []
 
 setup(
     name = "ztreamy",
-    version = "0.4.2.dev3",
+    version = "0.4.2.dev4",
     author = "Jesus Arias Fisteus",
     author_email = "jfisteus@gmail.com",
     description = ("A framework for publishing semantic events on the Web"),

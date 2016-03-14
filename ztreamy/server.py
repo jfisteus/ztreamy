@@ -297,6 +297,7 @@ class Stream(object):
         if persist_events and label is None:
             raise ValueError('Persisting recent events requires '
                              'a stream label')
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.label = label
         if source_id is not None:
             self.source_id = source_id
@@ -311,7 +312,7 @@ class Stream(object):
             self.event_buffer = events_buffer.PendingEventsBuffer()
         else:
             self.event_buffer = \
-                events_buffer.PersistentPendingEventsBuffer(self.label)
+                events_buffer.PendingEventsBufferAsync(self.label, self.ioloop)
         self.dispatcher = _EventDispatcher( \
                                 self,
                                 num_recent_events=num_recent_events,
@@ -329,7 +330,6 @@ class Stream(object):
                  raise ValueError('custom_publish_handler expected to be '
                                   'a class (tornado.web.RequestHandler '
                                   'or subclass')
-        self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.parse_event_body = parse_event_body
         if buffering_time:
             self.buffer_dump_sched = \
@@ -623,9 +623,9 @@ class _EventDispatcher(object):
                 events_buffer.EventsBuffer(num_recent_events)
         else:
             self.recent_events = \
-                events_buffer.CoordinatedEventsBuffer(num_recent_events,
-                                                      stream.label,
-                                                      stream.event_buffer)
+                events_buffer.EventsBufferAsync(num_recent_events,
+                                                stream.label,
+                                                stream.event_buffer)
         self.periodic_maintenance_timer = tornado.ioloop.PeriodicCallback( \
                                                    self._periodic_maintenance,
                                                    60000,

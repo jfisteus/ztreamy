@@ -30,6 +30,9 @@ import shutil
 import base64
 import re
 
+import tornado.concurrent
+import concurrent.futures
+
 from . import events
 
 
@@ -122,7 +125,7 @@ class PersistentPendingEventsBuffer(PendingEventsBuffer):
         """
         accepted = super(PersistentPendingEventsBuffer, self).add_event(event)
         if accepted:
-            self._store_event(event)
+            self._store_event(event, len(self.events) - 1)
         return accepted
 
     def reset(self):
@@ -186,8 +189,8 @@ class PersistentPendingEventsBuffer(PendingEventsBuffer):
                 files.append((int(index), event_id, full_name))
         return sorted(files)
 
-    def _store_event(self, event):
-        name = self._filename(len(self.events) - 1, event.event_id)
+    def _store_event(self, event, index):
+        name = self._filename(index, event.event_id)
         with open(os.path.join(self.current_dir, name), mode='w') as f:
             f.write(str(event))
 
@@ -199,6 +202,33 @@ class PersistentPendingEventsBuffer(PendingEventsBuffer):
             shutil.rmtree(self.previous_dir)
         os.rename(self.current_dir, self.previous_dir)
         os.makedirs(self.current_dir)
+
+
+class PendingEventsBufferAsync(PersistentPendingEventsBuffer):
+    """A pending event buffer that backs the events up to disk.
+
+    The I/O operations are done on another thread with an executor,
+    so that the server does not block.
+
+    """
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    def __init__(self, stream_label, io_loop, **kwargs):
+        self.io_loop = io_loop
+        super(PendingEventsBufferAsync, self).__init__(stream_label, **kwargs)
+
+    @tornado.concurrent.run_on_executor
+    def move_event_file(self, index, event_id, dest_filename):
+        super(PendingEventsBufferAsync, self).move_event_file( \
+                                                index, event_id, dest_filename)
+
+    @tornado.concurrent.run_on_executor
+    def _store_event(self, event, index):
+        super(PendingEventsBufferAsync, self)._store_event(event, index)
+
+    @tornado.concurrent.run_on_executor
+    def _roll_current_dir(self):
+        super(PendingEventsBufferAsync, self)._roll_current_dir()
 
 
 class EventsBuffer(object):
@@ -448,3 +478,29 @@ class CoordinatedEventsBuffer(PersistentEventsBuffer):
                                 os.path.join(self.store_dir, str(offset + i)))
             except IOError:
                 self._store_event(offset + i, events[i])
+
+
+class EventsBufferAsync(CoordinatedEventsBuffer):
+    """Events buffer for recent events that backs up to disk.
+
+    This buffer coordinates with a persistent pending events buffer
+    in order to avoid saving each event twice. They are moved from
+    the store of the pending events buffer to this store when possible.
+
+    The buffer is automatically reloaded from disk upon restart.
+
+    """
+    def __init__(self, size, stream_label, pending_buffer, **kwargs):
+        self.executor = pending_buffer.__class__.executor
+        self.io_loop = pending_buffer.io_loop
+        super(EventsBufferAsync, self).__init__(size, stream_label,
+                                                pending_buffer,
+                                                **kwargs)
+
+    @tornado.concurrent.run_on_executor
+    def _store_event(self, index, event):
+        super(EventsBufferAsync, self)._store_event(index, event)
+
+    @tornado.concurrent.run_on_executor
+    def _store_number(self, filename, number):
+        super(EventsBufferAsync, self)._store_number(filename, number)
