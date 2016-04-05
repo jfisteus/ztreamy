@@ -21,6 +21,7 @@
 import logging
 import time
 import json
+import copy
 
 import ztreamy
 from ztreamy import ZtreamyException
@@ -482,6 +483,9 @@ class Event(object):
 
     def serialize_json(self):
         return json.dumps(self.as_json())
+
+    def clone(self):
+        return copy.copy(self)
 
     def _serialize(self):
         data = []
