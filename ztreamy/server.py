@@ -389,6 +389,10 @@ class Stream(object):
                 and not self.dispatcher.is_duplicate(e)):
                 e.aggregator_id.append(self.source_id)
                 accepted_events.append(e)
+                logging.info('{}: accepted {}'.format(self.path, e.event_id))
+            else:
+                logging.info('{}: rejected duplicate: {}'\
+                             .format(self.path, e.event_id))
         if self.event_adapter:
             accepted_events = self.event_adapter(accepted_events)
         self.dispatcher.dispatch_immediate(accepted_events)
@@ -396,6 +400,7 @@ class Stream(object):
             self.dispatcher.dispatch(accepted_events)
         else:
             self.event_buffer.add_events(accepted_events)
+        return(accepted_events)
 
     def create_local_client(self, callback, separate_events=True):
         """Creates a local client for this stream.
@@ -1001,7 +1006,7 @@ class EventPublishHandler(GenericHandler):
                 if event.command == 'Event-Source-Finished':
                     if self.stop_when_source_finishes:
                         self.stream._finish_when_possible()
-        self.stream.dispatch_events(evs)
+        return self.stream.dispatch_events(evs)
 
     def get_and_dispatch_events(self, finish_request=True):
         """ Publishes the events.
@@ -1016,10 +1021,10 @@ class EventPublishHandler(GenericHandler):
 
         """
         evs = self.retrieve_events_checked()
-        self.process_events(evs)
+        accepted_events = self.process_events(evs)
         if finish_request:
             self.finish()
-        return evs
+        return accepted_events
 
 
 class EventPublishHandlerAsync(EventPublishHandler):
