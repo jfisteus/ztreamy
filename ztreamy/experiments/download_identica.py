@@ -132,7 +132,7 @@ def process_download(data, max_num_posts):
     return events
 
 def randomize_timestamps(events, interval_duration):
-    current_time = ztreamy.rfc3339_as_time(events[0].timestamp)
+    current_time = ztreamy.parse_timestamp(events[0].timestamp)
     time_max = current_time + interval_duration - 1
     exp_rate = 1.3 * len(events) / interval_duration
     for event in events:

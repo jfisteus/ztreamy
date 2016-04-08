@@ -8,3 +8,4 @@ httplib2
 simplejson
 docutils
 futures
+python-dateutil

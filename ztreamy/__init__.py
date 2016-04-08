@@ -21,6 +21,10 @@ import uuid
 import time
 from urlparse import urlparse
 import json
+import datetime
+
+import dateutil.tz
+import dateutil.parser
 
 import ztreamy.utils.rfc3339
 
@@ -78,26 +82,40 @@ def get_timestamp(date=None):
     else:
         return ztreamy.utils.rfc3339.rfc3339(time.time())
 
-_date_format = "%Y-%m-%dT%H:%M:%S"
-_date_format_alt = "%Y-%m-%d %H:%M:%S"
+_tz_utc = dateutil.tz.tz.tzutc()
+_epoc_utc = datetime.datetime(1970, 1, 1, tzinfo=_tz_utc)
 
-def rfc3339_as_time(timestamp):
-    """Returns the given RFC 3339 timestamp as a seconds since the epoch value.
+def parse_timestamp(timestamp, default_tz=None):
+    """Returns the given timestamp string as seconds since the epoch.
 
-    Note that the timezone information from the timestamp is lost.
+    It accepts any date format accepted by the dateutil package.
+    For example, RFC 3339 is one of them.
+
+    The timestamp is returned for the UTC time zone as a floating point
+    number. If the input timestamp is in other timezone, this function
+    takes care of the needed conversions.
+
+    The timestamp should come with time zone information. If not, and a
+    'default_tz' argument is passed, the timestamp is assumed to be in
+    that zone (see timezone objets in dateutil.tz). However, if no
+    'default_tz' is given, an ZtreamyException will be rised.
 
     """
     try:
-        t = time.mktime(time.strptime(timestamp[:-6], _date_format))
+        t = dateutil.parser.parse(timestamp)
     except ValueError:
-        try:
-            # For timestamps of the style of '2013-03-07 11:41:04.321215'
-            t = time.mktime(time.strptime(timestamp[:-7], _date_format_alt))
-        except ValueError:
-            raise ZtreamyException(('Incorrect RFC3339 timestamp: '
-                                    + timestamp[:-6] + '; expected '
-                                    + _date_format))
-    return t
+            raise ZtreamyException(('Incorrect timestamp: {}. '
+                                    '; RFC3339 timestamps and other '
+                                    'commonly used formats are accepted')\
+                                    .format(timestamp))
+    if not t.tzinfo:
+        if default_tz is not None:
+            t = t.replace(tzinfo=default_tz)
+        else:
+            raise ZtreamyException('Timestamps without timezone '
+                                   'are not accepted')
+    t_utc = t.astimezone(_tz_utc)
+    return (t_utc - _epoc_utc).total_seconds()
 
 def serialize_events(events, serialization=SERIALIZATION_ZTREAMY):
     """Returns a string with the serialization of the events.

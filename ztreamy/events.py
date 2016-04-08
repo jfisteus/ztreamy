@@ -365,7 +365,8 @@ class Event(object):
         else:
             self.aggregator_id = [str(e) for e in aggregator_id]
         self.event_type = event_type
-        self.timestamp = timestamp or ztreamy.get_timestamp()
+        self._timestamp = timestamp or ztreamy.get_timestamp()
+        self._time = None
         self.application_id = application_id
         self.extra_headers = {}
         if extra_headers is not None:
@@ -387,6 +388,28 @@ class Event(object):
                     if not isinstance(item, basestring):
                         raise ValueError('Aggregator ids must be strings')
         super(Event, self).__setattr__(name, value)
+
+    @property
+    def timestamp(self):
+        return self._timestamp
+
+    @timestamp.setter
+    def timestamp(self, value):
+        if value is None:
+            raise ValueError('Attempting to set a None timestamp')
+        self._timestamp = value
+        self._time = None
+
+    @property
+    def time(self):
+        """Event timestamp as a number of seconds since the epoch.
+
+        The number of seconds is UTC-based.
+
+        """
+        if self._time is None:
+            self._time = ztreamy.parse_timestamp(self.timestamp)
+        return self._time
 
     def set_extra_header(self, header, value):
         """Adds an extra header to the event."""
@@ -423,18 +446,6 @@ class Event(object):
             return str(self.body)
         else:
             raise ZtreamyException('Empty body in event', 'event_serialize')
-
-    def time(self):
-        """Returns the event timestamp as a seconds since the epoch value.
-
-        Note that the timezone information from the timestamp is
-        lost. Returns None if the event has no timestamp set.
-
-        """
-        if self.timestamp is not None:
-            return ztreamy.rfc3339_as_time(self.timestamp)
-        else:
-            return None
 
     def as_dictionary(self, json=False):
         """Returns the event as a dictionary.

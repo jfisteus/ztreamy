@@ -129,3 +129,36 @@ class TestEvent(unittest.TestCase):
         self.assertEqual(event.event_type, deserialized[0].event_type)
         self.assertEqual(event.timestamp, deserialized[0].timestamp)
         self.assertEqual(event.extra_headers, deserialized[0].extra_headers)
+
+    def test_timestamp(self):
+        t = '1970-01-01T10:45:02Z'
+        event = ztreamy.Event('7272727828',
+                              'text/plain',
+                              'asddf',
+                              timestamp=t)
+        self.assertEqual(event.timestamp, t)
+        self.assertIsNone(event._time)
+        self.assertEqual(event.time, 38702.0)
+        self.assertIsNotNone(event._time)
+        # Check that .time does not cache the old value:
+        t = '2016-04-06T11:15:02+00:00'
+        event.timestamp = t
+        self.assertEqual(event.timestamp, t)
+        self.assertIsNone(event._time)
+        self.assertEqual(event.time, 1459941302.0)
+        self.assertIsNotNone(event._time)
+
+    def test_timestamp_errors(self):
+        # Timestamps with no timezone are not allowed:
+        event = ztreamy.Event('7272727828',
+                              'text/plain',
+                              'asddf',
+                              timestamp='1970-01-01T10:45:02')
+        # Note that lazy timestamp parsing is used
+        self.assertEqual(event.timestamp, '1970-01-01T10:45:02')
+        with self.assertRaises(ztreamy.ZtreamyException):
+            event.time
+
+        # None timestamps are not allowed:
+        with self.assertRaises(ValueError):
+            event.timestamp = None
