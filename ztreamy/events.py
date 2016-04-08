@@ -400,7 +400,6 @@ class Event(object):
         self._timestamp = value
         self._time = None
 
-    @property
     def time(self):
         """Event timestamp as a number of seconds since the epoch.
 
