@@ -48,11 +48,12 @@ import tornado.web
 import tornado.httpserver
 
 import ztreamy
-from ztreamy import events, logger
+from . import events, logger
 from .client import Client
 from . import dispatchers
 from .dispatchers import ClientProperties, ClientPropertiesFactory
 from . import events_buffer
+from .utils import parsing
 
 
 # Uncomment to do memory profiling
@@ -782,6 +783,9 @@ class GenericHandler(tornado.web.RequestHandler):
     def ioloop(self):
         return self.application.ioloop
 
+    def req_content_type(self):
+        return parsing.get_content_type(self.request.headers['Content-Type'])
+
     def _last_seen_parameters(self):
         last_event_seen = self.get_argument('last-seen', default=None)
         past_events_limit = self.get_argument('past-events-limit',
@@ -987,10 +991,14 @@ class EventPublishHandler(GenericHandler):
         The method does not catch any parsing exception that might happen.
 
         """
-        if self.request.headers['Content-Type'] == ztreamy.event_media_type:
+        try:
+            content_type = self.req_content_type()
+        except ValueError:
+            raise tornado.web.HTTPError(400, 'Bad content type')
+        if content_type == ztreamy.event_media_type:
             deserializer = events.Deserializer()
             parse_body = self.stream.parse_event_body
-        elif self.request.headers['Content-Type'] == ztreamy.json_media_type:
+        elif content_type == ztreamy.json_media_type:
             deserializer = events.JSONDeserializer()
             parse_body = True
         else:
