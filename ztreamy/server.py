@@ -390,10 +390,6 @@ class Stream(object):
                 and not self.dispatcher.is_duplicate(e)):
                 e.aggregator_id.append(self.source_id)
                 accepted_events.append(e)
-                logging.info('{}: accepted {}'.format(self.path, e.event_id))
-            else:
-                logging.info('{}: rejected duplicate: {}'\
-                             .format(self.path, e.event_id))
         if self.event_adapter:
             accepted_events = self.event_adapter(accepted_events)
         self.dispatcher.dispatch_immediate(accepted_events)
@@ -673,8 +669,8 @@ class _EventDispatcher(object):
             dispatcher.dispatch(pack)
 
     def dispatch(self, evs):
-        logging.info('{}: server cycle; events: {}'.format(self.stream.path,
-                                                           len(evs)))
+        logging.debug('{}: server cycle; events: {}'.format(self.stream.path,
+                                                            len(evs)))
         self.recent_events.append_events(evs)
         if not evs:
             if self._auto_finish and time.time() - self.last_event_time > 60:
@@ -1095,7 +1091,7 @@ class EventPublishHandlerAsync(EventPublishHandler):
 
         """
         if not self.finished:
-            logging.info('Timeout a source request')
+            logging.debug('Timeout a source request')
         self.finish()
 
     def finish(self):
