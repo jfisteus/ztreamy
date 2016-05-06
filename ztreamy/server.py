@@ -1094,10 +1094,10 @@ class EventPublishHandlerAsync(EventPublishHandler):
             logging.debug('Timeout a source request')
         self.finish()
 
-    def finish(self):
+    def finish(self, *args, **kwargs):
         if not self.finished:
             self.finished = True
-            super(EventPublishHandlerAsync, self).finish()
+            super(EventPublishHandlerAsync, self).finish(*args, **kwargs)
 
 
 class _EventStreamHandler(GenericHandler):
