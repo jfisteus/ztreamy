@@ -80,8 +80,8 @@ def configure_max_clients(max_clients):
                               max_clients=max_clients)
 
 
-class ReconnectionMixin(object):
-    def __init__(self, *args, **kwargs):
+class ReconnectionManager(object):
+    def __init__(self):
         self.num_attempts = 0
 
     def notify_success(self):
@@ -326,7 +326,7 @@ class AsyncStreamingClient(object):
         self._deserializer = Deserializer()
         self.reconnect = reconnect
         self.disable_compression = disable_compression
-        self.connection_attempts = 0
+        self.reconnection = ReconnectionManager()
 #        self.data_history = []
 
     def start(self, loop=False):
@@ -380,18 +380,14 @@ class AsyncStreamingClient(object):
                           headers=headers,
                           request_timeout=0, connect_timeout=0)
         http_client.fetch(req, self._request_callback)
-        self.connection_attempts += 1
+        self.reconnection.notify_failure()
         logging.info('Connecting to {}'.format(self.url))
 
     def _reconnect(self):
-        t = self._reconnection_delay()
+        t = self.reconnection.compute_delay()
         logging.info('Disconnected from {}. Next attempt in {:.02f}s'\
                      .format(self.url, t))
         self.ioloop.add_timeout(datetime.timedelta(seconds=t), self._connect)
-
-    def _reconnection_delay(self):
-        return random.uniform(0.001,
-                              0.2 * 2 ** min(self.connection_attempts, 10))
 
     def _finish_internal(self, notify_connection_close):
         if self._closed:
@@ -405,7 +401,7 @@ class AsyncStreamingClient(object):
         self._closed = True
 
     def _stream_callback(self, data):
-        self.connection_attempts = 0
+        self.reconnection.notify_success()
         self._process_received_data(data)
 
     def _request_callback(self, response):
@@ -684,14 +680,13 @@ class SynchronousEventPublisher(object):
         pass
 
 
-class ContinuousEventPublisher(ReconnectionMixin):
+class ContinuousEventPublisher(object):
     """Continuously publish events through a single long-lived HTTP request.
 
     """
     def __init__(self, server_url, io_loop=None,
                  serialization_type=ztreamy.SERIALIZATION_ZTREAMY,
                  buffering_time=1.0):
-        super(ContinuousEventPublisher, self).__init__()
         if server_url.endswith('/publish'):
             self.server_url = server_url + '-cont'
         elif server_url.endswith('/'):
@@ -716,6 +711,7 @@ class ContinuousEventPublisher(ReconnectionMixin):
         self.next_publication = None
         self.running = False
         self.pending_events = []
+        self.reconnection = ReconnectionManager()
 
     @tornado.gen.coroutine
     def start(self):
@@ -735,9 +731,9 @@ class ContinuousEventPublisher(ReconnectionMixin):
                 logging.warning('Continuous request: {}'.format(e))
             logging.debug('Continuous request finished, pending {} events'\
                           .format(len(self.pending_events)))
-            self.notify_failure()
+            self.reconnection.notify_failure()
             if self.running:
-                delay = self.compute_delay()
+                delay = self.reconnection.compute_delay()
                 logging.debug('Retrying in {}s'.format(delay))
                 yield tornado.gen.sleep(delay)
 
@@ -760,7 +756,7 @@ class ContinuousEventPublisher(ReconnectionMixin):
                 data = ztreamy.serialize_events(self.pending_events,
                                          serialization=self.serialization_type)
                 yield write(data)
-                self.notify_success()
+                self.reconnection.notify_success()
                 self.pending_events = []
             if self.running:
                 self.next_publication += self.buffering_time
