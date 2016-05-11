@@ -43,7 +43,9 @@ import base64
 import tornado.ioloop
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.curl_httpclient import CurlAsyncHTTPClient
+import tornado.simple_httpclient
 import tornado.options
+import tornado.gen
 
 import ztreamy
 from ztreamy import Deserializer, Command, Filter
@@ -76,6 +78,20 @@ def configure_max_clients(max_clients):
     """
     AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient",
                               max_clients=max_clients)
+
+
+class ReconnectionMixin(object):
+    def __init__(self, *args, **kwargs):
+        self.num_attempts = 0
+
+    def notify_success(self):
+        self.num_attempts = 0
+
+    def notify_failure(self):
+        self.num_attempts += 1
+
+    def compute_delay(self):
+        return random.uniform(0.001, 0.2 * 2 ** min(self.num_attempts, 10))
 
 
 class Client(object):
@@ -543,8 +559,8 @@ class EventPublisher(object):
             self.server_url = server_url + 'publish'
         else:
             self.server_url = server_url + '/publish'
-        self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
+        self.http_client = CurlAsyncHTTPClient(self.ioloop)
         self.serialization_type = serialization_type
         self.headers = dict(EventPublisher._headers)
         if serialization_type == ztreamy.SERIALIZATION_JSON:
@@ -666,6 +682,96 @@ class SynchronousEventPublisher(object):
 
         """
         pass
+
+
+class ContinuousEventPublisher(ReconnectionMixin):
+    """Continuously publish events through a single long-lived HTTP request.
+
+    """
+    def __init__(self, server_url, io_loop=None,
+                 serialization_type=ztreamy.SERIALIZATION_ZTREAMY,
+                 buffering_time=1.0):
+        super(ContinuousEventPublisher, self).__init__()
+        if server_url.endswith('/publish'):
+            self.server_url = server_url + '-cont'
+        elif server_url.endswith('/'):
+            self.server_url = server_url + 'publish-cont'
+        else:
+            self.server_url = server_url + '/publish-cont'
+        self.io_loop = io_loop or tornado.ioloop.IOLoop.instance()
+        # The CURL client does not allow the `body_producer` style.
+        # Therefore we use a `SimpleAsyncHTTPClient`:
+        self.http_client = \
+              tornado.simple_httpclient.SimpleAsyncHTTPClient(self.io_loop)
+        self.headers = {}
+        if serialization_type == ztreamy.SERIALIZATION_ZTREAMY:
+            self.serialization_type = ztreamy.SERIALIZATION_ZTREAMY
+            self.headers['Content-Type'] = ztreamy.stream_media_type
+        elif serialization_type == ztreamy.SERIALIZATION_LDJSON:
+            self.serialization_type = ztreamy.SERIALIZATION_LDJSON
+            self.headers['Content-Type'] = ztreamy.ldjson_media_type
+        else:
+            raise ValueError('Bad serialization type')
+        self.buffering_time = buffering_time
+        self.next_publication = None
+        self.running = False
+        self.pending_events = []
+
+    @tornado.gen.coroutine
+    def start(self):
+        self.running = True
+        while self.running:
+            self.next_publication = self.io_loop.time()
+            req = HTTPRequest(self.server_url,
+                              method='POST',
+                              body_producer=self._body_producer,
+                              headers=self.headers,
+                              request_timeout=0,
+                              connect_timeout=5.0)
+            logging.debug('Continuous HTTP request {}'.format(self.server_url))
+            try:
+                self.response = yield self.http_client.fetch(req)
+            except Exception as e:
+                logging.warning('Continuous request: {}'.format(e))
+            logging.debug('Continuous request finished, pending {} events'\
+                          .format(len(self.pending_events)))
+            self.notify_failure()
+            if self.running:
+                delay = self.compute_delay()
+                logging.debug('Retrying in {}s'.format(delay))
+                yield tornado.gen.sleep(delay)
+
+
+    def stop(self):
+        self.running = False
+
+    def publish(self, event):
+        logging.debug('Publishing 1 event')
+        self.pending_events.append(event)
+
+    def publish_events(self, events):
+        logging.debug('Publishing {} events'.format(len(events)))
+        self.pending_events.extend(events)
+
+    @tornado.gen.coroutine
+    def _body_producer(self, write):
+        while True:
+            if self.pending_events:
+                data = ztreamy.serialize_events(self.pending_events,
+                                         serialization=self.serialization_type)
+                yield write(data)
+                self.notify_success()
+                self.pending_events = []
+            if self.running:
+                self.next_publication += self.buffering_time
+                delay = self.next_publication - self.io_loop.time()
+                if delay <= 0:
+                    self.next_publication = (self.io_loop.time()
+                                             + self.buffering_time)
+                    delay = self.buffering_time
+                yield tornado.gen.sleep(delay)
+            else:
+                break
 
 
 class LocalEventPublisher(object):

@@ -201,6 +201,10 @@ class StreamServer(tornado.web.Application):
                 handlers.append(tornado.web.URLSpec(stream.path + r"/publish",
                                                     stream.publish_handler,
                                                     kwargs=publish_kwargs))
+                handlers.append(tornado.web.URLSpec( \
+                                            stream.path + r"/publish-cont",
+                                            ContinuousPublishHandler,
+                                            kwargs=publish_kwargs))
         self.add_handlers(".*$", handlers)
 
 
@@ -1098,6 +1102,65 @@ class EventPublishHandlerAsync(EventPublishHandler):
         if not self.finished:
             self.finished = True
             super(EventPublishHandlerAsync, self).finish(*args, **kwargs)
+
+
+@tornado.web.stream_request_body
+class ContinuousPublishHandler(GenericHandler):
+    """ Asynchronous event publishing handler for continuous requests.
+
+    This handler allows clients to upload an unbounded continuous
+    stream of data with just one HTTP POST request.
+
+    Clients should use the Ztreamy serialization `ztreamy.stream_media_type`
+    or the line-delimited JSON serialization `ztreamy.ldjson_media_type`.
+
+    See the class `ztreamy.client.ContinuousEventPublisher` for an
+    example client implementation for this handler.
+
+    """
+    def __init__(self, application, request, stream=None,
+                 stop_when_source_finishes=False):
+        super(ContinuousPublishHandler, self).__init__(application, request)
+        self.stream = stream
+        self.deserializer = None
+        self.parse_body = self.stream.parse_event_body
+        if stream is None:
+            raise ValueError('ContinuousPublishHandler requires '
+                             'a stream object')
+
+    def prepare(self):
+        """Check the method and content type of the request.
+
+        Called once after the headers are parsed, but before the first
+        call to `data_received`.
+
+        """
+        if self.request.method != 'POST':
+            raise tornado.web.HTTPError(405, 'Method not allowed')
+        try:
+            content_type = self.req_content_type()
+        except ValueError:
+            raise tornado.web.HTTPError(400, 'Bad content type')
+        if content_type == ztreamy.stream_media_type:
+            self.deserializer = events.Deserializer()
+        elif content_type == ztreamy.ldjson_media_type:
+            self.deserializer = events.LDJSONDeserializer()
+            self.parse_body = True
+        else:
+            raise tornado.web.HTTPError(400, 'Bad content type')
+
+    def data_received(self, data):
+        try:
+            evs = self.deserializer.deserialize(data, complete=False,
+                                                parse_body=self.parse_body)
+        except (ValueError, ztreamy.ZtreamyException):
+            raise tornado.web.HTTPError(400, 'Bad request')
+        self.stream.dispatch_events(evs)
+
+    def post(self):
+        """ Called when the request gets finished."""
+        if self.deserializer.data_is_pending():
+            raise tornado.web.HTTPError(400, 'Bad request')
 
 
 class _EventStreamHandler(GenericHandler):

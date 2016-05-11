@@ -67,6 +67,9 @@ class Deserializer(object):
         self._event_reset()
         self.warning_lf_eol_reported = False
 
+    def data_is_pending(self):
+        return self._data != ''
+
     def _event_reset(self):
         """Method to be called internally after an event is read."""
         self._event = {}
@@ -259,6 +262,40 @@ class JSONDeserializer(object):
                              timestamp=d.get('Timestamp'),
                              extra_headers=extra_headers)
         return event
+
+
+class LDJSONDeserializer(JSONDeserializer):
+    def __init__(self):
+        super(LDJSONDeserializer, self).__init__()
+        self._data = ''
+
+    def deserialize(self, data, parse_body=True, complete=True):
+        events = []
+        if not parse_body:
+            raise ValueError('parse_body must be True in JSONDeserializer')
+        lines = data.split('\n')
+        if self._data:
+            # Some data is pending from the previous call
+            lines[0] = self._data + lines[0]
+        if lines:
+            if lines[-1]:
+                if complete:
+                    raise ZtreamyException('Spurious data in the input event',
+                                           'event_deserialize')
+                else:
+                    # Accumulate the data for the next call
+                    self._data = lines[-1]
+            del lines[-1]
+            for line in lines:
+                event_obj = json.loads(line)
+                events.append(self._dict_to_event(event_obj))
+        return events
+
+    def reset(self):
+        self._data = ''
+
+    def data_is_pending(self):
+        return self._data != ''
 
 
 def single_event_from_file(filename):

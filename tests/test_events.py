@@ -19,6 +19,7 @@
 
 import unittest
 import itertools
+import re
 
 import ztreamy
 import ztreamy.events as events
@@ -162,3 +163,72 @@ class TestEvent(unittest.TestCase):
         # None timestamps are not allowed:
         with self.assertRaises(ValueError):
             event.timestamp = None
+
+
+class TestLDJSONDeserializer(unittest.TestCase):
+
+    def test_deserialize_complete(self):
+        source_id = 'source-id-value'
+        syntax = ztreamy.json_media_type
+        body = {'a': 1, 'b': 'blah!'}
+        evs = [
+            events.JSONEvent(source_id, syntax, body),
+            events.JSONEvent(source_id, syntax, body, event_id='6767676766'),
+            events.JSONEvent(source_id, syntax, body,
+                             aggregator_id=['6767676766', '788839393']),
+        ]
+        serialized = ztreamy.serialize_events_ldjson(evs)
+        deserializer = events.LDJSONDeserializer()
+        deserialized = deserializer.deserialize(serialized)
+        self.assertEqual(evs, deserialized)
+
+    def test_deserialize_complete_lf_eol(self):
+        source_id = 'source-id-value'
+        syntax = ztreamy.json_media_type
+        body = {'a': 1, 'b': 'blah!'}
+        evs = [
+            events.JSONEvent(source_id, syntax, body),
+            events.JSONEvent(source_id, syntax, body, event_id='6767676766'),
+            events.JSONEvent(source_id, syntax, body,
+                             aggregator_id=['6767676766', '788839393']),
+        ]
+        serialized = re.sub(r'\r\n', r'\n',
+                            ztreamy.serialize_events_ldjson(evs))
+        deserializer = events.LDJSONDeserializer()
+        deserialized = deserializer.deserialize(serialized)
+        self.assertEqual(evs, deserialized)
+
+    def test_deserialize_incomplete(self):
+        source_id = 'source-id-value'
+        syntax = ztreamy.json_media_type
+        body = {'a': 1, 'b': 'blah!'}
+        evs = [
+            events.JSONEvent(source_id, syntax, body),
+            events.JSONEvent(source_id, syntax, body, event_id='6767676766'),
+            events.JSONEvent(source_id, syntax, body,
+                             aggregator_id=['6767676766', '788839393']),
+        ]
+        serialized = ztreamy.serialize_events_ldjson(evs)
+        parts = [serialized[:10], serialized[10:-1], serialized[-1:]]
+        deserializer = events.LDJSONDeserializer()
+        self.assertEquals([], deserializer.deserialize(parts[0],
+                                                       complete=False))
+        self.assertEquals(evs[:2], deserializer.deserialize(parts[1],
+                                                            complete=False))
+        self.assertEquals(evs[2:], deserializer.deserialize(parts[2],
+                                                            complete=True))
+
+    def test_deserialize_incomplete_raises(self):
+        source_id = 'source-id-value'
+        syntax = ztreamy.json_media_type
+        body = {'a': 1, 'b': 'blah!'}
+        evs = [
+            events.JSONEvent(source_id, syntax, body),
+            events.JSONEvent(source_id, syntax, body, event_id='6767676766'),
+            events.JSONEvent(source_id, syntax, body,
+                             aggregator_id=['6767676766', '788839393']),
+        ]
+        serialized = ztreamy.serialize_events_ldjson(evs)
+        deserializer = events.LDJSONDeserializer()
+        with self.assertRaises(ztreamy.ZtreamyException):
+            deserializer.deserialize(serialized[:-1])
