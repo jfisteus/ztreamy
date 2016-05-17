@@ -76,7 +76,8 @@ class StreamServer(tornado.web.Application):
     server.start()
 
     """
-    def __init__(self, port, ioloop=None, stop_when_source_finishes=False):
+    def __init__(self, port, ioloop=None, stop_when_source_finishes=False,
+                 **kwargs):
         """Creates a new server.
 
         'port' specifies the port number in which the HTTP server will
@@ -92,8 +93,7 @@ class StreamServer(tornado.web.Application):
         has been started.
 
         """
-        settings = dict()
-        super(StreamServer, self).__init__(**settings)
+        super(StreamServer, self).__init__(**kwargs)
         logging.info('Initializing server...')
         self.http_server = tornado.httpserver.HTTPServer(self,
                                                 decompress_request=True)
