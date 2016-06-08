@@ -54,6 +54,7 @@ from . import dispatchers
 from .dispatchers import ClientProperties, ClientPropertiesFactory
 from . import events_buffer
 from .utils import parsing
+from . import stats
 
 
 # Uncomment to do memory profiling
@@ -340,6 +341,7 @@ class Stream(object):
             self.buffer_dump_sched = \
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
                                                 buffering_time, self.ioloop)
+        self.stats = stats.StreamStats()
         ## self.stats_sched = tornado.ioloop.PeriodicCallback( \
         ##                                   self.dispatcher.stats, 10000,
         ##                                   self.ioloop)
@@ -690,6 +692,7 @@ class _EventDispatcher(object):
                 dispatcher.close()
             for e in evs:
                 logger.logger.event_dispatched(e)
+        self.stream.stats.count_events(len(evs))
 
     def close(self):
         """Closes every active streaming client."""
