@@ -49,7 +49,6 @@ import tornado.gen
 
 import ztreamy
 from ztreamy import Deserializer, Command, Filter
-from ztreamy import logger
 from ztreamy import split_url
 
 transferred_bytes = 0
@@ -429,8 +428,6 @@ class AsyncStreamingClient(object):
         global transferred_bytes
         transferred_bytes += len(data)
         evs = self._deserialize(data, parse_body=self.parse_event_body)
-        for e in evs:
-            logger.logger.event_delivered(e)
         if self.event_callback is not None:
             if not self.separate_events:
                 self.event_callback(evs)
@@ -443,8 +440,6 @@ class AsyncStreamingClient(object):
     def _deserialize(self, data, parse_body=True):
         evs = []
         event = None
-        compressed_len = len(data)
-        logger.logger.data_received(compressed_len, len(data))
         self._deserializer.append_data(data)
         event = self._deserializer.deserialize_next(parse_body=parse_body)
         while event is not None:
@@ -571,7 +566,6 @@ class EventPublisher(object):
         tornado.httpclient.HTTPResponse parameter.
 
         """
-        logger.logger.event_published(event)
         self.publish_events([event], callback=callback)
 
     def publish_events(self, events, callback=None):
@@ -803,9 +797,6 @@ class LocalEventPublisher(object):
 
 def read_cmd_options():
     from optparse import OptionParser, Values
-    tornado.options.define('eventlog', default=False,
-                           help='dump event log',
-                           type=bool)
     tornado.options.define('label', default=None,
                            help='define a client label',
                            type=str)
@@ -851,16 +842,10 @@ def main():
                     retrieve_missing_events=retrieve_missing_events)
 #    import time
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
-    node_id = ztreamy.random_id()
-    if tornado.options.options.eventlog:
-        logger.logger = logger.ZtreamyLogger(node_id,
-                                             'client-' + node_id + '.log')
     try:
         client.start(loop=True)
     except KeyboardInterrupt:
         pass
-    finally:
-        logger.logger.close()
 
 if __name__ == "__main__":
     main()

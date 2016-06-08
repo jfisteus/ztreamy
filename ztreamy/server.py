@@ -48,7 +48,7 @@ import tornado.web
 import tornado.httpserver
 
 import ztreamy
-from . import events, logger
+from . import events
 from .client import Client
 from . import dispatchers
 from .dispatchers import ClientProperties, ClientPropertiesFactory
@@ -680,7 +680,6 @@ class _EventDispatcher(object):
         self.recent_events.append_events(evs)
         if not evs:
             if self._auto_finish and time.time() - self.last_event_time > 60:
-                logger.logger.server_closed(self.num_clients)
                 self.close()
                 self.ioloop.stop()
         else:
@@ -690,8 +689,6 @@ class _EventDispatcher(object):
             dispatcher.dispatch(pack)
             if evs and not dispatcher.properties.streaming:
                 dispatcher.close()
-            for e in evs:
-                logger.logger.event_dispatched(e)
         self.stream.stats.count_events(len(evs))
 
     def close(self):
@@ -1283,9 +1280,6 @@ def main():
                            type=int)
     tornado.options.define('buffer', default=None, help='event buffer time (s)',
                            type=float)
-    tornado.options.define('eventlog', default=False,
-                           help='dump event log',
-                           type=bool)
     tornado.options.define('autostop', default=False,
                            help='stop the server when the source finishes',
                            type=bool)
@@ -1306,14 +1300,6 @@ def main():
     ##                     buffering_time=buffering_time)
     server.add_stream(stream)
     ## server.add_stream(relay)
-    if tornado.options.options.eventlog:
-        print(stream.source_id)
-        comments = {'Buffer time (ms)': buffering_time}
-#        logger.logger = logger.ZtreamyLogger(stream.source_id,
-        logger.logger = logger.CompactServerLogger(stream.source_id,
-                                                   'server-' + stream.source_id
-                                                   + '.log', comments)
-        logger.logger.auto_flush = True
      # Uncomment to test Stream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
     try:
@@ -1322,7 +1308,6 @@ def main():
         pass
     finally:
         server.stop()
-        logger.logger.close()
 
 
 if __name__ == "__main__":
