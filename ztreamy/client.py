@@ -731,7 +731,6 @@ class ContinuousEventPublisher(object):
                 logging.debug('Retrying in {}s'.format(delay))
                 yield tornado.gen.sleep(delay)
 
-
     def stop(self):
         self.running = False
 

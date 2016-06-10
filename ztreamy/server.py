@@ -155,7 +155,7 @@ class StreamServer(tornado.web.Application):
                 stream.stop()
             self.http_server.stop()
             self._stopped = True
-            if self._looping == True:
+            if self._looping:
                 self.ioloop.stop()
                 self._looping = False
 
@@ -342,6 +342,7 @@ class Stream(object):
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
                                                 buffering_time, self.ioloop)
         self.stats = stats.StreamStats()
+        self.running = False
         ## self.stats_sched = tornado.ioloop.PeriodicCallback( \
         ##                                   self.dispatcher.stats, 10000,
         ##                                   self.ioloop)
@@ -355,6 +356,7 @@ class Stream(object):
         """
         if self.buffering_time:
             self.buffer_dump_sched.start()
+        self.running = True
         ## self.stats_sched.start()
 
     def stop(self):
@@ -370,6 +372,7 @@ class Stream(object):
             self.buffer_dump_sched.stop()
             self._dump_buffer()
         self.dispatcher.close()
+        self.running = False
         ## self.stats_sched.stop()
 
     def dispatch_event(self, event):
@@ -911,10 +914,16 @@ class EventPublishHandler(GenericHandler):
             raise ValueError('EventPublishHandler requires a stream object')
 
     def get(self):
-        self.get_and_dispatch_events()
+        if self.stream.running:
+            self.get_and_dispatch_events()
+        else:
+            raise tornado.web.HTTPError(503, 'The stream is stopped')
 
     def post(self):
-        self.get_and_dispatch_events()
+        if self.stream.running:
+            self.get_and_dispatch_events()
+        else:
+            raise tornado.web.HTTPError(503, 'The stream is stopped')
 
     def retrieve_events(self):
         """ Gets the events from a GET or POST message.
@@ -1061,11 +1070,17 @@ class EventPublishHandlerAsync(EventPublishHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        self.get_and_dispatch_events(finish_request=True)
+        if self.stream.running:
+            self.get_and_dispatch_events(finish_request=True)
+        else:
+            raise tornado.web.HTTPError(503, 'The stream is stopped')
 
     @tornado.web.asynchronous
     def post(self):
-        self.get_and_dispatch_events(finish_request=True)
+        if self.stream.running:
+            self.get_and_dispatch_events(finish_request=True)
+        else:
+            raise tornado.web.HTTPError(503, 'The stream is stopped')
 
     def set_response_timeout(self, timeout):
         """ Sets a response timeout.
