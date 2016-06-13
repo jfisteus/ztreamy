@@ -13,9 +13,9 @@ import java.util.zip.GZIPOutputStream;
  */
 public class Publisher {
 
-    private URL serverURL;
-    private String logFileName;
-    private Serializer serializer;
+    protected URL serverURL;
+    protected String logFileName;
+    protected Serializer serializer;
 
     /**
      * Create a new instance for the given stream URL.
@@ -150,5 +150,13 @@ public class Publisher {
      */
     public int publish(Event event, boolean compress) throws IOException {
         return publish(new Event[] {event}, compress);
+    }
+
+    /**
+     * Closes this publisher.
+     *
+     */
+    public void close() {
+        // Nothing to do, no resources are allocated
     }
 }
