@@ -123,6 +123,14 @@ public class Event {
     }
 
     /**
+     * Get the Event-Id field of this event.
+     *
+     */
+    public String getEventId() {
+        return eventId;
+    }
+
+    /**
      * Return the body of the event.
      *
      * @return the body of the event as a map.

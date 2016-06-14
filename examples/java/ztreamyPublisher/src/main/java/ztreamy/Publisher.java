@@ -125,7 +125,10 @@ public class Publisher {
         if (logFileName != null) {
             log.close();
         }
-        return con.getResponseCode();
+        int result = con.getResponseCode();
+        // Consume the response body:
+        con.getInputStream().close();
+        return result;
     }
 
     /**

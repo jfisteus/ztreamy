@@ -19,10 +19,12 @@ import org.apache.http.conn.routing.HttpRoute;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpClientConnection;
 import org.apache.http.HttpResponse;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
 import org.apache.http.message.BasicHttpEntityEnclosingRequest;
 import org.apache.http.entity.BasicHttpEntity;
 import org.apache.http.conn.ConnectionPoolTimeoutException;
+import org.apache.http.util.EntityUtils;
 
 
 /**
@@ -166,7 +168,12 @@ public class PublisherHC extends Publisher {
             connection.sendRequestHeader(req);
             connection.sendRequestEntity(req);
             HttpResponse response = connection.receiveResponseHeader();
+            connection.receiveResponseEntity(response);
             result = response.getStatusLine().getStatusCode();
+            HttpEntity responseEntity = response.getEntity();
+            if (responseEntity != null) {
+                EntityUtils.consume(responseEntity);
+            }
         } catch (HttpException e) {
             throw new IOException(e);
         }
