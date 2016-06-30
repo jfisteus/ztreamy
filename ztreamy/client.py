@@ -728,7 +728,7 @@ class ContinuousEventPublisher(object):
             self.reconnection.notify_failure()
             if self.running:
                 delay = self.reconnection.compute_delay()
-                logging.debug('Retrying in {}s'.format(delay))
+                logging.warning('Retrying in {}s'.format(delay))
                 yield tornado.gen.sleep(delay)
 
     def stop(self):
