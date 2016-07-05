@@ -33,18 +33,18 @@ requirements = ['setuptools',
                 'tornado',
                 'rdflib>=4.0',
                 'rdflib-jsonld',
-                'tweepy==2.3.0',
                 'pycurl',
-                'pyparsing==1.5.7',
-                'httplib2',
+                'pyparsing',
                 'simplejson',
+                'futures',
+                'python-dateutil',
                 ]
 
 tests_require = []
 
 setup(
     name = "ztreamy",
-    version = "0.4.2",
+    version = "0.5",
     author = "Jesus Arias Fisteus",
     author_email = "jfisteus@gmail.com",
     description = ("A framework for publishing semantic events on the Web"),

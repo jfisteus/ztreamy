@@ -30,20 +30,25 @@ served in a stream. 'SynchronousEventPublisher' has a similar
 interface, but is synchronous.
 
 """
-import tornado.ioloop
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest
-from tornado.curl_httpclient import CurlAsyncHTTPClient
-import tornado.options
 import logging
 import sys
 import urllib2
 import httplib
 import datetime
 import random
+import os
+import os.path
+import base64
+
+import tornado.ioloop
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.curl_httpclient import CurlAsyncHTTPClient
+import tornado.simple_httpclient
+import tornado.options
+import tornado.gen
 
 import ztreamy
 from ztreamy import Deserializer, Command, Filter
-from ztreamy import logger
 from ztreamy import split_url
 
 transferred_bytes = 0
@@ -74,6 +79,20 @@ def configure_max_clients(max_clients):
                               max_clients=max_clients)
 
 
+class ReconnectionManager(object):
+    def __init__(self):
+        self.num_attempts = 0
+
+    def notify_success(self):
+        self.num_attempts = 0
+
+    def notify_failure(self):
+        self.num_attempts += 1
+
+    def compute_delay(self):
+        return random.uniform(0.001, 0.2 * 2 ** min(self.num_attempts, 10))
+
+
 class Client(object):
     """Asynchronous client for multiple stream sources.
 
@@ -86,6 +105,7 @@ class Client(object):
     def __init__(self, streams, event_callback, error_callback=None,
                  connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
+                 label=None, retrieve_missing_events=False,
                  ioloop=None, parse_event_body=True, separate_events=True,
                  disable_compression=False):
         """Creates a new client for one or more stream URLs.
@@ -103,6 +123,12 @@ class Client(object):
         If 'separate_events' is set to None, then the event callback
         will receive a list of events instead of a single events.
 
+        A 'label' (string) may be set to this client. Setting a label
+        allows the client to save the id of the latest event it received
+        and ask for missed events when the client is run again.
+        Set 'retrieve_missing_events' to True in order to do that.
+        If 'retrieve_missing_events' is True, a non-empty label must be set.
+
         If a 'ioloop' object is given, the client will block on it
         apon calling the 'start()' method. If not, it will block on
         the default 'ioloop' of Tornado.
@@ -119,6 +145,8 @@ class Client(object):
                          source_start_callback=source_start_callback,
                          source_finish_callback=source_finish_callback,
                          connection_close_callback=self._client_close_callback,
+                         label=label,
+                         retrieve_missing_events=retrieve_missing_events,
                          parse_event_body=parse_event_body,
                          separate_events=separate_events,
                          disable_compression=disable_compression))
@@ -243,6 +271,7 @@ class AsyncStreamingClient(object):
     def __init__(self, url, event_callback=None, error_callback=None,
                  connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
+                 label=None, retrieve_missing_events=False,
                  ioloop=None, parse_event_body=True, separate_events=True,
                  reconnect=True, disable_compression=False):
         """Creates a new client for a given stream URL.
@@ -254,11 +283,24 @@ class AsyncStreamingClient(object):
         If 'separate_events' is set to None, then the event callback
         will receive a list of events instead of a single events.
 
+        A 'label' (string) may be set to this client. Setting a label
+        allows the client to save the id of the latest event it received
+        and ask for missed events when the client is run again.
+        Set 'retrieve_missing_events' to True in order to do that.
+        If 'retrieve_missing_events' is True, a non-empty label must be set.
+
         If a 'ioloop' object is given, the client will block on it
         apon calling the 'start()' method. If not, it will block on
         the default 'ioloop' of Tornado.
 
+        When 'reconnect' is True (which is the default), the client tries
+        to automatically reconnect when it loses connection
+        with the server, following an exponential back-off mechanism.
+
         """
+        if retrieve_missing_events and not label:
+            raise ValueError('Retrieving missing events'
+                             ' requires a client label')
         if isinstance(event_callback, Filter):
             event_callback = event_callback.filter_event
         self.url = url
@@ -267,16 +309,23 @@ class AsyncStreamingClient(object):
         self.connection_close_callback = connection_close_callback
         self.source_start_callback = source_start_callback
         self.source_finish_callback = source_finish_callback
+        self.label = label
+        if retrieve_missing_events:
+            self.status_file = self._create_status_file(False)
+        elif label:
+            self.status_file = self._create_status_file(True)
+        else:
+            self.status_file = None
+        self.last_event_id = None
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.parse_event_body = parse_event_body
         self.separate_events = separate_events
         self._closed = False
         self._looping = False
         self._deserializer = Deserializer()
-        self.last_event = None
         self.reconnect = reconnect
         self.disable_compression = disable_compression
-        self.connection_attempts = 0
+        self.reconnection = ReconnectionManager()
 #        self.data_history = []
 
     def start(self, loop=False):
@@ -317,10 +366,11 @@ class AsyncStreamingClient(object):
 
     def _connect(self):
         http_client = AsyncHTTPClient()
-        if self.last_event is None:
+        last_event_received = self._read_last_event_id()
+        if last_event_received is None:
             url = self.url
         else:
-            url = self.url + '?last-seen=' + self.last_event
+            url = self.url + '?last-seen=' + last_event_received
         if not self.disable_compression:
             headers = {'Accept-Encoding': 'deflate;q=1, identity;q=0.5'}
         else:
@@ -329,11 +379,13 @@ class AsyncStreamingClient(object):
                           headers=headers,
                           request_timeout=0, connect_timeout=0)
         http_client.fetch(req, self._request_callback)
-        self.connection_attempts += 1
+        self.reconnection.notify_failure()
+        logging.info('Connecting to {}'.format(self.url))
 
     def _reconnect(self):
-        logging.info('Reconnecting to the stream...')
-        t = 3 + random.expovariate(0.3)
+        t = self.reconnection.compute_delay()
+        logging.info('Disconnected from {}. Next attempt in {:.02f}s'\
+                     .format(self.url, t))
         self.ioloop.add_timeout(datetime.timedelta(seconds=t), self._connect)
 
     def _finish_internal(self, notify_connection_close):
@@ -348,13 +400,12 @@ class AsyncStreamingClient(object):
         self._closed = True
 
     def _stream_callback(self, data):
-        self.connection_attempts = 0
+        self.reconnection.notify_success()
         self._process_received_data(data)
 
     def _request_callback(self, response):
         if response.error:
-            if (self.connection_attempts < 5
-                and not response.error.code // 100 == 4
+            if (not response.error.code // 100 == 4
                 and not self._closed
                 and self.reconnect):
                 self._reconnect()
@@ -367,7 +418,8 @@ class AsyncStreamingClient(object):
         else:
             if len(response.body) > 0:
                 self._process_received_data(response.body)
-            finish = True
+            self._reconnect()
+            finish = False
         if finish:
             logging.info('Finishing client')
             self._finish_internal(True)
@@ -376,8 +428,6 @@ class AsyncStreamingClient(object):
         global transferred_bytes
         transferred_bytes += len(data)
         evs = self._deserialize(data, parse_body=self.parse_event_body)
-        for e in evs:
-            logger.logger.event_delivered(e)
         if self.event_callback is not None:
             if not self.separate_events:
                 self.event_callback(evs)
@@ -385,13 +435,11 @@ class AsyncStreamingClient(object):
                 for ev in evs:
                     self.event_callback(ev)
         if len(evs) > 0:
-            self.last_event = evs[-1].event_id
+            self._write_last_event_id(evs[-1])
 
     def _deserialize(self, data, parse_body=True):
         evs = []
         event = None
-        compressed_len = len(data)
-        logger.logger.data_received(compressed_len, len(data))
         self._deserializer.append_data(data)
         event = self._deserializer.deserialize_next(parse_body=parse_body)
         while event is not None:
@@ -411,6 +459,38 @@ class AsyncStreamingClient(object):
                 evs.append(event)
             event = self._deserializer.deserialize_next(parse_body=parse_body)
         return evs
+
+    def _create_status_file(self, overwrite):
+        dirname = '.ztreamy-client-' + self.label
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+        status_file = os.path.join(dirname, base64.urlsafe_b64encode(self.url))
+        if overwrite:
+            mode = 'w'
+        else:
+            mode = 'a'
+        with open(status_file, mode=mode):
+            pass
+        return status_file
+
+    def _write_last_event_id(self, event):
+        if self.status_file is not None:
+            with open(self.status_file, mode='w') as f:
+                f.write(event.event_id)
+        else:
+            self.last_event_id = event.event_id
+
+    def _read_last_event_id(self):
+        if self.status_file is not None:
+            with open(self.status_file) as f:
+                event_id_read = f.read().strip()
+            if event_id_read:
+                event_id = event_id_read
+            else:
+                event_id = None
+        else:
+            event_id = self.last_event_id
+        return event_id
 
 
 class SynchronousClient(object):
@@ -470,8 +550,8 @@ class EventPublisher(object):
             self.server_url = server_url + 'publish'
         else:
             self.server_url = server_url + '/publish'
-        self.http_client = CurlAsyncHTTPClient(io_loop=io_loop)
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
+        self.http_client = CurlAsyncHTTPClient(self.ioloop)
         self.serialization_type = serialization_type
         self.headers = dict(EventPublisher._headers)
         if serialization_type == ztreamy.SERIALIZATION_JSON:
@@ -486,7 +566,6 @@ class EventPublisher(object):
         tornado.httpclient.HTTPResponse parameter.
 
         """
-        logger.logger.event_published(event)
         self.publish_events([event], callback=callback)
 
     def publish_events(self, events, callback=None):
@@ -514,8 +593,8 @@ class EventPublisher(object):
     def _request_callback(self, response):
         if response.error:
             logging.error(response.error)
-        else:
-            logging.info('Event successfully sent to server')
+        ## else:
+        ##     logging.info('Event successfully sent to server')
 
     def _send_request(self, body, callback=None):
         req = HTTPRequest(self.server_url, body=body, method='POST',
@@ -566,7 +645,7 @@ class SynchronousEventPublisher(object):
         """
         return self.publish_events([event])
 
-    def publish_events(self, events):
+    def publish_events(self, events, return_response=False):
         """Publishes a list of events.
 
         The events in the list 'events' are sent to the server in a new
@@ -578,11 +657,12 @@ class SynchronousEventPublisher(object):
         conn = httplib.HTTPConnection(self.hostname, self.port)
         conn.request('POST', self.path, body, self.headers)
         response = conn.getresponse()
-        if response.status == 200:
-            return True
-        else:
+        if response.status != 200:
             logging.error(str(response.status) + ' ' + response.reason)
-            return False
+        if return_response:
+            return response
+        else:
+            return response.status == 200
 
     def close(self):
         """Closes the event publisher.
@@ -592,6 +672,95 @@ class SynchronousEventPublisher(object):
 
         """
         pass
+
+
+class ContinuousEventPublisher(object):
+    """Continuously publish events through a single long-lived HTTP request.
+
+    """
+    def __init__(self, server_url, io_loop=None,
+                 serialization_type=ztreamy.SERIALIZATION_ZTREAMY,
+                 buffering_time=1.0):
+        if server_url.endswith('/publish'):
+            self.server_url = server_url + '-cont'
+        elif server_url.endswith('/'):
+            self.server_url = server_url + 'publish-cont'
+        else:
+            self.server_url = server_url + '/publish-cont'
+        self.io_loop = io_loop or tornado.ioloop.IOLoop.instance()
+        # The CURL client does not allow the `body_producer` style.
+        # Therefore we use a `SimpleAsyncHTTPClient`:
+        self.http_client = \
+              tornado.simple_httpclient.SimpleAsyncHTTPClient(self.io_loop)
+        self.headers = {}
+        if serialization_type == ztreamy.SERIALIZATION_ZTREAMY:
+            self.serialization_type = ztreamy.SERIALIZATION_ZTREAMY
+            self.headers['Content-Type'] = ztreamy.stream_media_type
+        elif serialization_type == ztreamy.SERIALIZATION_LDJSON:
+            self.serialization_type = ztreamy.SERIALIZATION_LDJSON
+            self.headers['Content-Type'] = ztreamy.ldjson_media_type
+        else:
+            raise ValueError('Bad serialization type')
+        self.buffering_time = buffering_time
+        self.next_publication = None
+        self.running = False
+        self.pending_events = []
+        self.reconnection = ReconnectionManager()
+
+    @tornado.gen.coroutine
+    def start(self):
+        self.running = True
+        while self.running:
+            self.next_publication = self.io_loop.time()
+            req = HTTPRequest(self.server_url,
+                              method='POST',
+                              body_producer=self._body_producer,
+                              headers=self.headers,
+                              request_timeout=0,
+                              connect_timeout=5.0)
+            logging.debug('Continuous HTTP request {}'.format(self.server_url))
+            try:
+                self.response = yield self.http_client.fetch(req)
+            except Exception as e:
+                logging.warning('Continuous request: {}'.format(e))
+            logging.debug('Continuous request finished, pending {} events'\
+                          .format(len(self.pending_events)))
+            self.reconnection.notify_failure()
+            if self.running:
+                delay = self.reconnection.compute_delay()
+                logging.warning('Retrying in {}s'.format(delay))
+                yield tornado.gen.sleep(delay)
+
+    def stop(self):
+        self.running = False
+
+    def publish(self, event):
+        logging.debug('Publishing 1 event')
+        self.pending_events.append(event)
+
+    def publish_events(self, events):
+        logging.debug('Publishing {} events'.format(len(events)))
+        self.pending_events.extend(events)
+
+    @tornado.gen.coroutine
+    def _body_producer(self, write):
+        while True:
+            if self.pending_events:
+                data = ztreamy.serialize_events(self.pending_events,
+                                         serialization=self.serialization_type)
+                yield write(data)
+                self.reconnection.notify_success()
+                self.pending_events = []
+            if self.running:
+                self.next_publication += self.buffering_time
+                delay = self.next_publication - self.io_loop.time()
+                if delay <= 0:
+                    self.next_publication = (self.io_loop.time()
+                                             + self.buffering_time)
+                    delay = self.buffering_time
+                yield tornado.gen.sleep(delay)
+            else:
+                break
 
 
 class LocalEventPublisher(object):
@@ -627,8 +796,12 @@ class LocalEventPublisher(object):
 
 def read_cmd_options():
     from optparse import OptionParser, Values
-    tornado.options.define('eventlog', default=False,
-                           help='dump event log',
+    tornado.options.define('label', default=None,
+                           help='define a client label',
+                           type=str)
+    tornado.options.define('missing', default=False,
+                           help=('retrieve missing events '
+                                 '(requires a client label)'),
                            type=bool)
     tornado.options.define('deflate', default=True,
                            help='Accept compressed data with deflate',
@@ -657,23 +830,21 @@ def main():
 #    filter = ztreamy.filters.SimpleTripleFilter(handle_event,
 #                                        predicate='http://example.com/temp')
     disable_compression = not tornado.options.options.deflate
+    retrieve_missing_events = tornado.options.options.missing
+    client_label = tornado.options.options.label
     client = Client(options.stream_urls,
                     event_callback=handle_event,
 #                    event_callback=filter.filter_event,
                     error_callback=handle_error,
-                    disable_compression=disable_compression)
+                    disable_compression=disable_compression,
+                    label=client_label,
+                    retrieve_missing_events=retrieve_missing_events)
 #    import time
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 6, stop_client)
-    node_id = ztreamy.random_id()
-    if tornado.options.options.eventlog:
-        logger.logger = logger.ZtreamyLogger(node_id,
-                                             'client-' + node_id + '.log')
     try:
         client.start(loop=True)
     except KeyboardInterrupt:
         pass
-    finally:
-        logger.logger.close()
 
 if __name__ == "__main__":
     main()

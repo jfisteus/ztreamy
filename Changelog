@@ -1,3 +1,31 @@
+2016-07-05  Jesus Arias Fisteus  <jfisteus@gmail.com>
+
+	* Release 0.5
+
+	* Continuous event publishers (single long-lived HTTP request
+	to send events to the stream)
+
+	* Optional persistent recent events buffer and pending events buffer
+	in order to provide reliability and prevent event loss
+
+	* Optional custom event publish handlers in order to
+	respond to publisher clients
+
+	* Add synchronous filters
+
+	* Drop duplicate events in streams
+
+	* Improve automatic client reconnection (optional disk persistence
+	to avoid data loss, exponential back-off, unlimited number of
+	reconnection attempts)
+
+	* Accept gzipped requests in the server
+
+	* Improve Java client examples
+
+	* Several bugfixes and other minor improvements
+
+
 2015-11-27  Jesus Arias Fisteus  <jfisteus@gmail.com>
 
 	* Release 0.4.2

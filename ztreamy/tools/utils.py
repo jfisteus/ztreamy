@@ -59,8 +59,8 @@ class EventPublisher(object):
         if response.error:
             self.error = True
             logging.error(response.error)
-        else:
-            logging.info('Event successfully sent to server')
+        ## else:
+        ##     logging.info('Event successfully sent to server')
 
 
 class _FakeResponse(object):

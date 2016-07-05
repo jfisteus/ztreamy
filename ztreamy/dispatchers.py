@@ -202,9 +202,9 @@ class LocalDispatcher(Dispatcher):
 
     def dispatch(self, events_pack):
         if len(self.subscriptions):
-            logging.info('{} {}: {}'.format(self.stream.path,
-                                            self.properties,
-                                            len(self.subscriptions)))
+            logging.debug('{} {}: {}'.format(self.stream.path,
+                                             self.properties,
+                                             len(self.subscriptions)))
         if len(self.subscriptions) and len(events_pack):
             for client in self.subscriptions:
                 client.send_events(events_pack.events)
@@ -229,9 +229,9 @@ class SimpleDispatcher(Dispatcher):
 
     def dispatch(self, events_pack):
         if len(self.subscriptions):
-            logging.info('{} {}: {}'.format(self.stream.path,
-                                            self.properties,
-                                            len(self.subscriptions)))
+            logging.debug('{} {}: {}'.format(self.stream.path,
+                                             self.properties,
+                                             len(self.subscriptions)))
         if len(self.subscriptions) and len(events_pack):
             self.last_event_time = time.time()
             data = events_pack.serialize(self.properties.serialization)
@@ -249,7 +249,7 @@ class SimpleDispatcher(Dispatcher):
                         client.close()
                         self.unsubscribe(client)
             elif time.time() - self.last_event_time > 595:
-                logging.info('{} {}: sending keep-alive event'.format( \
+                logging.debug('{} {}: sending keep-alive event'.format( \
                                                 self.stream.path,
                                                 self.properties))
                 keep_alive = events.Command('', 'ztreamy-command',
@@ -293,14 +293,14 @@ class ZlibDispatcher(Dispatcher):
                 self.groups.append(new_group)
             self.new_subscriptions = []
         if len(self.subscriptions):
-            logging.info('{} {}: {} ({} groups)'.format( \
+            logging.debug('{} {}: {} ({} groups)'.format( \
                                                 self.stream.path,
                                                 self.properties,
                                                 len(self.subscriptions),
                                                 len(self.groups)))
             if len(self.groups) > 1:
                 for i, group in enumerate(self.groups):
-                    logging.info('    #{}: {} | {}'.format(i, len(group),
+                    logging.debug('    #{}: {} | {}'.format(i, len(group),
                                                            group.data_counter))
             if len(events_pack):
                 self.last_event_time = time.time()
@@ -316,7 +316,7 @@ class ZlibDispatcher(Dispatcher):
     def periodic_maintenance(self):
         if (len(self.subscriptions)
             and time.time() - self.last_event_time > 595):
-            logging.info('{} {}: sending keep-alive event'.format( \
+            logging.debug('{} {}: sending keep-alive event'.format( \
                                                         self.stream.path,
                                                         self.properties))
             keep_alive = events.Command('', 'ztreamy-command',

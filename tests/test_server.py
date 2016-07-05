@@ -20,39 +20,40 @@ import unittest
 
 from tornado.web import HTTPError
 
-from ztreamy.server import _GenericHandler
+from ztreamy.server import GenericHandler
+
 
 class TestServer(unittest.TestCase):
 
     def test_parse_content_encoding(self):
         value = ['identity']
-        self.assertEqual(_GenericHandler._accept_values_internal(value),
+        self.assertEqual(GenericHandler._accept_values_internal(value),
                          ['identity'])
 
         value = ['deflate, identity']
-        self.assertEqual(_GenericHandler._accept_values_internal(value),
+        self.assertEqual(GenericHandler._accept_values_internal(value),
                          ['deflate', 'identity'])
 
         value = ['deflate;q=0.5, identity;q=1.0']
-        self.assertEqual(_GenericHandler._accept_values_internal(value),
+        self.assertEqual(GenericHandler._accept_values_internal(value),
                          ['identity', 'deflate'])
 
         value = ['identity;q=1.0, deflate;q=0.5']
-        self.assertEqual(_GenericHandler._accept_values_internal(value),
+        self.assertEqual(GenericHandler._accept_values_internal(value),
                          ['identity', 'deflate'])
 
         value = ['deflate,identity; q=0.5']
-        self.assertEqual(_GenericHandler._accept_values_internal(value),
+        self.assertEqual(GenericHandler._accept_values_internal(value),
                          ['deflate', 'identity'])
 
         value = ['identity;q=1.0000, deflate;q=0.5']
         self.assertRaises(HTTPError,
-                          _GenericHandler._accept_values_internal, value)
+                          GenericHandler._accept_values_internal, value)
 
         value = ['identity;q=1.000, deflate;q=1.0001']
         self.assertRaises(HTTPError,
-                          _GenericHandler._accept_values_internal, value)
+                          GenericHandler._accept_values_internal, value)
 
         value = ['identity;q=1.000, deflate;q=']
         self.assertRaises(HTTPError,
-                          _GenericHandler._accept_values_internal, value)
+                          GenericHandler._accept_values_internal, value)

@@ -21,6 +21,7 @@
 import logging
 import time
 import json
+import copy
 
 import ztreamy
 from ztreamy import ZtreamyException
@@ -65,6 +66,9 @@ class Deserializer(object):
         self.previous_len = 0
         self._event_reset()
         self.warning_lf_eol_reported = False
+
+    def data_is_pending(self):
+        return self._data != ''
 
     def _event_reset(self):
         """Method to be called internally after an event is read."""
@@ -260,6 +264,58 @@ class JSONDeserializer(object):
         return event
 
 
+class LDJSONDeserializer(JSONDeserializer):
+    def __init__(self):
+        super(LDJSONDeserializer, self).__init__()
+        self._data = ''
+
+    def deserialize(self, data, parse_body=True, complete=True):
+        events = []
+        if not parse_body:
+            raise ValueError('parse_body must be True in JSONDeserializer')
+        lines = data.split('\n')
+        if self._data:
+            # Some data is pending from the previous call
+            lines[0] = self._data + lines[0]
+        if lines:
+            if lines[-1]:
+                if complete:
+                    raise ZtreamyException('Spurious data in the input event',
+                                           'event_deserialize')
+                else:
+                    # Accumulate the data for the next call
+                    self._data = lines[-1]
+            del lines[-1]
+            for line in lines:
+                event_obj = json.loads(line)
+                events.append(self._dict_to_event(event_obj))
+        return events
+
+    def reset(self):
+        self._data = ''
+
+    def data_is_pending(self):
+        return self._data != ''
+
+
+def single_event_from_file(filename):
+    """Read a single event from the given filename.
+
+    Raises ValueError if the file contains more than one event,
+    ZtreamyException if syntax errors are found.
+    IOError exceptions may also happen.
+
+    """
+    deserializer = Deserializer()
+    with open(filename) as f:
+        evs = deserializer.deserialize(f.read(), complete=True)
+    if len(evs) == 1:
+        event = evs[0]
+    else:
+        raise ValueError('More than one event read in buffer!')
+    return event
+
+
 class Event(object):
     """Generic event in the system.
 
@@ -331,6 +387,10 @@ class Event(object):
         should be used instead.
 
         """
+        if source_id is None:
+            raise ValueError('Required event field missing: source_id')
+        elif not syntax:
+            raise ValueError('Required event field missing: syntax')
         self.event_id = event_id or ztreamy.random_id()
         self.source_id = source_id
         self.syntax = syntax
@@ -342,7 +402,8 @@ class Event(object):
         else:
             self.aggregator_id = [str(e) for e in aggregator_id]
         self.event_type = event_type
-        self.timestamp = timestamp or ztreamy.get_timestamp()
+        self._timestamp = timestamp or ztreamy.get_timestamp()
+        self._time = None
         self.application_id = application_id
         self.extra_headers = {}
         if extra_headers is not None:
@@ -365,6 +426,27 @@ class Event(object):
                         raise ValueError('Aggregator ids must be strings')
         super(Event, self).__setattr__(name, value)
 
+    @property
+    def timestamp(self):
+        return self._timestamp
+
+    @timestamp.setter
+    def timestamp(self, value):
+        if value is None:
+            raise ValueError('Attempting to set a None timestamp')
+        self._timestamp = value
+        self._time = None
+
+    def time(self):
+        """Event timestamp as a number of seconds since the epoch.
+
+        The number of seconds is UTC-based.
+
+        """
+        if self._time is None:
+            self._time = ztreamy.parse_timestamp(self.timestamp)
+        return self._time
+
     def set_extra_header(self, header, value):
         """Adds an extra header to the event."""
         if (not isinstance(header, basestring)
@@ -382,6 +464,12 @@ class Event(object):
         """Returns the string serialization of the event."""
         return self._serialize()
 
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __hash__(self):
+        return hash(str(self))
+
     def serialize_body(self):
         """Returns a string representation of the body of the event.
 
@@ -394,18 +482,6 @@ class Event(object):
             return str(self.body)
         else:
             raise ZtreamyException('Empty body in event', 'event_serialize')
-
-    def time(self):
-        """Returns the event timestamp as a seconds since the epoch value.
-
-        Note that the timezone information from the timestamp is
-        lost. Returns None if the event has no timestamp set.
-
-        """
-        if self.timestamp is not None:
-            return ztreamy.rfc3339_as_time(self.timestamp)
-        else:
-            return None
 
     def as_dictionary(self, json=False):
         """Returns the event as a dictionary.
@@ -455,6 +531,9 @@ class Event(object):
     def serialize_json(self):
         return json.dumps(self.as_json())
 
+    def clone(self):
+        return copy.copy(self)
+
     def _serialize(self):
         data = []
         data.append('Event-Id: ' + str(self.event_id))
@@ -503,8 +582,7 @@ class Command(Event):
         if syntax != 'ztreamy-command':
             raise ZtreamyException('Usupported syntax in Command',
                                    'programming')
-        super(Command, self).__init__(source_id, syntax, None, **kwargs)
-        self.body = command
+        super(Command, self).__init__(source_id, syntax, command, **kwargs)
         self.command = command
         if not command in Command.valid_commands:
             raise ZtreamyException('Usupported command ' + command,
@@ -531,9 +609,8 @@ class TestEvent(Event):
         if syntax != 'ztreamy-test':
             raise ZtreamyException('Usupported syntax in TestEvent',
                                    'programming')
-        super(TestEvent, self).__init__(source_id, syntax, None, **kwargs)
+        super(TestEvent, self).__init__(source_id, syntax, '', **kwargs)
         if body is not None:
-            self._parse_body(body)
             parts = self.extra_headers['X-Float-Timestamp'].split('/')
             self.float_time = float(parts[1])
             self.sequence_num = int(parts[0])
@@ -543,12 +620,6 @@ class TestEvent(Event):
             self.extra_headers['X-Float-Timestamp'] = \
                 str(sequence_num) + '/' + str(self.float_time)
 
-    def serialize_body(self):
-        return ''
-
-    def _parse_body(self, body):
-        # This event has an empty body
-        pass
 
 Event.register_syntax('ztreamy-test', TestEvent, always_parse=True)
 
@@ -562,11 +633,9 @@ class JSONEvent(Event):
         if not syntax in JSONEvent.supported_syntaxes:
             raise ZtreamyException('Usupported syntax in JSONEvent',
                                    'programming')
-        super(JSONEvent, self).__init__(source_id, syntax, None, **kwargs)
         if isinstance(body, basestring):
-            self.body = self._parse_body(body)
-        else:
-            self.body = body
+            body = self._parse_body(body)
+        super(JSONEvent, self).__init__(source_id, syntax, body, **kwargs)
 
     def serialize_body(self):
         return json.dumps(self.body) + '\r\n\r\n'
@@ -584,5 +653,5 @@ for syntax in JSONEvent.supported_syntaxes:
 def create_command(source_id, command):
     return Command(source_id, 'ztreamy-command', command)
 
-def parse_aggregator_id(data):
+def parse_aggregator_ids(data):
     return [v.strip() for v in data.split(',') if v != '']

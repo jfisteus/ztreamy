@@ -19,11 +19,12 @@
 
 """
 
-import rdflib
 import json
 
+import rdflib
+
 import ztreamy
-import ztreamy.events as events
+from . import events
 from ztreamy import ZtreamyException
 
 class RDFEvent(events.Event):
