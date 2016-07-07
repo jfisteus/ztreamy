@@ -50,6 +50,9 @@ def read_cmd_options():
     tornado.options.define('eventlog', default=False,
                            help='dump event log',
                            type=bool)
+    tornado.options.define('validate_cert', default=True,
+                           help='Validate the HTTPS certificate',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 1:
@@ -62,7 +65,9 @@ def main():
     options = read_cmd_options()
     entity_id = ztreamy.random_id()
     limit = tornado.options.options.limit
-    publishers = [client.EventPublisher(url) for url in options.server_urls]
+    validate_cert = tornado.options.options.validate_cert
+    publishers = [client.EventPublisher(url, validate_cert=validate_cert) \
+                  for url in options.server_urls]
     io_loop = tornado.ioloop.IOLoop.instance()
     time_generator = utils.get_scheduler(tornado.options.options.distribution)
     scheduler = Scheduler(limit, entity_id, io_loop, publishers,
