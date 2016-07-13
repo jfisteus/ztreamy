@@ -77,12 +77,20 @@ class StreamServer(tornado.web.Application):
     server.start()
 
     """
-    def __init__(self, port, ioloop=None, stop_when_source_finishes=False,
-                 **kwargs):
+    def __init__(self, port, certfile= None, keyfile=None, ioloop=None,
+                 stop_when_source_finishes=False, **kwargs):
         """Creates a new server.
 
         'port' specifies the port number in which the HTTP server will
         listen.
+
+        'certfile'  is the certificate to provide bidirectional encryption of
+         communications between the client and server through HTTPS protocol.
+         To use HTTP connections, its value by default is None.
+
+        'keyfile'  is the private key to provide bidirectional encryption of
+         communications between the client and server through HTTPS protocol.
+         To use HTTP connections, its value by default is None.
 
         'stop_when_source_finishes' set to True makes the server
         finish after the event source declares it has finished. Used
@@ -95,11 +103,23 @@ class StreamServer(tornado.web.Application):
 
         """
         super(StreamServer, self).__init__(**kwargs)
-        logging.info('Initializing server...')
-        self.http_server = tornado.httpserver.HTTPServer(self,
+	if certfile is None or keyfile is None:
+            logging.info('Starting up the HTTP server')
+            self.http_server = tornado.httpserver.HTTPServer(self,
+                                                decompress_request=True)
+        else:
+            logging.info('Starting up the HTTPS server')
+            ssl_options = {
+                'certfile': certfile,
+                'keyfile': keyfile,
+            }
+            self.http_server = tornado.httpserver.HTTPServer(self,
+                                                ssl_options=ssl_options,
                                                 decompress_request=True)
         self.streams = []
         self.port = port
+        self.certfile = certfile
+        self.keyfile = keyfile
         self.ioloop = ioloop or tornado.ioloop.IOLoop.instance()
         self.stop_when_source_finishes = stop_when_source_finishes
         self._looping = False
@@ -122,7 +142,7 @@ class StreamServer(tornado.web.Application):
     def start(self, loop=True):
         """Starts the server.
 
-        The server begins to listen to HTTP requests.
+        The server begins to listen to HTTP or HTTPS requests.
 
         If 'loop' is true (which is the default), the server will
         block on the ioloop until 'close()' is called.
@@ -1280,7 +1300,6 @@ class _ShortLivedHandler(GenericHandler):
         if not self.request.connection.stream.closed():
             self.write(data)
 
-
 def main():
     import time
     import tornado.options
@@ -1298,14 +1317,20 @@ def main():
     tornado.options.define('autostop', default=False,
                            help='stop the server when the source finishes',
                            type=bool)
+    tornado.options.define('certfile', default=None,
+                           help='certfile for HTTPS connections')
+    tornado.options.define('keyfile', default=None,
+                           help='keyfile for HTTPS connections')
     tornado.options.parse_command_line()
     port = tornado.options.options.port
+    certfile = tornado.options.options.certfile
+    keyfile = tornado.options.options.keyfile
     if (tornado.options.options.buffer is not None
         and tornado.options.options.buffer > 0):
         buffering_time = tornado.options.options.buffer * 1000
     else:
         buffering_time = None
-    server = StreamServer(port,
+    server = StreamServer(port, certfile, keyfile,
                  stop_when_source_finishes=tornado.options.options.autostop)
     stream = Stream('/events', allow_publish=True,
                     buffering_time=buffering_time)

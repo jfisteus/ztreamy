@@ -102,8 +102,8 @@ class Client(object):
     'LocalClient' classes.
 
     """
-    def __init__(self, streams, event_callback, error_callback=None,
-                 connection_close_callback=None,
+    def __init__(self, streams, event_callback, validate_cert=True,
+                 error_callback=None, connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
                  label=None, retrieve_missing_events=False,
                  ioloop=None, parse_event_body=True, separate_events=True,
@@ -140,6 +140,7 @@ class Client(object):
         for stream in streams:
             if isinstance(stream, basestring):
                 self.clients.append(AsyncStreamingClient(stream,
+                         validate_cert=validate_cert,
                          event_callback=event_callback,
                          error_callback=error_callback,
                          source_start_callback=source_start_callback,
@@ -268,8 +269,8 @@ class AsyncStreamingClient(object):
     'Client' instead.
 
     """
-    def __init__(self, url, event_callback=None, error_callback=None,
-                 connection_close_callback=None,
+    def __init__(self, url, validate_cert=True, event_callback=None,
+                 error_callback=None, connection_close_callback=None,
                  source_start_callback=None, source_finish_callback=None,
                  label=None, retrieve_missing_events=False,
                  ioloop=None, parse_event_body=True, separate_events=True,
@@ -304,6 +305,7 @@ class AsyncStreamingClient(object):
         if isinstance(event_callback, Filter):
             event_callback = event_callback.filter_event
         self.url = url
+        self.validate_cert = validate_cert
         self.event_callback = event_callback
         self.error_callback = error_callback
         self.connection_close_callback = connection_close_callback
@@ -376,8 +378,8 @@ class AsyncStreamingClient(object):
         else:
             headers = {'Accept-Encoding': 'identity'}
         req = HTTPRequest(url, streaming_callback=self._stream_callback,
-                          headers=headers,
-                          request_timeout=0, connect_timeout=0)
+                          headers=headers, request_timeout=0,
+                          connect_timeout=0, validate_cert=self.validate_cert)
         http_client.fetch(req, self._request_callback)
         self.reconnection.notify_failure()
         logging.info('Connecting to {}'.format(self.url))
@@ -499,9 +501,10 @@ class SynchronousClient(object):
     This client should be used in long-polling mode.
 
     """
-    def __init__(self, server_url, parse_event_body=True,
-                 last_event_seen=None):
+    def __init__(self, server_url, validate_cert=True,
+                 parse_event_body=True, last_event_seen=None):
         self.server_url = server_url
+        self.validate_cert = validate_cert
         self.last_event_seen = last_event_seen
         self.deserializer = Deserializer()
         self.parse_event_body = parse_event_body
@@ -536,7 +539,7 @@ class EventPublisher(object):
 
     _headers = {'Content-Type': ztreamy.event_media_type}
 
-    def __init__(self, server_url, io_loop=None,
+    def __init__(self, server_url, validate_cert=True, io_loop=None,
                  serialization_type=ztreamy.SERIALIZATION_ZTREAMY):
         """Creates a new 'EventPublisher' object.
 
@@ -550,6 +553,7 @@ class EventPublisher(object):
             self.server_url = server_url + 'publish'
         else:
             self.server_url = server_url + '/publish'
+	self.validate_cert = validate_cert
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
         self.http_client = CurlAsyncHTTPClient(self.ioloop)
         self.serialization_type = serialization_type
@@ -599,7 +603,7 @@ class EventPublisher(object):
     def _send_request(self, body, callback=None):
         req = HTTPRequest(self.server_url, body=body, method='POST',
                           headers=self.headers, request_timeout=0,
-                          connect_timeout=0)
+                          connect_timeout=0, validate_cert=self.validate_cert)
         callback = callback or self._request_callback
         # Enqueue a new callback in the ioloop, to avoid problems
         # when this code is run from a callback of the HTTP client
@@ -615,8 +619,7 @@ class SynchronousEventPublisher(object):
 
     """
     _headers = {'Content-Type': ztreamy.event_media_type}
-
-    def __init__(self, server_url,
+    def __init__(self, server_url, validate_cert=True,
                  serialization_type=ztreamy.SERIALIZATION_ZTREAMY):
         """Creates a new 'SynchronousEventPublisher' object.
 
@@ -631,6 +634,7 @@ class SynchronousEventPublisher(object):
                 self.path = self.path + 'publish'
             else:
                 self.path = self.path + '/publish'
+        self.validate_cert=validate_cert
         self.serialization_type = serialization_type
         self.headers = dict(SynchronousEventPublisher._headers)
         if serialization_type == ztreamy.SERIALIZATION_JSON:
@@ -678,7 +682,7 @@ class ContinuousEventPublisher(object):
     """Continuously publish events through a single long-lived HTTP request.
 
     """
-    def __init__(self, server_url, io_loop=None,
+    def __init__(self, server_url, validate_cert=True, io_loop=None,
                  serialization_type=ztreamy.SERIALIZATION_ZTREAMY,
                  buffering_time=1.0):
         if server_url.endswith('/publish'):
@@ -706,6 +710,7 @@ class ContinuousEventPublisher(object):
         self.running = False
         self.pending_events = []
         self.reconnection = ReconnectionManager()
+	self.validate_cert=validate_cert
 
     @tornado.gen.coroutine
     def start(self):
@@ -717,7 +722,8 @@ class ContinuousEventPublisher(object):
                               body_producer=self._body_producer,
                               headers=self.headers,
                               request_timeout=0,
-                              connect_timeout=5.0)
+                              connect_timeout=5.0,
+                              validate_cert=self.validate_cert)
             logging.debug('Continuous HTTP request {}'.format(self.server_url))
             try:
                 self.response = yield self.http_client.fetch(req)
@@ -806,6 +812,9 @@ def read_cmd_options():
     tornado.options.define('deflate', default=True,
                            help='Accept compressed data with deflate',
                            type=bool)
+    tornado.options.define('validate_cert', default=True,
+                           help='Validate the HTTPS certificate',
+                           type=bool)
     remaining = tornado.options.parse_command_line()
     options = Values()
     if len(remaining) >= 1:
@@ -832,8 +841,9 @@ def main():
     disable_compression = not tornado.options.options.deflate
     retrieve_missing_events = tornado.options.options.missing
     client_label = tornado.options.options.label
+    validate_cert = tornado.options.options.validate_cert
     client = Client(options.stream_urls,
-                    event_callback=handle_event,
+                    event_callback=handle_event, validate_cert=validate_cert,
 #                    event_callback=filter.filter_event,
                     error_callback=handle_error,
                     disable_compression=disable_compression,
