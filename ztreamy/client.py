@@ -553,7 +553,7 @@ class EventPublisher(object):
             self.server_url = server_url + 'publish'
         else:
             self.server_url = server_url + '/publish'
-	self.validate_cert = validate_cert
+        self.validate_cert = validate_cert
         self.ioloop = io_loop or tornado.ioloop.IOLoop.instance()
         self.http_client = CurlAsyncHTTPClient(self.ioloop)
         self.serialization_type = serialization_type
@@ -710,7 +710,7 @@ class ContinuousEventPublisher(object):
         self.running = False
         self.pending_events = []
         self.reconnection = ReconnectionManager()
-	self.validate_cert=validate_cert
+        self.validate_cert=validate_cert
 
     @tornado.gen.coroutine
     def start(self):
