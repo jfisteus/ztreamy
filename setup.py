@@ -29,7 +29,7 @@ if sys.version_info[0] != 2 or sys.version_info[1] not in [7]:
     sys.exit(1)
 
 # Dependencies
-requirements = ['setuptools',
+requirements = ['setuptools>=18.5',
                 'tornado',
                 'rdflib>=4.0',
                 'rdflib-jsonld',

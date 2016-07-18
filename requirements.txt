@@ -1,4 +1,4 @@
-setuptools
+setuptools>=18.5
 tornado
 rdflib>=4.0
 rdflib-jsonld
