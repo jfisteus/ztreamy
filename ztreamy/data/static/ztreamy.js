@@ -16,6 +16,9 @@
  * along with this program.  If not, see
  * <http://www.gnu.org/licenses/>.
  *
+ * Includes code by Jeff Ward (jcward.com) under MIT license
+ * (UUID at the bottom of this file).
+ *
  */
 var ztreamy = ztreamy || {}
 
@@ -27,10 +30,10 @@ var ztreamy = ztreamy || {}
  * The function will be called with a list of event objects
  * (see the method defaultEventsCallback for an example).
  *
- * var stream = ztreamy.Stream(url);
+ * var stream = new ztreamy.Stream("http://example.com/stream1");
  * stream.eventsCallback = function(events) {
  *     // do something with the list of events
- * };
+ * }
  * stream.consume();
  *
  */
@@ -201,6 +204,75 @@ ztreamy.headers = ["Event-Id",
                    "Body-Length"
                    ]
 
+/*
+ * The Publisher class
+ *
+ * It publishes an event in a stream given its URL. Example:
+ *
+ * var publisher = new ztreamy.Publisher("http://example.com/stream1");
+ * publisher.publish({"test": 6})
+ *     .done(function(data) {
+ *         console.log("event sent");
+ *     })
+ *     .fail(function(jqxhr, textStatus, error) {
+ *         console.log("error");
+ *     });
+ *
+ */
+ztreamy.Publisher = function(url, source_id, application_id) {
+    var initialize_source_id = function(source_id) {
+        if (!source_id) {
+            return UUID.generate();
+        } else {
+            return source_id;
+        }
+    }
+
+    this.url = url;
+    this.source_id = initialize_source_id(source_id);
+    this.application_id = application_id;
+
+    this.publish = function(body, application_id, event_type,
+                            extra_headers) {
+        event = this.create_event(body, application_id, event_type,
+                                  extra_headers);
+        return this.post_json(event);
+    }
+
+    this.create_event = function(body, application_id, event_type,
+                                 extra_headers) {
+        event = {
+            "Event-Id": UUID.generate(),
+            "Source-Id": this.source_id,
+            "Timestamp": (new Date()).toISOString(),
+            "Body": body,
+            "Syntax": "application/json"
+        };
+        if (!application_id && this.application_id) {
+            application_id = this.application_id;
+        }
+        if (application_id) {
+            event["ApplicationId"] = application_id;
+        }
+        if (event_type) {
+            event["EventType"] = event_type;
+        }
+        for (var header in extra_headers) {
+            event[header] = extra_headers[header];
+        }
+        return event;
+    }
+
+    this.post_json = function(event) {
+        return $.ajax({
+            type: "POST",
+            url: this.url + "/publish",
+            data: JSON.stringify(event),
+            contentType: "application/json"
+        });
+    }
+}
+
 /* Rendering functions for the default dashboard */
 ztreamy.renderEvent = function(event) {
     var card = $("<div>").addClass("ztreamy-event");
@@ -241,3 +313,31 @@ ztreamy.renderBody = function(event) {
     return $("<div>").addClass("ztreamy-event-body")
                      .text(body);
 }
+
+
+/**
+ * Fast UUID generator, RFC4122 version 4 compliant.
+ * @author Jeff Ward (jcward.com).
+ * @license MIT license
+ * @link http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/21963136#21963136
+ **/
+var UUID = (function() {
+    var self = {};
+    var lut = [];
+    for (var i = 0; i < 256; i++) {
+        lut[i] = (i<16?'0':'') + (i).toString(16);
+    }
+    self.generate = function() {
+        var d0 = Math.random()*0xffffffff|0;
+        var d1 = Math.random()*0xffffffff|0;
+        var d2 = Math.random()*0xffffffff|0;
+        var d3 = Math.random()*0xffffffff|0;
+        return lut[d0&0xff] + lut[d0>>8&0xff] + lut[d0>>16&0xff]
+            + lut[d0>>24&0xff] + '-' + lut[d1&0xff] + lut[d1>>8&0xff]
+            + '-' + lut[d1>>16&0x0f|0x40] + lut[d1>>24&0xff] + '-'
+            + lut[d2&0x3f|0x80] + lut[d2>>8&0xff] + '-' + lut[d2>>16&0xff]
+            + lut[d2>>24&0xff] + lut[d3&0xff] + lut[d3>>8&0xff]
+            + lut[d3>>16&0xff] + lut[d3>>24&0xff];
+  }
+  return self;
+})();

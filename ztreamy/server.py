@@ -935,15 +935,21 @@ class EventPublishHandler(GenericHandler):
 
     def get(self):
         if self.stream.running:
+            self.set_header('Access-Control-Allow-Origin', '*')
             self.get_and_dispatch_events()
         else:
             raise tornado.web.HTTPError(503, 'The stream is stopped')
 
     def post(self):
         if self.stream.running:
+            self.set_header('Access-Control-Allow-Origin', '*')
             self.get_and_dispatch_events()
         else:
             raise tornado.web.HTTPError(503, 'The stream is stopped')
+
+    def options(self):
+        self.set_header('Access-Control-Allow-Headers', 'Content-type,')
+        self.set_header('Access-Control-Allow-Origin', '*')
 
     def retrieve_events(self):
         """ Gets the events from a GET or POST message.
@@ -1031,7 +1037,9 @@ class EventPublishHandler(GenericHandler):
             deserializer = events.JSONDeserializer()
             parse_body = True
         else:
-            raise tornado.web.HTTPError(400, 'Bad content type')
+            raise tornado.web.HTTPError(400,
+                                        'Bad content type: {}'\
+                                        .format(content_type))
         return deserializer.deserialize(self.request.body,
                                         parse_body=parse_body,
                                         complete=True)
