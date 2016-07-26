@@ -19,7 +19,21 @@
  */
 var ztreamy = ztreamy || {}
 
-// The Stream class
+/*
+ * The Stream class
+ *
+ * It consumes a stream given its URL. Set the eventsCallback property
+ * with the function you want to be called every time new events arrive.
+ * The function will be called with a list of event objects
+ * (see the method defaultEventsCallback for an example).
+ *
+ * var stream = ztreamy.Stream(url);
+ * stream.eventsCallback = function(events) {
+ *     // do something with the list of events
+ * };
+ * stream.consume();
+ *
+ */
 ztreamy.Stream = function(url) {
     this.url = url;
     this.maxDisplayedEvents = 200;
@@ -178,6 +192,16 @@ ztreamy.Stream = function(url) {
     this.errorCallback = this.defaultErrorCallback;
 }
 
+ztreamy.headers = ["Event-Id",
+                   "Source-Id",
+                   "Application-Id",
+                   "Event-Type",
+                   "Timestamp",
+                   "Syntax",
+                   "Body-Length"
+                   ]
+
+/* Rendering functions for the default dashboard */
 ztreamy.renderEvent = function(event) {
     var card = $("<div>").addClass("ztreamy-event");
     // Render standard headers
@@ -217,11 +241,3 @@ ztreamy.renderBody = function(event) {
     return $("<div>").addClass("ztreamy-event-body")
                      .text(body);
 }
-
-ztreamy.headers = ["Event-Id",
-                   "Source-Id",
-                   "Application-Id",
-                   "Timestamp",
-                   "Syntax",
-                   "Body-Length"
-                   ]
