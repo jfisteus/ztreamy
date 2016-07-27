@@ -218,6 +218,18 @@ ztreamy.headers = ["Event-Id",
  *         console.log("error");
  *     });
  *
+ * An alternative way is creating an event object and publishing it later:
+ *
+ * var publisher = new ztreamy.Publisher("http://example.com/stream1");
+ * var event = publisher.create_event({"test": 6})
+ * event.publish()
+ *     .done(function(data) {
+ *         console.log("event sent");
+ *     })
+ *     .fail(function(jqxhr, textStatus, error) {
+ *         console.log("error");
+ *     });
+ *
  */
 ztreamy.Publisher = function(url, source_id, application_id) {
     var initialize_source_id = function(source_id) {
@@ -229,6 +241,7 @@ ztreamy.Publisher = function(url, source_id, application_id) {
     }
 
     this.url = url;
+    this.publish_url = url + "/publish"
     this.source_id = initialize_source_id(source_id);
     this.application_id = application_id;
 
@@ -236,29 +249,35 @@ ztreamy.Publisher = function(url, source_id, application_id) {
                             extra_headers) {
         event = this.create_event(body, application_id, event_type,
                                   extra_headers);
-        return this.post_json(event);
+        return event.publish();
     }
 
     this.create_event = function(body, application_id, event_type,
                                  extra_headers) {
         event = {
-            "Event-Id": UUID.generate(),
-            "Source-Id": this.source_id,
-            "Timestamp": (new Date()).toISOString(),
-            "Body": body,
-            "Syntax": "application/json"
+            fields : {
+                "Event-Id": UUID.generate(),
+                "Source-Id": this.source_id,
+                "Timestamp": (new Date()).toISOString(),
+                "Body": body,
+                "Syntax": "application/json"
+            },
+            publisher: this,
+            publish: function() {
+                return this.publisher.post_json(this);
+            }
         };
         if (!application_id && this.application_id) {
             application_id = this.application_id;
         }
         if (application_id) {
-            event["ApplicationId"] = application_id;
+            event.fields["ApplicationId"] = application_id;
         }
         if (event_type) {
-            event["EventType"] = event_type;
+            event.fields["EventType"] = event_type;
         }
         for (var header in extra_headers) {
-            event[header] = extra_headers[header];
+            event.fields[header] = extra_headers[header];
         }
         return event;
     }
@@ -266,8 +285,8 @@ ztreamy.Publisher = function(url, source_id, application_id) {
     this.post_json = function(event) {
         return $.ajax({
             type: "POST",
-            url: this.url + "/publish",
-            data: JSON.stringify(event),
+            url: this.publish_url,
+            data: JSON.stringify(event.fields),
             contentType: "application/json"
         });
     }
