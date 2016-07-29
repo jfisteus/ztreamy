@@ -39,6 +39,7 @@ import random
 import os
 import os.path
 import base64
+import ssl
 
 import tornado.ioloop
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -509,12 +510,20 @@ class SynchronousClient(object):
         self.deserializer = Deserializer()
         self.parse_event_body = parse_event_body
         self.stream_finished = False
+        self.scheme, hostname, port, path = split_url(server_url)
 
     def receive_events(self):
         url = self.server_url
         if self.last_event_seen is not None:
             url += '?last-seen=' + self.last_event_seen
-        connection = urllib2.urlopen(url)
+        if self.scheme == 'https':
+            if self.validate_cert:
+                context = ssl.create_default_context()
+            else:
+                context = ssl._create_unverified_context()
+            connection = urllib2.urlopen(url, context=context)
+        else:
+            connection = urllib2.urlopen(url)
         data = connection.read()
         evs = self.deserializer.deserialize(data, complete=True,
                                             parse_body=self.parse_event_body)
@@ -627,8 +636,10 @@ class SynchronousEventPublisher(object):
         by 'server_url'.
 
         """
-        scheme, self.hostname, self.port, self.path = split_url(server_url)
-        assert scheme == 'http'
+        self.scheme, self.hostname, self.port, self.path = \
+                                                       split_url(server_url)
+        if self.scheme != 'http' and self.scheme != 'https':
+            raise ValueError('An HTTP(S) URL is required')
         if not self.path.endswith('/publish'):
             if self.path.endswith('/'):
                 self.path = self.path + 'publish'
@@ -658,7 +669,18 @@ class SynchronousEventPublisher(object):
         """
         body = ztreamy.serialize_events(events,
                                         serialization=self.serialization_type)
-        conn = httplib.HTTPConnection(self.hostname, self.port)
+        if self.scheme == 'http':
+            conn = httplib.HTTPConnection(self.hostname, self.port)
+        elif self.scheme == 'https':
+            if self.validate_cert:
+                context = ssl.create_default_context()
+            else:
+                context = ssl._create_unverified_context()
+            conn = httplib.HTTPSConnection(self.hostname,
+                                           port=self.port,
+                                           context=context)
+        else:
+            raise ValueError('HTTP(S) URL required')
         conn.request('POST', self.path, body, self.headers)
         response = conn.getresponse()
         if response.status != 200:
