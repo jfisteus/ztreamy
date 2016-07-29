@@ -43,7 +43,7 @@ and the *libcurl* with its header files to be
 installed in your system. In Debian and Ubuntu they are packaged as
 `python-dev`, `libcurl3` and `libcurl4-openssl-dev` respectively::
 
-    sudo apt-get install python-dev curl libcurl3 libcurl4-openssl-dev
+    sudo apt-get install python-dev libssl-dev curl libcurl3 libcurl4-openssl-dev
 
 Now, somewhere in your user account, create the *virtualenv* directory
 in which Ztreamy will be installed. For example, if you call the
