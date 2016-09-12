@@ -55,6 +55,7 @@ from .dispatchers import ClientProperties, ClientPropertiesFactory
 from . import events_buffer
 from .utils import parsing
 from . import stats
+from . import authorization
 
 
 # Uncomment to do memory profiling
@@ -289,6 +290,8 @@ class Stream(object):
                  event_adapter=None,
                  parse_event_body=True,
                  custom_publish_handler=None,
+                 auth_manager_sub=None,
+                 auth_manager_pub=None,
                  ioloop=None):
         """Creates a stream object.
 
@@ -361,6 +364,8 @@ class Stream(object):
             self.buffer_dump_sched = \
                 tornado.ioloop.PeriodicCallback(self._dump_buffer,
                                                 buffering_time, self.ioloop)
+        self.auth_manager_sub = auth_manager_sub
+        self.auth_manager_pub = auth_manager_pub
         self.stats = stats.StreamStats()
         self.running = False
         ## self.stats_sched = tornado.ioloop.PeriodicCallback( \
@@ -458,6 +463,20 @@ class Stream(object):
     def _finish(self):
         self.dispatcher.close()
         self.ioloop.stop()
+
+    def check_authorization_subscribe(self, request):
+        if self.auth_manager_sub is not None:
+            authorized = self.auth_manager_sub.authorize(request)
+        else:
+            authorized = True
+        return authorized
+
+    def check_authorization_publish(self, request):
+        if self.auth_manager_pub is not None:
+            authorized = self.auth_manager_pub.authorize(request)
+        else:
+            authorized = True
+        return authorized
 
 
 class RelayStream(Stream):
@@ -806,6 +825,14 @@ class GenericHandler(tornado.web.RequestHandler):
     def ioloop(self):
         return self.application.ioloop
 
+    def authorize_subscribe(self, stream):
+        if not stream.check_authorization_subscribe(self.request):
+            raise tornado.web.HTTPError(403, 'Forbidden')
+
+    def authorize_publish(self, stream):
+        if not stream.check_authorization_publish(self.request):
+            raise tornado.web.HTTPError(403, 'Forbidden')
+
     def req_content_type(self):
         return parsing.get_content_type(self.request.headers['Content-Type'])
 
@@ -934,6 +961,7 @@ class EventPublishHandler(GenericHandler):
             raise ValueError('EventPublishHandler requires a stream object')
 
     def get(self):
+        self.authorize_publish(self.stream)
         if self.stream.running:
             self.set_header('Access-Control-Allow-Origin', '*')
             self.get_and_dispatch_events()
@@ -941,6 +969,7 @@ class EventPublishHandler(GenericHandler):
             raise tornado.web.HTTPError(503, 'The stream is stopped')
 
     def post(self):
+        self.authorize_publish(self.stream)
         if self.stream.running:
             self.set_header('Access-Control-Allow-Origin', '*')
             self.get_and_dispatch_events()
@@ -1098,6 +1127,7 @@ class EventPublishHandlerAsync(EventPublishHandler):
 
     @tornado.web.asynchronous
     def get(self):
+        self.authorize_publish(self.stream)
         if self.stream.running:
             self.get_and_dispatch_events(finish_request=True)
         else:
@@ -1105,6 +1135,7 @@ class EventPublishHandlerAsync(EventPublishHandler):
 
     @tornado.web.asynchronous
     def post(self):
+        self.authorize_publish(self.stream)
         if self.stream.running:
             self.get_and_dispatch_events(finish_request=True)
         else:
@@ -1178,6 +1209,7 @@ class ContinuousPublishHandler(GenericHandler):
         call to `data_received`.
 
         """
+        self.authorize_publish(self.stream)
         if self.request.method != 'POST':
             raise tornado.web.HTTPError(405, 'Method not allowed')
         try:
@@ -1217,6 +1249,7 @@ class _EventStreamHandler(GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
+        self.authorize_subscribe(self.stream)
         # non_blocking will be ignored and False used always!
         last_event_seen, past_events_limit, non_blocking = \
             self._last_seen_parameters()
@@ -1276,6 +1309,7 @@ class _ShortLivedHandler(GenericHandler):
 
     @tornado.web.asynchronous
     def get(self):
+        self.authorize_subscribe(self.stream)
         last_event_seen, past_events_limit, non_blocking = \
             self._last_seen_parameters()
         if ('Accept' in self.request.headers
@@ -1329,10 +1363,17 @@ def main():
                            help='certfile for HTTPS connections')
     tornado.options.define('keyfile', default=None,
                            help='keyfile for HTTPS connections')
+    tornado.options.define('whitelist_sub', default=None,
+                           help='IP whitelist to subscribe')
+    tornado.options.define('whitelist_pub', default=None,
+                           help='IP whitelist to publish')
+
     tornado.options.parse_command_line()
     port = tornado.options.options.port
     certfile = tornado.options.options.certfile
     keyfile = tornado.options.options.keyfile
+    whitelist_sub = tornado.options.options.whitelist_sub
+    whitelist_pub = tornado.options.options.whitelist_pub
     if (tornado.options.options.buffer is not None
         and tornado.options.options.buffer > 0):
         buffering_time = tornado.options.options.buffer * 1000
@@ -1340,8 +1381,19 @@ def main():
         buffering_time = None
     server = StreamServer(port, certfile, keyfile,
                  stop_when_source_finishes=tornado.options.options.autostop)
-    stream = Stream('/events', allow_publish=True,
-                    buffering_time=buffering_time)
+    if whitelist_sub is not None:
+        whitelist1 = authorization.IPAuthorizationManager()
+        whitelist1.load_from_file(whitelist_sub)
+    else:
+        whitelist1 = None
+    if whitelist_pub is not None:
+        whitelist2 = authorization.IPAuthorizationManager()
+        whitelist2.load_from_file(whitelist_pub)
+    else:
+        whitelist2 = None
+    stream = Stream('/events', auth_manager_sub=whitelist1,
+             auth_manager_pub=whitelist2, allow_publish=True,
+             buffering_time=buffering_time)
     ## relay = RelayStream('/relay', [('http://localhost:' + str(port)
     ##                                + '/stream/priority')],
     ##                     allow_publish=True,
@@ -1350,6 +1402,7 @@ def main():
     ## server.add_stream(relay)
      # Uncomment to test Stream.stop():
 #    tornado.ioloop.IOLoop.instance().add_timeout(time.time() + 5, stop_server)
+
     try:
         server.start()
     except KeyboardInterrupt:

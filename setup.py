@@ -38,6 +38,7 @@ requirements = ['setuptools>=18.5',
                 'simplejson',
                 'futures',
                 'python-dateutil',
+                'IPy',
                 ]
 
 tests_require = []
