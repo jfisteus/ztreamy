@@ -369,7 +369,11 @@ class Event(object):
         is returned instead.
 
         """
-        syntax = parsing.get_content_type(syntax)
+        try:
+            syntax = parsing.get_content_type(syntax)
+        except ValueError:
+            if not syntax in Event._subclasses:
+                raise
         if syntax in Event._subclasses:
             subclass = Event._subclasses[syntax]
         else:
