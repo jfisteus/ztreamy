@@ -24,7 +24,7 @@ public class Event {
 
     private static Charset charsetUTF8 = Charset.forName("UTF-8");
     private static SimpleDateFormat rfc3339Format =
-        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
+        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     /**
      * Create an event with all the required parameters.
@@ -128,6 +128,14 @@ public class Event {
      */
     public String getEventId() {
         return eventId;
+    }
+
+    /**
+     * Get the timestamp of this event as an RFC3339 string.
+     *
+     */
+    public String getTimestamp() {
+        return timestamp;
     }
 
     /**
@@ -281,5 +289,4 @@ public class Event {
         event.setBody("Test body.");
         System.out.write(event.serialize());
     }
-
 }
