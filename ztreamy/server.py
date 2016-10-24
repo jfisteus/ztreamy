@@ -105,11 +105,11 @@ class StreamServer(tornado.web.Application):
         """
         super(StreamServer, self).__init__(**kwargs)
         if certfile is None or keyfile is None:
-            logging.info('Starting up the HTTP server')
+            logging.info('Initializing the HTTP server')
             self.http_server = tornado.httpserver.HTTPServer(self,
                                                 decompress_request=True)
         else:
-            logging.info('Starting up the HTTPS server')
+            logging.info('Initializing the HTTPS server')
             ssl_options = {
                 'certfile': certfile,
                 'keyfile': keyfile,
@@ -150,7 +150,7 @@ class StreamServer(tornado.web.Application):
 
         """
         assert(not self._started)
-        logging.info('Starting server...')
+        logging.info('Starting server at port {}'.format(self.port))
         self._register_handlers()
         self.http_server.listen(self.port)
         for stream in self.streams:
