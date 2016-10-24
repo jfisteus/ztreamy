@@ -271,10 +271,10 @@ ztreamy.Publisher = function(url, source_id, application_id) {
             application_id = this.application_id;
         }
         if (application_id) {
-            event.fields["ApplicationId"] = application_id;
+            event.fields["Application-Id"] = application_id;
         }
         if (event_type) {
-            event.fields["EventType"] = event_type;
+            event.fields["Event-Type"] = event_type;
         }
         for (var header in extra_headers) {
             event.fields[header] = extra_headers[header];
