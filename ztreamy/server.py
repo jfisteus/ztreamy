@@ -1305,7 +1305,7 @@ class _ShortLivedHandler(GenericHandler):
     def __init__(self, application, request, dispatcher=None, stream=None):
         super(_ShortLivedHandler, self).__init__(application, request)
         self.dispatcher = dispatcher
-        # the 'stream' argument is ignored (not necessary)
+        self.stream = stream
 
     @tornado.web.asynchronous
     def get(self):
