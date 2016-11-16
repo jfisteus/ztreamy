@@ -29,6 +29,7 @@ import os.path
 import shutil
 import base64
 import re
+import logging
 
 import tornado.concurrent
 import concurrent.futures
@@ -403,12 +404,15 @@ class PersistentEventsBuffer(EventsBuffer):
         self._store_position()
 
     def _read_store(self):
+        logging.info('Loading persistent event buffer from {}'
+                     .format(self.store_dir))
         size = self._read_number(self.store_size_filename)
         if size != self.size:
             raise ValueError('Events buffer size is different in disk')
         self.position = self._read_number(self.store_pos_filename)
         if self.position < 0 or self.position >= self.size:
             raise ValueError('Wrong position number in events buffer')
+        logging.info('Position: {}, size: {}'.format(self.position, self.size))
         for i in range(self.size):
             event = self._read_event(i)
             if event is not None:
@@ -417,6 +421,8 @@ class PersistentEventsBuffer(EventsBuffer):
             elif i != self.position:
                 # The buffer is not full but we aren't
                 # at the current position as we should
+                logging.error('Failed to read event file for index {}'
+                              .format(i))
                 raise ValueError('Wrong buffer position')
             else:
                 # The buffer is not full but everything is ok
