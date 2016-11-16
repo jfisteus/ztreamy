@@ -78,9 +78,9 @@ def get_timestamp(date=None):
 
     """
     if date is not None:
-        return ztreamy.utils.rfc3339.rfc3339(date)
+        return ztreamy.utils.rfc3339.rfc3339(date, milliseconds=True)
     else:
-        return ztreamy.utils.rfc3339.rfc3339(time.time())
+        return ztreamy.utils.rfc3339.rfc3339(time.time(), milliseconds=True)
 
 _tz_utc = dateutil.tz.tz.tzutc()
 _epoc_utc = datetime.datetime(1970, 1, 1, tzinfo=_tz_utc)

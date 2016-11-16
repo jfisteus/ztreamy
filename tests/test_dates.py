@@ -17,8 +17,9 @@
 #
 
 import unittest
+import datetime
 
-import dateutil
+import dateutil.tz
 
 import ztreamy
 
@@ -41,6 +42,21 @@ class TestDates(unittest.TestCase):
         date = '2016-04-06T11:15:02Z'
         timestamp = ztreamy.parse_timestamp(date)
         self.assertEqual(timestamp, 1459941302.0)
+
+    def test_date_parsing_milliseconds(self):
+        date = '1970-01-01T10:45:02.002Z'
+        timestamp = ztreamy.parse_timestamp(date)
+        self.assertEqual(timestamp, 38702.002)
+
+    def test_generate_date_with_milliseconds(self):
+        tz = dateutil.tz.tz.tzoffset(None, -3600)
+        date = datetime.datetime(2016, 11, 16, 9, 30, 0, 678000, tz)
+        timestamp_str = ztreamy.get_timestamp(date)
+        self.assertEqual(timestamp_str, '2016-11-16T09:30:00.678-01:00')
+
+        date = datetime.datetime(2016, 11, 16, 9, 30, 0, 0, tz)
+        timestamp_str = ztreamy.get_timestamp(date)
+        self.assertEqual(timestamp_str, '2016-11-16T09:30:00.000-01:00')
 
     def test_date_parsing_no_tz(self):
         date = '2016-04-06T11:15:02'
