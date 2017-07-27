@@ -106,6 +106,7 @@ public class PublisherHC extends Publisher {
         ConnectionRequest connReq = manager.requestConnection(route, null);
         try {
             connection = connReq.get(3, TimeUnit.SECONDS);
+            connection.setSocketTimeout(4000);
             connected = true;
         } catch (InterruptedException | ExecutionException |
                  ConnectionPoolTimeoutException e) {

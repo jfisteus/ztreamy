@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>ztreamy</groupId>
 	<artifactId>ztreamyPublisher</artifactId>
-	<version>0.5.dev6</version>
+	<version>0.5.dev9</version>
 	<name>Ztreamy</name>
 	<dependencies>
 		<dependency>
