@@ -43,7 +43,7 @@ class Scheduler(utils.EventScheduler):
 
 def read_cmd_options():
     from optparse import OptionParser, Values
-    tornado.options.define('distribution', default='exp(5)',
+    tornado.options.define('distribution', default='exp[5]',
                            help='distribution of the time between events')
     tornado.options.define('limit', default=0, type=int,
                            help='number of events to generate')
